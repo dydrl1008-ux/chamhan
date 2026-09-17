@@ -27,9 +27,12 @@ insert into leave_requests(user_id,type,start_date,end_date,requested_by) values
 update leave_requests set status='approved' where user_id=:'st1' returning status;
 \echo '--- [D] 직원2가 직원1 근태 조회 → 0행'
 set request.jwt.claim.sub=:'st2'; select count(*) from leave_requests; select count(*) from attendance;
-\echo '--- [E] 1팀장: 직원1 근태 보임(1), 승인 가능'
+\echo '--- [E] 1팀장: 직원1 근태 보임(1), 팀 승인 → pending 유지; 총괄 최종 승인 → approved'
 set request.jwt.claim.sub=:'mgr1'; select count(*) from leave_requests;
-update leave_requests set status='approved', decided_by=:'mgr1', decided_at=now() where user_id=:'st1' and type='annual' returning status;
+update leave_requests set team_approved_at=now() where user_id=:'st1' and type='annual' returning status;
+set request.jwt.claim.sub=:'head';
+update leave_requests set status='approved' where user_id=:'st1' and type='annual' returning status;
+set request.jwt.claim.sub=:'mgr1';
 \echo '--- [E2] 1팀장이 2팀 직원 무단결근 등록 → 에러여야 (팀 다름)'
 insert into leave_requests(user_id,type,start_date,end_date,requested_by) values (:'st2','absent',current_date,current_date,:'mgr1');
 \echo '--- [F] 총괄: 전체 조회, 이슈 등록 가능'

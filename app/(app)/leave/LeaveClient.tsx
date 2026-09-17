@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { requestLeave, decideLeave } from './actions';
 import type { Profile } from '@/lib/auth/session';
 type P = { id: string; name: string; team_id: number | null; role: string; position: string | null; annual_leave_granted: number; monthly_leave_granted: number; hired_at: string | null };
-type L = { id: number; user_id: string; type: string; start_date: string; end_date: string; days: number; reason: string | null; status: string; source: string };
+type L = { id: number; user_id: string; type: string; start_date: string; end_date: string; days: number; reason: string | null; status: string; source: string; team_approved_at: string | null };
 type Agg = { user_id: string; month?: string; year?: number; late_cnt: number; absent_cnt: number; sick_cnt: number; annual_cnt: number; half_cnt: number; monthly_cnt: number; annual_used: number; monthly_used: number };
 const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각' };
 const stName: Record<string, [string, React.CSSProperties]> = { pending: ['대기', { background: '#FDF1DD', color: '#D97706' }], approved: ['승인', { background: 'var(--ok-soft, #E7F7EC)', color: 'var(--ok)' }], rejected: ['반려', { background: 'var(--bad-soft)', color: 'var(--bad)' }], cancelled: ['취소', { background: 'var(--bg)', color: 'var(--muted)' }] };
@@ -13,6 +13,8 @@ export default function LeaveClient({ me, people, leaves, monthly, yearly, teams
   const r = useRouter(); const [msg, setMsg] = useState('');
   const canManage = me.role !== 'staff';
   const canSeeAll = me.role === 'admin' || me.role === 'head';
+  const isFinal = canSeeAll;
+  const stLabel = (l: L) => l.status === 'pending' ? (l.team_approved_at ? ['팀승인 · 최종대기', { background: '#E0E7FF', color: '#3730A3' }] as [string, React.CSSProperties] : stName.pending) : stName[l.status];
   const pool = people.filter(p => p.role !== 'head');
   const one = selUser !== 'all' ? pool.find(p => p.id === selUser) ?? null : null;
   const us = one ? [one] : pool;
@@ -35,7 +37,7 @@ export default function LeaveClient({ me, people, leaves, monthly, yearly, teams
         {msg && <span style={{ fontSize: 13, color: msg.includes('실패') || msg.includes('부족') || msg.includes('권한') ? 'var(--bad)' : 'var(--ok)' }}>{msg}</span>}
       </div>
       {tgt && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
-        {[[`${one ? tgt.name : '내'} 잔여 연차`, `${tgt.annual_leave_granted - ty.annual_used}일`, `부여 ${tgt.annual_leave_granted} · 사용 ${ty.annual_used} (연)`], [`${Number(month.slice(5))}월 지각`, `${tm.late_cnt}회`, `연 누계 ${ty.late_cnt}회`], [`${Number(month.slice(5))}월 연차·반차·병가`, `${tm.annual_cnt} · ${tm.half_cnt} · ${tm.sick_cnt}회`, `연 누계 ${ty.annual_cnt} · ${ty.half_cnt} · ${ty.sick_cnt}회`], [canManage ? '승인 대기' : '내 신청 대기', `${rows.filter(l => l.status === 'pending' && (canManage || l.user_id === me.id)).length}건`, '']].map(([l, v, d]) => (
+        {[[`${one ? tgt.name : '내'} 잔여 연차`, `${tgt.annual_leave_granted - ty.annual_used}일`, `부여 ${tgt.annual_leave_granted} · 사용 ${ty.annual_used} (연)`], [`${Number(month.slice(5))}월 지각`, `${tm.late_cnt}회`, `연 누계 ${ty.late_cnt}회`], [`${Number(month.slice(5))}월 연차·반차·병가`, `${tm.annual_cnt} · ${tm.half_cnt} · ${tm.sick_cnt}회`, `연 누계 ${ty.annual_cnt} · ${ty.half_cnt} · ${ty.sick_cnt}회`], [isFinal ? '최종 승인 대기' : canManage ? '팀 승인 대기' : '내 신청 대기', `${rows.filter(l => l.status === 'pending' && (isFinal ? true : canManage ? !l.team_approved_at : l.user_id === me.id)).length}건`, isFinal ? `팀승인 안 된 건 ${rows.filter(l => l.status === 'pending' && !l.team_approved_at).length}` : '']].map(([l, v, d]) => (
           <div key={l} className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{l}</div><div style={{ fontSize: 24, fontWeight: 800 }}>{v}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{d}</div></div>))}
       </div>}
       {!one && <div className="card">
@@ -57,8 +59,11 @@ export default function LeaveClient({ me, people, leaves, monthly, yearly, teams
         <div className="card">
           <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{one ? `${one.name} 근태 내역 · ${today.slice(0, 4)}년` : `근태 내역 · ${Number(month.slice(5))}월 (대기 건 포함)`} <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{rows.length}건</span></h3>
           <table><thead><tr><th>이름</th><th>유형</th><th>기간</th><th>일수</th><th>사유</th><th>상태</th><th></th></tr></thead>
-            <tbody>{rows.map(l => <tr key={l.id}><td>{pool.find(p => p.id === l.user_id)?.name ?? '-'}</td><td>{leaveName[l.type]}</td><td style={{ whiteSpace: 'nowrap' }}>{l.start_date}{l.end_date !== l.start_date && ` ~ ${l.end_date}`}</td><td>{l.days || '-'}</td><td style={{ fontSize: 12, color: 'var(--muted)' }}>{l.reason}{l.source === 'auto_late' && ' · 자동'}</td><td><span className="pill" style={stName[l.status][1]}>{stName[l.status][0]}</span></td>
-              <td style={{ whiteSpace: 'nowrap' }}>{l.status === 'pending' && (canManage ? <><button className="btn" style={{ padding: '4px 10px', fontSize: 12, background: 'var(--ok)' }} onClick={async () => { const x = await decideLeave(l.id, 'approved'); setMsg(x.msg); r.refresh(); }}>승인</button> <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'rejected'); setMsg(x.msg); r.refresh(); }}>반려</button></> : l.user_id === me.id && <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'cancelled'); setMsg(x.msg); r.refresh(); }}>취소</button>)}</td></tr>)}
+            <tbody>{rows.map(l => <tr key={l.id}><td>{pool.find(p => p.id === l.user_id)?.name ?? '-'}</td><td>{leaveName[l.type]}</td><td style={{ whiteSpace: 'nowrap' }}>{l.start_date}{l.end_date !== l.start_date && ` ~ ${l.end_date}`}</td><td>{l.days || '-'}</td><td style={{ fontSize: 12, color: 'var(--muted)' }}>{l.reason}{l.source === 'auto_late' && ' · 자동'}</td><td><span className="pill" style={stLabel(l)[1]}>{stLabel(l)[0]}</span></td>
+              <td style={{ whiteSpace: 'nowrap' }}>{l.status === 'pending' && (
+                isFinal ? <><button className="btn" style={{ padding: '4px 10px', fontSize: 12, background: 'var(--ok)' }} onClick={async () => { const x = await decideLeave(l.id, 'approved'); setMsg(x.msg); r.refresh(); }}>최종 승인</button> <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'rejected'); setMsg(x.msg); r.refresh(); }}>반려</button></>
+                : canManage ? (!l.team_approved_at ? <><button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'team_approve'); setMsg(x.msg); r.refresh(); }}>팀 승인</button> <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'rejected'); setMsg(x.msg); r.refresh(); }}>반려</button></> : <span style={{ fontSize: 12, color: 'var(--muted)' }}>총괄 최종 승인 대기</span>)
+                : l.user_id === me.id && <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'cancelled'); setMsg(x.msg); r.refresh(); }}>취소</button>)}</td></tr>)}
             {rows.length === 0 && <tr><td colSpan={7} style={{ color: 'var(--muted)', textAlign: 'center', padding: 24 }}>없음</td></tr>}</tbody></table>
         </div>
         <div className="card">
@@ -68,8 +73,8 @@ export default function LeaveClient({ me, people, leaves, monthly, yearly, teams
             <select name="type">{Object.entries(leaveName).filter(([k]) => canManage || !['absent', 'late'].includes(k)).map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}><input type="date" name="start_date" defaultValue={today} required /><input type="date" name="end_date" defaultValue={today} /></div>
             <input name="reason" placeholder="사유" />
-            <button className="btn">{canManage ? '등록 (즉시 승인)' : '신청'}</button>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{canManage ? '팀장·총괄·어드민 등록은 바로 승인 처리됩니다. 무단결근·지각은 여기서만 등록.' : '팀장 승인 후 반영. 잔여 연차를 넘으면 신청이 막힙니다.'}</div>
+            <button className="btn">{isFinal ? '등록 (즉시 확정)' : canManage ? '등록 (최종 승인 대기)' : '신청'}</button>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{isFinal ? '총괄·어드민 등록은 바로 확정됩니다.' : canManage ? '팀장 등록은 팀 승인 상태로 들어가고 총괄 최종 승인 후 확정. 무단결근·지각은 여기서만 등록.' : '팀장 승인 → 총괄 최종 승인 후 반영. 잔여 연차를 넘으면 신청이 막힙니다.'}</div>
           </form>
         </div>
       </div>
