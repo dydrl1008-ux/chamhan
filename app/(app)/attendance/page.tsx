@@ -2,6 +2,7 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, addDays, fmtMD } from '@/lib/date/kst';
 import CheckCard from './CheckCard';
+import Corrections from './Corrections';
 export const dynamic = 'force-dynamic';
 
 export default async function AttendancePage() {
@@ -9,11 +10,12 @@ export default async function AttendancePage() {
   const sb = supabaseServer();
   const today = todayKST();
   const from = addDays(today, -6);
-  const [{ data: rows }, { data: people }, { data: leaves }, { data: lateSetting }] = await Promise.all([
-    sb.from('attendance').select('user_id,work_date,check_in,check_out,is_late').gte('work_date', from).lte('work_date', today),
+  const [{ data: rows }, { data: people }, { data: leaves }, { data: lateSetting }, { data: corrections }] = await Promise.all([
+    sb.from('attendance').select('id,user_id,work_date,check_in,check_out,is_late').gte('work_date', from).lte('work_date', today),
     sb.from('profiles').select('id,name,team_id,role,position').eq('is_active', true).neq('role', 'admin').order('team_id').order('name'),
     sb.from('leave_requests').select('user_id,type,start_date,end_date,status,reason').lte('start_date', today).gte('end_date', today).neq('status', 'rejected').neq('status', 'cancelled'),
-    me.role === 'admin' ? sb.from('app_settings').select('value').eq('key', 'late_after').maybeSingle() : Promise.resolve({ data: null }),
+    sb.from('app_settings').select('value').eq('key', 'late_after').maybeSingle(),
+    sb.from('attendance_corrections').select('id,attendance_id,user_id,field,old_time,new_time,reason,status,created_at').order('id', { ascending: false }).limit(50),
   ]);
   const mine = rows?.find(r => r.user_id === me.id && r.work_date === today) ?? null;
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, -i));
@@ -21,12 +23,13 @@ export default async function AttendancePage() {
   const scope = (people ?? []).filter(u => u.role !== 'head');
   const todayLv = (leaves ?? []).filter(l => scope.some(u => u.id === l.user_id));
   const noCheck = scope.filter(u => !rows?.find(r => r.user_id === u.id && r.work_date === today) && !todayLv.find(l => l.user_id === u.id && l.type !== 'late'));
-  const nm = (id: string) => scope.find(u => u.id === id)?.name ?? '-';
+  const nm = (id: string) => (people ?? []).find(u => u.id === id)?.name ?? '-';
   const cnt = (t: string[]) => todayLv.filter(l => t.includes(l.type)).length;
+  const myRows = (rows ?? []).filter(r => r.user_id === me.id).sort((a, b) => b.work_date.localeCompare(a.work_date));
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
-      <h1 style={{ fontSize: 20, margin: 0 }}>출퇴근 <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 400 }}>{today} · 지각 기준 {lateSetting?.value ?? '10:00'}</span></h1>
+      <h1 style={{ fontSize: 20, margin: 0 }}>출퇴근 <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 400 }}>{today} · 지각 기준 {lateSetting?.value ?? '09:30'} · 현재 시각 이전 기록 불가</span></h1>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
         <CheckCard today={today} checkIn={mine?.check_in?.slice(0, 5) ?? null} checkOut={mine?.check_out?.slice(0, 5) ?? null} isLate={!!mine?.is_late} />
         <div className="card">
@@ -40,6 +43,7 @@ export default async function AttendancePage() {
           {todayLv.length === 0 && noCheck.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 13 }}>오늘 근태 이슈 없음</div>}
         </div>
       </div>
+      <Corrections me={me} myRows={myRows} corrections={corrections ?? []} names={Object.fromEntries((people ?? []).map(p => [p.id, p.name]))} rowsById={Object.fromEntries((rows ?? []).map(r => [r.id, r.work_date]))} />
       <div className="card">
         <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{me.role === 'staff' ? '내 최근 7일' : '출퇴근 현황 · 최근 7일'}</h3>
         <div style={{ overflowX: 'auto' }}><table>

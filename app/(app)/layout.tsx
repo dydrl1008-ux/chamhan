@@ -15,10 +15,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Link href="/issues">금일 이슈</Link>
         <Link href="/attendance">출퇴근</Link>
         <Link href="/leave">근태</Link>
+        <div style={{ fontSize: 11, color: '#5C6890', padding: '14px 12px 4px' }}>영업</div>
+        {p.role !== 'head' && <Link href="/kpi">일간 KPI 보고</Link>}
+        {p.role === 'head' && <Link href="/kpi">일간 KPI 현황</Link>}
+        <Link href="/margin">영업 마진</Link>
+        {p.role !== 'staff' && <Link href="/weekly">팀장 주간보고</Link>}
         {p.role === 'admin' && (<>
           <div style={{ fontSize: 11, color: '#5C6890', padding: '14px 12px 4px' }}>어드민</div>
           <Link href="/admin/users">사용자 · 팀</Link>
           <Link href="/admin/ips">허용 IP</Link>
+          <Link href="/admin/targets">월 목표 마진</Link>
         </>)}
         <div style={{ marginTop: 30, padding: 12, background: 'rgba(255,255,255,.05)', borderRadius: 12, fontSize: 12.5 }}>
           <div style={{ color: '#fff', fontWeight: 600 }}>{p.name}</div>

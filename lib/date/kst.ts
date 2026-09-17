@@ -8,3 +8,7 @@ export function nowTimeKST(): string {
 export function monthOf(d: string) { return d.slice(0, 7); }
 export function addDays(d: string, n: number) { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
 export const fmtMD = (d: string) => d.slice(5).replace('-', '/');
+/** 해당 날짜가 속한 주의 월요일 */
+export function weekStartOf(d: string) { const x = new Date(d + 'T00:00:00Z'); const dow = (x.getUTCDay() + 6) % 7; return addDays(d, -dow); }
+export const won = (n: number | null | undefined) => '₩' + Math.round(Number(n ?? 0)).toLocaleString('ko-KR');
+export const man = (n: number | null | undefined) => (Math.round(Number(n ?? 0) / 10000)).toLocaleString('ko-KR') + '만';
