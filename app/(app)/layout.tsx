@@ -40,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/admin/duties">관리팀 담당업무</NavLink>
           <NavLink href="/admin/pnl">영업이익 월별</NavLink>
           <NavLink href="/admin/assets">자산·계정</NavLink>
+          <NavLink href="/admin/settlement">정산 연동</NavLink>
         </>)}
         <div style={{ marginTop: 30, padding: 12, background: 'rgba(255,255,255,.05)', borderRadius: 12, fontSize: 12.5 }}>
           <div style={{ color: '#fff', fontWeight: 600 }}>{p.name}</div>

@@ -3,7 +3,7 @@ import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitKpi } from './actions';
-type K = { calls: number; new_cnt: number; margin: number; kakao_db: number; overtime: boolean; new_margin: number; work_report: string | null; feedback: string | null } | null;
+type K = { calls: number; new_cnt: number; margin: number; margin_auto?: number; margin_manual?: number; kakao_db: number; overtime: boolean; new_margin: number; work_report: string | null; feedback: string | null } | null;
 export default function KpiForm({ date, today, existing }: { date: string; today: string; existing: K }) {
   const r = useRouter(); const [msg, setMsg] = useState('');
   const box: React.CSSProperties = { border: '1px solid var(--line)', borderRadius: 12, padding: '12px 14px', background: 'var(--bg)' };
@@ -17,10 +17,11 @@ export default function KpiForm({ date, today, existing }: { date: string; today
       </div>
       <form action={async fd => { const x = await submitKpi(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 14 }}>
         <input type="hidden" name="work_date" value={date} />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
           <div style={box}><label style={lab}>콜 수</label><input name="calls" type="number" min={0} defaultValue={existing?.calls ?? ''} placeholder="0" style={big} /></div>
           <div style={box}><label style={lab}>신규 건수</label><input name="new_cnt" type="number" min={0} defaultValue={existing?.new_cnt ?? ''} placeholder="0" style={big} /></div>
-          <div style={box}><label style={lab}>금일 마진 <span style={{ color: 'var(--muted)' }}>(원, VAT 제외 · 마이너스 가능)</span></label><input name="margin" type="number" step={1} defaultValue={existing?.margin ?? ''} placeholder="0" style={big} /></div>
+          <div style={box}><label style={lab}>정산 자동 마진 <span style={{ color: 'var(--muted)' }}>(정산승인 ÷1.1 · 수정 불가)</span></label><div style={{ ...big, padding: '6px 0', color: (existing?.margin_auto ?? 0) < 0 ? 'var(--bad)' : 'inherit' }}>₩{Number(existing?.margin_auto ?? 0).toLocaleString('ko-KR')}</div></div>
+          <div style={box}><label style={lab}>추가 마진 <span style={{ color: 'var(--muted)' }}>(정산 외 · 카페배포 등, 마이너스 가능)</span></label><input name="margin_manual" type="number" step={1} defaultValue={existing?.margin_manual ?? ''} placeholder="0" style={big} /></div>
           <div style={box}><label style={lab}>금일 카톡 DB</label><input name="kakao_db" type="number" min={0} defaultValue={existing?.kakao_db ?? ''} placeholder="0" style={big} /></div>
           <div style={box}><label style={lab}>신규 마진 <span style={{ color: 'var(--muted)' }}>(원)</span></label><input name="new_margin" type="number" step={1} defaultValue={existing?.new_margin ?? ''} placeholder="0" style={big} /></div>
           <div style={box}><label style={lab}>야근</label><select name="overtime" defaultValue={existing?.overtime ? '1' : '0'} style={big}><option value="0">없음</option><option value="1">야근</option></select></div>

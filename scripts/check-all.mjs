@@ -63,10 +63,11 @@ try {
 
   // ---- KPI · 마진 ----
   const KD = '2026-01-05';
-  r = await S1.c.from('kpi_daily').upsert({ user_id: S1.p.id, work_date: KD, calls: 120, new_cnt: 1, margin: 350000, kakao_db: 5, new_margin: 350000, work_report: '자동점검' }, { onConflict: 'user_id,work_date' }).select('id,team_id').single();
+  r = await S1.c.from('kpi_daily').upsert({ user_id: S1.p.id, work_date: KD, calls: 120, new_cnt: 1, margin_manual: 350000, kakao_db: 5, new_margin: 350000, work_report: '자동점검' }, { onConflict: 'user_id,work_date' }).select('id,team_id').single();
   ok('직원1 KPI 제출 → 팀 자동', !r.error && r.data?.team_id === S1.p.team_id, r.error?.message); if (r.data?.id) cleanup.push(['kpi_daily', r.data.id]);
-  r = await S1.c.from('kpi_daily').upsert({ user_id: S1.p.id, work_date: KD, calls: 130, margin: 400000 }, { onConflict: 'user_id,work_date' }).select('margin').single(); ok('같은 날 재제출 → 수정', r.data?.margin === 400000);
+  r = await S1.c.from('kpi_daily').upsert({ user_id: S1.p.id, work_date: KD, calls: 130, margin_manual: 400000 }, { onConflict: 'user_id,work_date' }).select('margin').single(); ok('같은 날 재제출 → 수정', r.data?.margin === 400000);
   r = await S1.c.from('kpi_daily').insert({ user_id: S2.p.id, work_date: KD, calls: 1 }); ok('직원1이 직원2 KPI 입력 → 차단', !!r.error);
+  r = await S1.c.from('kpi_daily').update({ margin_auto: 9999999 }).eq('user_id', S1.p.id).eq('work_date', KD).select('margin_auto').single(); ok('직원이 정산 자동 마진 직접 수정 → 차단', !!r.error, r.error?.message?.slice(0, 30));
   r = await S1.c.from('v_margin_monthly').select('margin').eq('user_id', S1.p.id).eq('month', '2026-01-01').maybeSingle(); ok('마진 집계 뷰 반영', Number(r.data?.margin) === 400000, String(r.data?.margin));
   ok('직원2가 직원1 KPI 못 봄', (await cnt(S2.c, 'kpi_daily', q => q.eq('user_id', S1.p.id))) === 0);
   ok('팀장이 직원1 KPI 봄', (await cnt(M.c, 'kpi_daily', q => q.eq('user_id', S1.p.id).eq('work_date', KD))) === 1);

@@ -2,7 +2,7 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, addDays, fmtMD, won, man, weekStartOf } from '@/lib/date/kst';
 export const dynamic = 'force-dynamic';
-type Row = { user_id: string; team_id: number | null; work_date: string; calls: number; new_cnt: number; margin: number; new_margin: number; kakao_db: number; work_report: string | null };
+type Row = { user_id: string; team_id: number | null; work_date: string; calls: number; new_cnt: number; margin: number; margin_auto: number; margin_manual: number; new_margin: number; kakao_db: number; work_report: string | null };
 export default async function MarginPage({ searchParams }: { searchParams: { t?: string; team?: string } }) {
   const me = (await getProfile())!; const sb = supabaseServer(); const today = todayKST();
   const tab = ['day', 'week', 'month'].includes(searchParams.t ?? '') ? searchParams.t! : 'month';
@@ -10,7 +10,7 @@ export default async function MarginPage({ searchParams }: { searchParams: { t?:
   const range: [string, string] = tab === 'day' ? [today, today] : tab === 'week' ? [ws, we] : [ms, today];
   const label = tab === 'day' ? `금일 (${fmtMD(today)})` : tab === 'week' ? `이번 주 (${fmtMD(ws)}~${fmtMD(we)})` : `${Number(today.slice(5, 7))}월`;
   const [{ data: rowsAll }, { data: people }, { data: teams }, { data: targets }] = await Promise.all([
-    sb.from('kpi_daily').select('user_id,team_id,work_date,calls,new_cnt,margin,new_margin,kakao_db,work_report').gte('work_date', ms).lte('work_date', today).order('work_date', { ascending: false }),
+    sb.from('kpi_daily').select('user_id,team_id,work_date,calls,new_cnt,margin,margin_auto,margin_manual,new_margin,kakao_db,work_report').gte('work_date', ms).lte('work_date', today).order('work_date', { ascending: false }),
     sb.from('profiles').select('id,name,team_id,role,position').eq('is_active', true).in('role', ['staff', 'manager']).order('team_id').order('name'),
     sb.from('teams').select('id,name,leader_id').eq('is_active', true).order('sort_order'),
     sb.from('monthly_targets').select('user_id,team_id,margin').eq('month', ms),
@@ -49,13 +49,13 @@ export default async function MarginPage({ searchParams }: { searchParams: { t?:
   const mx = Math.max(1, ...daily.map(x => Math.abs(x.m)));
   return (
     <div style={{ display: 'grid', gap: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}><h1 style={{ fontSize: 20, margin: 0 }}>영업 마진</h1><div style={{ display: 'flex', gap: 4, background: 'var(--panel)', border: '1px solid var(--line)', padding: 4, borderRadius: 12 }}><Tab k="day" l="일" /><Tab k="week" l="주" /><Tab k="month" l="월" /></div><span style={{ fontSize: 12, color: 'var(--muted)' }}>일간 KPI '금일 마진' 자동 집계 · VAT 제외 · 별도 입력 없음</span></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}><h1 style={{ fontSize: 20, margin: 0 }}>영업 마진</h1><div style={{ display: 'flex', gap: 4, background: 'var(--panel)', border: '1px solid var(--line)', padding: 4, borderRadius: 12 }}><Tab k="day" l="일" /><Tab k="week" l="주" /><Tab k="month" l="월" /></div><span style={{ fontSize: 12, color: 'var(--muted)' }}>금일 마진 = 정산 자동(÷1.1) + 직원 추가분 · VAT 제외</span></div>
       {agg}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18 }}>
         <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>마진 내역 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{label} · {rows.filter(r => scopeIds.includes(r.user_id)).length}건</span></h3>
-          <div style={{ overflowX: 'auto', maxHeight: 480 }}><table><thead><tr><th>날짜</th>{me.role !== 'staff' && <th>담당</th>}<th style={{ textAlign: 'right' }}>콜</th><th style={{ textAlign: 'right' }}>신규</th><th style={{ textAlign: 'right' }}>신규 마진</th><th style={{ textAlign: 'right' }}>금일 마진</th><th>업무 보고</th></tr></thead>
-            <tbody>{rows.filter(r => scopeIds.includes(r.user_id)).map((r, i) => <tr key={i}><td>{fmtMD(r.work_date)}</td>{me.role !== 'staff' && <td><b>{nm(r.user_id)}</b></td>}<td style={{ textAlign: 'right' }}>{r.calls}</td><td style={{ textAlign: 'right' }}>{r.new_cnt || '-'}</td><td style={{ textAlign: 'right' }}>{r.new_margin ? won(r.new_margin) : '-'}</td><td style={{ textAlign: 'right', fontWeight: 700, color: color(r.margin) }}>{won(r.margin)}</td><td style={{ fontSize: 12, color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.work_report ?? ''}>{r.work_report}</td></tr>)}
-            {rows.filter(r => scopeIds.includes(r.user_id)).length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>해당 기간 KPI 입력 없음</td></tr>}</tbody></table></div></div>
+          <div style={{ overflowX: 'auto', maxHeight: 480 }}><table><thead><tr><th>날짜</th>{me.role !== 'staff' && <th>담당</th>}<th style={{ textAlign: 'right' }}>콜</th><th style={{ textAlign: 'right' }}>신규</th><th style={{ textAlign: 'right' }}>정산 자동</th><th style={{ textAlign: 'right' }}>추가</th><th style={{ textAlign: 'right' }}>금일 마진</th><th>업무 보고</th></tr></thead>
+            <tbody>{rows.filter(r => scopeIds.includes(r.user_id)).map((r, i) => <tr key={i}><td>{fmtMD(r.work_date)}</td>{me.role !== 'staff' && <td><b>{nm(r.user_id)}</b></td>}<td style={{ textAlign: 'right' }}>{r.calls}</td><td style={{ textAlign: 'right' }}>{r.new_cnt || '-'}</td><td style={{ textAlign: 'right', color: color(r.margin_auto) }}>{won(r.margin_auto)}</td><td style={{ textAlign: 'right', color: 'var(--muted)' }}>{r.margin_manual ? won(r.margin_manual) : '-'}</td><td style={{ textAlign: 'right', fontWeight: 700, color: color(r.margin) }}>{won(r.margin)}</td><td style={{ fontSize: 12, color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.work_report ?? ''}>{r.work_report}</td></tr>)}
+            {rows.filter(r => scopeIds.includes(r.user_id)).length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>해당 기간 KPI 입력 없음</td></tr>}</tbody></table></div></div>
         <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>이달 일별 마진 추이</h3>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 160 }}>{daily.map(x => <div key={x.d} title={`${x.d} ${won(x.m)}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--muted)' }}><div style={{ display: 'flex', alignItems: 'flex-end', width: '100%', height: 130 }}><div style={{ width: '100%', height: `${Math.abs(x.m) / mx * 100}%`, background: x.m < 0 ? 'var(--bad)' : 'var(--accent)', borderRadius: '4px 4px 0 0' }} /></div>{Number(x.d.slice(8))}</div>)}{daily.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 13 }}>데이터 없음</div>}</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>빨강 = 마이너스 마진</div></div>
