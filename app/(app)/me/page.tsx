@@ -2,6 +2,7 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, won, man, fmtMD } from '@/lib/date/kst';
 import { evaluatePeople } from '@/lib/eval';
+import PasswordChange from '@/components/PasswordChange';
 export const dynamic = 'force-dynamic';
 export default async function MePage() {
   const me = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const year = Number(today.slice(0, 4)); const ms = today.slice(0, 7) + '-01';
@@ -47,6 +48,7 @@ export default async function MePage() {
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>{p.inc.next ? `다음 구간(${p.inc.next.label} ${(Number(p.inc.next.rate) * 100).toFixed(0)}%)까지 ${won(Number(p.inc.next.min_margin) - p.monthMargin)} 남음` : '최고 구간'} · 마이너스 마진은 0으로 계산</div>
           </>}</div>
       </div>
+      <PasswordChange />
       {me.role === 'staff' && <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>팀장 지시사항 · 피드백 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>제출된 주간보고 기준 · 최근 4주</span></h3>
         {(dir ?? []).map((d: any, i: number) => <div key={i} style={{ padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, marginBottom: 8 }}><div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{fmtMD(d.week_start)} 주</div>{d.common_directive && <div style={{ fontSize: 13, marginBottom: 4 }}><b>공통</b> {d.common_directive}</div>}{d.directive && <div style={{ fontSize: 13, marginBottom: 4 }}><b>지시</b> {d.directive}</div>}{d.feedback && <div style={{ fontSize: 13, color: 'var(--muted)' }}><b>피드백</b> {d.feedback}</div>}</div>)}
         {(dir ?? []).length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)' }}>아직 제출된 주간보고가 없습니다.</div>}</div>}

@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {p.role === 'head' && <NavLink href="/kpi">일간 KPI 현황</NavLink>}
         <NavLink href="/margin">영업 마진</NavLink>
         {p.role !== 'staff' && <NavLink href="/weekly">팀장 주간보고</NavLink>}
-        {(p.role === 'admin' || p.role === 'head') && <NavLink href="/settlement">정산 연동</NavLink>}
+        {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/settlement">정산 연동</NavLink>}
         <NavLink href="/plans">계획 캘린더</NavLink>
         <NavLink href="/reports">보고서</NavLink>
         <NavLink href="/products">상품 안내·접수</NavLink>
@@ -45,6 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div style={{ marginTop: 30, padding: 12, background: 'rgba(255,255,255,.05)', borderRadius: 12, fontSize: 12.5 }}>
           <div style={{ color: '#fff', fontWeight: 600 }}>{p.name}</div>
           <div>{roleName}{p.position ? ` · ${p.position}` : ''}</div>
+          <a href="/me" style={{ display: 'block', fontSize: 11.5, color: '#8590B3', marginTop: 8 }}>마이페이지 · 비밀번호 변경</a>
           <LogoutButton />
         </div>
       </aside>

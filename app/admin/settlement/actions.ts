@@ -1,6 +1,6 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { requireRole } from '@/lib/auth/session';
+import { requireRole, getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { settleLogin, fetchApprovals, guessMap } from '@/lib/settlement/client';
 import { runSync } from '@/lib/settlement/sync';
@@ -23,14 +23,14 @@ export async function saveFieldMap(fd: FormData): Promise<{ ok: boolean; msg: st
   revalidatePath('/settlement'); return { ok: true, msg: '매핑 저장' };
 }
 export async function syncNow(from: string, to: string): Promise<{ ok: boolean; msg: string }> {
-  const me = await requireRole(['admin', 'head']);
+  const me = await getProfile(); if (!me || !(me.role === 'admin' || me.role === 'head' || me.is_mgmt)) return { ok: false, msg: '권한 없음' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return { ok: false, msg: '기간 오류' };
   const r = await runSync(from, to, me.name);
   revalidatePath('/settlement'); revalidatePath('/margin'); revalidatePath('/kpi'); revalidatePath('/weekly'); revalidatePath('/');
   return { ok: r.ok, msg: r.msg };
 }
 export async function saveEmplMap(fd: FormData): Promise<{ ok: boolean; msg: string }> {
-  await requireRole(['admin', 'head']); const sb = supabaseServer();
+  const me = await getProfile(); if (!me || !(me.role === 'admin' || me.role === 'head' || me.is_mgmt)) return { ok: false, msg: '권한 없음' }; const sb = supabaseServer();
   const ids = fd.getAll('empl_id').map(String), users = fd.getAll('user_id').map(String);
   const rows = ids.map((empl_id, i) => ({ empl_id, user_id: users[i] || null })).filter(r => r.empl_id);
   for (const r of rows) { const { error } = await sb.from('settlement_empl_map').upsert(r); if (error) return { ok: false, msg: error.message }; }
