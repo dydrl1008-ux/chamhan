@@ -15,16 +15,17 @@ export async function runSync(from: string, to: string, triggeredBy: string): Pr
   try {
     const map = await loadMap(); if (!map) return finish(false, '필드 매핑이 없습니다. 어드민 › 정산 연동 › 연결 테스트 후 매핑 저장');
     const cookie = await settleLogin();
-    // 서버가 한 번에 돌려주는 건수에 상한이 있어 5일 단위로 나눠 조회 후 합침
+    // 정산 API 는 조회기간을 '작업시작일' 로 거르므로, 요청일 기준으로 빠짐없이 받기 위해 앞뒤 31일을 넓혀 조회 (5일 단위 분할)
+    const qFrom = addDays(from, -31), qTo = addDays(to, 31);
     const rows: SettleRow[] = []; const seen = new Set<string>(); const windows: string[] = [];
-    for (let s = from; s <= to; s = addDays(s, 5)) {
-      const e = addDays(s, 4) > to ? to : addDays(s, 4);
-      const part = await fetchApprovals(cookie, s, e); windows.push(`${s.slice(5)}~${e.slice(5)}:${part.length}`);
+    for (let s = qFrom; s <= qTo; s = addDays(s, 5)) {
+      const e = addDays(s, 4) > qTo ? qTo : addDays(s, 4);
+      const part = await fetchApprovals(cookie, s, e); windows.push(`${s.slice(5)}~${e.slice(5)}:${part.length}`); await new Promise(r => setTimeout(r, 150));
       for (const r of part) { const k = JSON.stringify(r); if (!seen.has(k)) { seen.add(k); rows.push(r); } }
     }
     // 유일키 = 정산번호 + 승인번호 + 요청구분 (환불 건이 같은 정산번호를 쓰는 경우 대비)
     const keyOf = (r: SettleRow) => [r[map.settle_no], r['confirmSeq'], r['reqGubun']].filter(v => v !== undefined && v !== null && String(v) !== '').map(String).join('|');
-    const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: toNum(r[map.profit]), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date);
+    const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: toNum(r[map.profit]), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date && x.req_date >= from && x.req_date <= to);
     if (rows.length && !items.length) return finish(false, `매핑된 필드에서 값을 못 읽음 (키: ${Object.keys(rows[0]).join(',')})`, rows.length);
     { const { error: ed } = await sb.from('settlement_items').delete().gte('req_date', from).lte('req_date', to); if (ed) return finish(false, '기간 정리 실패: ' + ed.message, rows.length); }
     for (let i = 0; i < items.length; i += 500) { const { error } = await sb.from('settlement_items').upsert(items.slice(i, i + 500), { onConflict: 'settle_no' }); if (error) return finish(false, 'settlement_items 저장 실패: ' + error.message, rows.length); }
