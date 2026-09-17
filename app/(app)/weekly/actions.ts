@@ -29,7 +29,11 @@ export async function saveReport(fd: FormData): Promise<R> {
   const ids = fd.getAll('member_id').map(String);
   const notes = ids.map((uid, i) => ({ report_id: rep.id, user_id: uid, directive: String(fd.getAll('directive')[i] ?? ''), feedback: String(fd.getAll('feedback')[i] ?? '') }));
   if (notes.length) { const { error: e2 } = await sb.from('weekly_member_notes').upsert(notes, { onConflict: 'report_id,user_id' }); if (e2) return { ok: false, msg: `인원별 저장 실패: ${e2.message}` }; }
-  revalidatePath('/weekly');
+  // 팀원 이달 개인 목표 (팀장 권한, RLS: 본인 팀만)
+  const month = weekStart.slice(0, 7) + '-01';
+  const tRows = ids.map((uid, i) => ({ month, user_id: uid, team_id: null, margin: Number(String(fd.getAll('member_target')[i] ?? '0').replace(/,/g, '')) || 0 })).filter(x => x.margin > 0);
+  if (tRows.length) { const { error: e3 } = await sb.from('monthly_targets').upsert(tRows, { onConflict: 'month,user_id' }); if (e3) return { ok: false, msg: `개인 목표 저장 실패: ${e3.message}` }; }
+  revalidatePath('/weekly'); revalidatePath('/margin'); revalidatePath('/');
   return { ok: true, msg: submit ? '주간보고 제출 완료 · 총괄·대표 열람 가능' : '임시저장됨' };
 }
 export async function addPipeline(fd: FormData): Promise<R> {

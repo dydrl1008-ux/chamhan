@@ -21,7 +21,7 @@ export default async function MarginPage({ searchParams }: { searchParams: { t?:
   const nm = (id: string) => ppl.find(p => p.id === id)?.name ?? '-';
   const sum = (arr: Row[], k: keyof Row) => arr.reduce((a, r) => a + Number(r[k] || 0), 0);
   const tUser = (id: string) => Number(targets?.find(t => t.user_id === id)?.margin ?? 0);
-  const tTeam = (id: number) => Number(targets?.find(t => t.team_id === id)?.margin ?? 0);
+  const tTeam = (id: number) => ppl.filter(x => x.team_id === id).reduce((a, x) => a + tUser(x.id), 0);   // 팀 목표 = 팀원 개인 목표 합계
   const pct = (a: number, b: number) => b ? Math.round(a / b * 100) : 0;
   const color = (m: number) => m < 0 ? 'var(--bad)' : 'inherit';
   const Tab = ({ k, l }: { k: string; l: string }) => <a href={`/margin?t=${k}`} style={{ padding: '7px 14px', borderRadius: 8, fontWeight: 600, fontSize: 13, textDecoration: 'none', background: tab === k ? 'var(--accent-soft)' : 'transparent', color: tab === k ? 'var(--accent)' : 'var(--muted)' }}>{l}</a>;
