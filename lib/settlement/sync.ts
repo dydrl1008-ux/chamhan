@@ -15,8 +15,11 @@ export async function runSync(from: string, to: string, triggeredBy: string): Pr
   try {
     const map = await loadMap(); if (!map) return finish(false, '필드 매핑이 없습니다. 어드민 › 정산 연동 › 연결 테스트 후 매핑 저장');
     const cookie = await settleLogin(); const rows = await fetchApprovals(cookie, from, to);
-    const items = rows.map(r => ({ settle_no: String(r[map.settle_no] ?? ''), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: toNum(r[map.profit]), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date);
+    // 유일키 = 정산번호 + 승인번호 + 요청구분 (환불 건이 같은 정산번호를 쓰는 경우 대비)
+    const keyOf = (r: SettleRow) => [r[map.settle_no], r['confirmSeq'], r['reqGubun']].filter(v => v !== undefined && v !== null && String(v) !== '').map(String).join('|');
+    const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: toNum(r[map.profit]), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date);
     if (rows.length && !items.length) return finish(false, `매핑된 필드에서 값을 못 읽음 (키: ${Object.keys(rows[0]).join(',')})`, rows.length);
+    { const { error: ed } = await sb.from('settlement_items').delete().gte('req_date', from).lte('req_date', to); if (ed) return finish(false, '기간 정리 실패: ' + ed.message, rows.length); }
     for (let i = 0; i < items.length; i += 500) { const { error } = await sb.from('settlement_items').upsert(items.slice(i, i + 500), { onConflict: 'settle_no' }); if (error) return finish(false, 'settlement_items 저장 실패: ' + error.message, rows.length); }
     const { data: applied, error } = await sb.rpc('apply_settlement_margin', { p_from: from, p_to: to });
     if (error) return finish(false, 'KPI 반영 실패: ' + error.message, rows.length);
