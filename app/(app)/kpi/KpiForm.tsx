@@ -1,4 +1,5 @@
 'use client';
+import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitKpi } from './actions';
@@ -14,7 +15,7 @@ export default function KpiForm({ date, today, existing }: { date: string; today
         <h3 style={{ margin: 0, fontSize: 15 }}>{existing ? '제출 완료 · 수정 가능' : '작성'} <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>퇴근 전 제출</span></h3>
         <input type="date" value={date} max={today} onChange={e => r.push(`/kpi?d=${e.target.value}`)} style={{ width: 160 }} />
       </div>
-      <form action={async fd => { const x = await submitKpi(fd); setMsg(x.msg); if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 14 }}>
+      <form action={async fd => { const x = await submitKpi(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 14 }}>
         <input type="hidden" name="work_date" value={date} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
           <div style={box}><label style={lab}>콜 수</label><input name="calls" type="number" min={0} defaultValue={existing?.calls ?? ''} placeholder="0" style={big} /></div>

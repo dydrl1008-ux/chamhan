@@ -1,4 +1,5 @@
 'use client';
+import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveReport, addPipeline, updatePipeline } from './actions';
@@ -28,7 +29,7 @@ export default function WeeklyClient(p: { me: Profile; teams: { id: number; name
   const fmt = (k: string, v: number) => k === 'margin' ? won(v) : v.toLocaleString();
 
   return (
-    <form action={async fd => { const x = await saveReport(fd); setMsg(x.msg); if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 18 }}>
+    <form action={async fd => { const x = await saveReport(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 18 }}>
       <input type="hidden" name="team_id" value={teamId} /><input type="hidden" name="week_start" value={ws} />
       <div style={{ background: 'linear-gradient(120deg,#101A4A,#26308F)', color: '#fff', borderRadius: 16, padding: '22px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
         <div><h1 style={{ margin: '0 0 4px', fontSize: 20 }}>영업팀 팀장 주간보고</h1><div style={{ fontSize: 12.5, opacity: .85, display: 'flex', gap: 14 }}><span>{teams.find(t => t.id === teamId)?.name}</span><span>{fmtMD(ws)} ~ {fmtMD(we)}</span><span>{report?.status === 'submitted' ? `제출 완료 ${report.submitted_at?.slice(0, 10)}` : '작성 중'}</span></div></div>
@@ -53,7 +54,7 @@ export default function WeeklyClient(p: { me: Profile; teams: { id: number; name
       </Sec>
       <Sec b="B" t="신규 가망건 파이프라인" d="단계: 콜 → 연결 → 카톡 → 협상 → 결제" right={<span className="pill">{pipeline.length}건</span>}>
         <div style={{ overflowX: 'auto' }}><table><thead><tr><th>담당자</th><th>업체명</th><th>단계</th><th>예상 마진</th><th>다음 액션</th><th>리스크</th><th>필요 지원</th><th style={{ minWidth: 200 }}>비고</th>{canEdit && <th></th>}</tr></thead><tbody>
-          {pipeline.map(x => <tr key={x.id}><td>{nm(x.owner_id)}</td><td><b>{x.client}</b></td><td>{canEdit ? <select value={x.stage} onChange={async e => { const res = await updatePipeline(x.id, { stage: e.target.value }); setMsg(res.msg); r.refresh(); }} style={{ width: 80, padding: '4px 6px', fontSize: 12 }}>{STAGES.map(s => <option key={s}>{s}</option>)}</select> : <span className="pill" style={stageStyle[x.stage]}>{x.stage}</span>}</td><td>{x.expected_margin}</td><td>{x.next_action}</td><td>{x.risk || <span style={{ color: 'var(--muted)' }}>-</span>}</td><td>{x.support || <span style={{ color: 'var(--muted)' }}>-</span>}</td><td style={{ fontSize: 12, color: 'var(--muted)' }}>{x.memo}</td>{canEdit && <td><button type="button" className="btn ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={async () => { if (!confirm('종료 처리할까요? (결제 완료·이탈)')) return; const res = await updatePipeline(x.id, { is_active: false }); setMsg(res.msg); r.refresh(); }}>종료</button></td>}</tr>)}
+          {pipeline.map(x => <tr key={x.id}><td>{nm(x.owner_id)}</td><td><b>{x.client}</b></td><td>{canEdit ? <select value={x.stage} onChange={async e => { const res = await updatePipeline(x.id, { stage: e.target.value }); { notify(res.msg); setMsg(res.msg); }; r.refresh(); }} style={{ width: 80, padding: '4px 6px', fontSize: 12 }}>{STAGES.map(s => <option key={s}>{s}</option>)}</select> : <span className="pill" style={stageStyle[x.stage]}>{x.stage}</span>}</td><td>{x.expected_margin}</td><td>{x.next_action}</td><td>{x.risk || <span style={{ color: 'var(--muted)' }}>-</span>}</td><td>{x.support || <span style={{ color: 'var(--muted)' }}>-</span>}</td><td style={{ fontSize: 12, color: 'var(--muted)' }}>{x.memo}</td>{canEdit && <td><button type="button" className="btn ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={async () => { if (!confirm('종료 처리할까요? (결제 완료·이탈)')) return; const res = await updatePipeline(x.id, { is_active: false }); { notify(res.msg); setMsg(res.msg); }; r.refresh(); }}>종료</button></td>}</tr>)}
           {pipeline.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--muted)', padding: 20 }}>등록된 가망건 없음</td></tr>}
         </tbody></table></div>
         {canEdit && <PipelineAdd teamId={teamId} members={members} onDone={m => { setMsg(m); r.refresh(); }} />}

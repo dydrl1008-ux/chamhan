@@ -16,14 +16,15 @@ export async function requestLeave(fd: FormData): Promise<{ ok: boolean; msg: st
   revalidatePath('/leave'); revalidatePath('/attendance');
   return { ok: true, msg: isFinal ? '등록·확정됨' : isManager ? '등록됨 (총괄 최종 승인 대기)' : '신청됨 (팀장 승인 대기)' };
 }
-export async function decideLeave(id: number, action: 'team_approve' | 'approved' | 'rejected' | 'cancelled'): Promise<{ ok: boolean; msg: string }> {
+export async function decideLeave(id: number, action: 'team_approve' | 'team_unapprove' | 'approved' | 'rejected' | 'cancelled' | 'reopen'): Promise<{ ok: boolean; msg: string }> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
-  const patch: Record<string, unknown> = action === 'team_approve'
-    ? { team_approved_at: new Date().toISOString() }
+  const patch: Record<string, unknown> = action === 'team_approve' ? { team_approved_at: new Date().toISOString() }
+    : action === 'team_unapprove' ? { team_approved_at: null }
+    : action === 'reopen' ? { status: 'pending' }
     : { status: action, decided_by: me.id, decided_at: new Date().toISOString() };
   const { data, error } = await supabaseServer().from('leave_requests').update(patch).eq('id', id).select('id');
   if (error) return { ok: false, msg: error.message.includes('최종') ? error.message : `처리 실패: ${error.message}` };
   if (!data?.length) return { ok: false, msg: '권한이 없거나 이미 처리된 건입니다.' };
   revalidatePath('/leave'); revalidatePath('/attendance');
-  return { ok: true, msg: { team_approve: '팀 승인 완료 (총괄 최종 승인 대기)', approved: '최종 승인', rejected: '반려', cancelled: '취소' }[action] + (action === 'team_approve' ? '' : ' 처리됨') };
+  return { ok: true, msg: { team_approve: '팀 승인 완료 (총괄 최종 승인 대기)', team_unapprove: '팀 승인 취소 → 대기', approved: '최종 승인 처리됨', rejected: '반려 처리됨', cancelled: '취소 처리됨', reopen: '승인/반려 취소 → 대기로 복귀' }[action] };
 }

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getProfile } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
+import Toast from '@/components/Toast';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const p = await getProfile();
   if (!p) redirect('/login');
@@ -33,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <main style={{ padding: 28 }}>{children}</main>
+      <Toast />
     </div>
   );
 }

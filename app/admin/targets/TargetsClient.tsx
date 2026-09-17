@@ -1,4 +1,5 @@
 'use client';
+import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveTargets } from './actions';
@@ -7,7 +8,7 @@ export default function TargetsClient({ month, people, teams, targets }: { month
   const tu = (id: string) => targets.find(t => t.user_id === id)?.margin ?? '';
   const tt = (id: number) => targets.find(t => t.team_id === id)?.margin ?? '';
   return (
-    <form action={async fd => { const x = await saveTargets(fd); setMsg(x.msg); if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 18, maxWidth: 900 }}>
+    <form action={async fd => { const x = await saveTargets(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 18, maxWidth: 900 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><h1 style={{ fontSize: 20, margin: 0 }}>월 목표 마진</h1><input type="month" name="month" value={month} onChange={e => r.push(`/admin/targets?m=${e.target.value}`)} style={{ width: 160 }} />{msg && <span style={{ fontSize: 13, color: 'var(--ok)' }}>{msg}</span>}</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
         <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>팀 목표 (원)</h3><table><tbody>{teams.map(t => <tr key={t.id}><td><b>{t.name}</b></td><td><input type="hidden" name="team_id" value={t.id} /><input name="team_margin" type="number" defaultValue={tt(t.id)} placeholder="60000000" /></td></tr>)}</tbody></table></div>

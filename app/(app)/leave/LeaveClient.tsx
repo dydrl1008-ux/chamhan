@@ -1,4 +1,5 @@
 'use client';
+import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { requestLeave, decideLeave } from './actions';
@@ -60,15 +61,22 @@ export default function LeaveClient({ me, people, leaves, monthly, yearly, teams
           <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{one ? `${one.name} 근태 내역 · ${today.slice(0, 4)}년` : `근태 내역 · ${Number(month.slice(5))}월 (대기 건 포함)`} <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{rows.length}건</span></h3>
           <table><thead><tr><th>이름</th><th>유형</th><th>기간</th><th>일수</th><th>사유</th><th>상태</th><th></th></tr></thead>
             <tbody>{rows.map(l => <tr key={l.id}><td>{pool.find(p => p.id === l.user_id)?.name ?? '-'}</td><td>{leaveName[l.type]}</td><td style={{ whiteSpace: 'nowrap' }}>{l.start_date}{l.end_date !== l.start_date && ` ~ ${l.end_date}`}</td><td>{l.days || '-'}</td><td style={{ fontSize: 12, color: 'var(--muted)' }}>{l.reason}{l.source === 'auto_late' && ' · 자동'}</td><td><span className="pill" style={stLabel(l)[1]}>{stLabel(l)[0]}</span></td>
-              <td style={{ whiteSpace: 'nowrap' }}>{l.status === 'pending' && (
-                isFinal ? <><button className="btn" style={{ padding: '4px 10px', fontSize: 12, background: 'var(--ok)' }} onClick={async () => { const x = await decideLeave(l.id, 'approved'); setMsg(x.msg); r.refresh(); }}>최종 승인</button> <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'rejected'); setMsg(x.msg); r.refresh(); }}>반려</button></>
-                : canManage ? (['late','absent'].includes(l.type) ? <span style={{ fontSize: 12, color: 'var(--muted)' }}>총괄 직접 승인</span> : !l.team_approved_at ? <><button className="btn" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'team_approve'); setMsg(x.msg); r.refresh(); }}>팀 승인</button> <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'rejected'); setMsg(x.msg); r.refresh(); }}>반려</button></> : <span style={{ fontSize: 12, color: 'var(--muted)' }}>총괄 최종 승인 대기</span>)
-                : l.user_id === me.id && <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideLeave(l.id, 'cancelled'); setMsg(x.msg); r.refresh(); }}>취소</button>)}</td></tr>)}
+              <td style={{ whiteSpace: 'nowrap' }}>{(() => {
+                const B = (label: string, act: any, style?: React.CSSProperties) => <button className={`btn ${style ? '' : 'ghost'}`} style={{ padding: '4px 10px', fontSize: 12, marginRight: 4, ...(style ?? {}) }} onClick={async () => { const x = await decideLeave(l.id, act); notify(x.msg); setMsg(x.msg); r.refresh(); }}>{label}</button>;
+                const direct = ['late', 'absent'].includes(l.type);
+                if (l.status === 'pending') {
+                  if (isFinal) return (direct || l.team_approved_at) ? <>{B('최종 승인', 'approved', { background: 'var(--ok)' })}{B('반려', 'rejected')}</> : <span style={{ fontSize: 12, color: 'var(--muted)' }}>팀장 승인 대기</span>;
+                  if (canManage) return direct ? <span style={{ fontSize: 12, color: 'var(--muted)' }}>총괄 직접 승인</span> : l.team_approved_at ? <>{B('팀 승인 취소', 'team_unapprove')}<span style={{ fontSize: 12, color: 'var(--muted)' }}>최종 대기</span></> : <>{B('팀 승인', 'team_approve', { background: 'var(--accent)' })}{B('반려', 'rejected')}</>;
+                  return l.user_id === me.id ? B('취소', 'cancelled') : null;
+                }
+                if ((l.status === 'approved' || l.status === 'rejected') && isFinal) return B(l.status === 'approved' ? '승인 취소' : '반려 취소', 'reopen');
+                return null;
+              })()}</td></tr>)}
             {rows.length === 0 && <tr><td colSpan={7} style={{ color: 'var(--muted)', textAlign: 'center', padding: 24 }}>없음</td></tr>}</tbody></table>
         </div>
         <div className="card">
           <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{canManage ? '근태 등록' : '휴가 신청'}</h3>
-          <form action={async fd => { const x = await requestLeave(fd); setMsg(x.msg); if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 10 }}>
+          <form action={async fd => { const x = await requestLeave(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 10 }}>
             {canManage && <select name="user_id" defaultValue={one?.id ?? pool[0]?.id}>{pool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
             <select name="type">{Object.entries(leaveName).filter(([k]) => canManage || !['absent', 'late'].includes(k)).map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}><input type="date" name="start_date" defaultValue={today} required /><input type="date" name="end_date" defaultValue={today} /></div>

@@ -1,4 +1,5 @@
 'use client';
+import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { requestCorrection, decideCorrection } from './actions';
@@ -14,7 +15,7 @@ export default function Corrections({ me, myRows, corrections, names, rowsById }
     <div style={{ display: 'grid', gridTemplateColumns: isFinal ? '1fr 1fr' : '1fr 1fr', gap: 18 }}>
       <div className="card">
         <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>출퇴근 시각 수정 요청 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>잘못 눌렀을 때 · 총괄 승인 후 변경</span></h3>
-        {myRows.length ? <form action={async fd => { const x = await requestCorrection(fd); setMsg(x.msg); if (x.ok) r.refresh(); }} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        {myRows.length ? <form action={async fd => { const x = await requestCorrection(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
           <select name="attendance_id">{myRows.map(x => <option key={x.id} value={x.id}>{x.work_date} ({x.check_in?.slice(0, 5) ?? '-'} / {x.check_out?.slice(0, 5) ?? '-'})</option>)}</select>
           <select name="field"><option value="check_in">출근 시각</option><option value="check_out">퇴근 시각</option></select>
           <input type="time" name="new_time" required />
@@ -28,7 +29,7 @@ export default function Corrections({ me, myRows, corrections, names, rowsById }
         <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>수정 요청 승인 <span className="pill" style={pending.length ? { background: 'var(--bad-soft)', color: 'var(--bad)' } : undefined}>{pending.length}건 대기</span></h3>
         <table><thead><tr><th>이름</th><th>날짜</th><th>항목</th><th>변경</th><th>사유</th><th></th></tr></thead><tbody>
           {pending.map(c => <tr key={c.id}><td><b>{names[c.user_id] ?? '-'}</b></td><td>{rowsById[c.attendance_id] ?? '-'}</td><td>{c.field === 'check_in' ? '출근' : '퇴근'}</td><td style={{ fontVariantNumeric: 'tabular-nums' }}>{c.old_time?.slice(0, 5) ?? '-'} → <b>{c.new_time.slice(0, 5)}</b></td><td style={{ fontSize: 12, color: 'var(--muted)' }}>{c.reason}</td>
-            <td style={{ whiteSpace: 'nowrap' }}><button className="btn" style={{ padding: '4px 10px', fontSize: 12, background: 'var(--ok)' }} onClick={async () => { const x = await decideCorrection(c.id, 'approved'); setMsg(x.msg); r.refresh(); }}>승인</button> <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideCorrection(c.id, 'rejected'); setMsg(x.msg); r.refresh(); }}>반려</button></td></tr>)}
+            <td style={{ whiteSpace: 'nowrap' }}><button className="btn" style={{ padding: '4px 10px', fontSize: 12, background: 'var(--ok)' }} onClick={async () => { const x = await decideCorrection(c.id, 'approved'); { notify(x.msg); setMsg(x.msg); }; r.refresh(); }}>승인</button> <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { const x = await decideCorrection(c.id, 'rejected'); { notify(x.msg); setMsg(x.msg); }; r.refresh(); }}>반려</button></td></tr>)}
           {pending.length === 0 && <tr><td colSpan={6} style={{ color: 'var(--muted)', textAlign: 'center', padding: 20 }}>대기 중인 요청 없음</td></tr>}
         </tbody></table>
         {corrections.filter(c => c.status !== 'pending').length > 0 && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>처리 완료 {corrections.filter(c => c.status !== 'pending').length}건 (감사 로그에 기록)</div>}

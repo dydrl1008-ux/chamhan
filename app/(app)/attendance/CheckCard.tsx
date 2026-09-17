@@ -1,4 +1,5 @@
 'use client';
+import { notify } from '@/components/Toast';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { checkAttendance } from './actions';
@@ -7,7 +8,7 @@ export default function CheckCard({ today, checkIn, checkOut, isLate }: { today:
   const [tIn, setTIn] = useState(checkIn ?? '');
   useEffect(() => { if (!checkIn) setTIn(nowTimeKST()); }, [checkIn]); const [tOut, setTOut] = useState(checkOut ?? '18:30');
   const [msg, setMsg] = useState(''); const [busy, setBusy] = useState(false); const r = useRouter();
-  async function go(kind: 'in' | 'out') { setBusy(true); const res = await checkAttendance(kind, kind === 'in' ? tIn : tOut); setBusy(false); setMsg(res.msg); if (res.ok) r.refresh(); }
+  async function go(kind: 'in' | 'out') { setBusy(true); const res = await checkAttendance(kind, kind === 'in' ? tIn : tOut); setBusy(false); { notify(res.msg); setMsg(res.msg); }; if (res.ok) r.refresh(); }
   return (
     <div className="card">
       <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>오늘 ({today}) {checkIn && <span className="pill" style={isLate ? { background: 'var(--bad-soft)', color: 'var(--bad)' } : undefined}>{isLate ? '지각' : '정상 출근'}</span>}</h3>
