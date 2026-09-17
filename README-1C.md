@@ -1,7 +1,7 @@
 # 워크허브 1-C — 일간 KPI · 영업 마진 · 가망건 · 팀장 주간보고 · 출근 수정요청
 
 ## 적용
-1. SQL Editor 순서대로: `0005` → `0006` → `0007` → `0008_1c_manager_targets.sql`
+1. SQL Editor 순서대로: `0005` → `0006` → `0007` → `0008` → `0009_1c_targets_unique_fix.sql`
 2. `checks/1c_check.sql` → 전부 result = expect
 3. GitHub Desktop: 덮어쓰기 → Commit `1-C` → Push
 4. 어드민 › 월 목표 마진: 이번 달 팀·개인 목표 입력 (달성률 표시용)

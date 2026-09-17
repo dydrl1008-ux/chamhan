@@ -90,12 +90,26 @@ try {
   r = await H.c.from('issues').insert({ title: '자동점검 이슈', body: 'x', customer_notice: 'x', author_id: H.p.id }).select('id').single(); ok('총괄 이슈 등록', !r.error); if (r.data?.id) cleanup.push(['issues', r.data.id]);
   r = await S1.c.from('issues').insert({ title: 'x', author_id: S1.p.id }); ok('직원 이슈 등록 → 차단', !!r.error);
   r = await S1.c.from('issue_reads').upsert({ issue_id: cleanup.find(x => x[0] === 'issues')?.[1], user_id: S1.p.id }, { onConflict: 'issue_id,user_id', ignoreDuplicates: true }); ok('직원 읽음 처리', !r.error, r.error?.message);
+
+  // ---- 1-D: 계획 · 기준 · 지시사항 ----
+  r = await S1.c.from('plans').insert({ user_id: S1.p.id, type: 'daily', title: '자동점검', start_date: TD, end_date: TD }).select('id').single();
+  const planId = r.data?.id; ok('직원1 계획 등록', !r.error && planId, r.error?.message); if (planId) cleanup.push(['plans', planId]);
+  r = await S1.c.from('plans').update({ is_done: true }).eq('id', planId).select('done_at').single(); ok('계획 완료 → done_at 기록', !!r.data?.done_at);
+  r = await S1.c.from('plans').insert({ user_id: S2.p.id, type: 'daily', title: 'x', start_date: TD, end_date: TD }); ok('직원1이 직원2 계획 등록 → 차단', !!r.error);
+  ok('직원2가 직원1 계획 못 봄', (await cnt(S2.c, 'plans', q => q.eq('id', planId))) === 0);
+  ok('팀장이 직원1 계획 봄', (await cnt(M.c, 'plans', q => q.eq('id', planId))) === 1);
+  r = await S1.c.from('promotion_criteria').select('id'); ok('직원 진급 기준 열람', !r.error && (r.data?.length ?? 0) >= 1, `${r.data?.length}행`);
+  r = await S1.c.from('incentive_tiers').select('id'); ok('직원 인센티브 구간 열람', !r.error && (r.data?.length ?? 0) >= 1, `${r.data?.length}행`);
+  r = await S1.c.from('promotion_criteria').update({ monthly_margin_min: 1 }).neq('id', 0).select('id'); ok('직원 기준 수정 → 차단', !!r.error || !r.data?.length);
+  r = await S1.c.from('incentive_tiers').insert({ scope: 'staff', label: 'x', min_margin: 0, rate: 9 }); ok('직원 구간 추가 → 차단', !!r.error);
+  r = await S1.c.from('app_settings').select('key'); ok('직원은 기준 설정키만 읽음(admin_bypass 제외)', !r.error && !(r.data ?? []).some(x => x.key === 'admin_bypass_ip'), (r.data ?? []).map(x => x.key).join(','));
+  r = await S1.c.rpc('my_directives', { p_limit: 3 }); ok('본인 지시사항 함수 호출', !r.error, r.error?.message);
 } catch (e) { results.push({ name: '치명적 오류', pass: false, note: e.message }); }
 
 // ---- 정리 (service role 있으면 테스트 행 삭제) ----
 if (SVC && cleanup.length) {
   const A = createClient(URL_, SVC, { auth: { persistSession: false } });
-  const order = ['weekly_member_notes', 'weekly_reports', 'monthly_targets', 'pipeline', 'issue_reads', 'issues', 'attendance_corrections', 'leave_requests', 'kpi_daily'];
+  const order = ['plans', 'weekly_member_notes', 'weekly_reports', 'monthly_targets', 'pipeline', 'issue_reads', 'issues', 'attendance_corrections', 'leave_requests', 'kpi_daily'];
   for (const t of order) for (const [tt, id] of cleanup) if (tt === t) await A.from(t).delete().eq('id', id);
   await A.from('leave_requests').delete().eq('reason', '자동점검');
   results.push({ name: '테스트 데이터 정리', pass: true, note: `${cleanup.length}건 삭제` });
