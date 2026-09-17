@@ -1,0 +1,28 @@
+name: settle-sync
+on:
+  schedule:
+    - cron: '0 21 * * *'        # 매일 06:00 KST (UTC 21:00) — 최근 7일
+  workflow_dispatch:            # 수동 실행 (기간 지정)
+    inputs:
+      from: { description: '시작일 YYYY-MM-DD (비우면 최근 7일)', required: false }
+      to:   { description: '종료일 YYYY-MM-DD', required: false }
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm install --no-audit --no-fund @supabase/supabase-js
+      - run: node scripts/settle-sync.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SETTLE_BASE_URL: ${{ secrets.SETTLE_BASE_URL }}
+          SETTLE_CO_CODE: ${{ secrets.SETTLE_CO_CODE }}
+          SETTLE_USER_ID: ${{ secrets.SETTLE_USER_ID }}
+          SETTLE_USER_PW: ${{ secrets.SETTLE_USER_PW }}
+          FROM: ${{ github.event.inputs.from }}
+          TO: ${{ github.event.inputs.to }}
+          TRIGGERED_BY: github-${{ github.event_name }}
