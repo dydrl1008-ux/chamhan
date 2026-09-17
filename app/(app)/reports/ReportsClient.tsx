@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { saveSubmission } from './actions';
+import { fmtKST } from '@/lib/date/kst';
 import type { Profile } from '@/lib/auth/session';
 type F = { id: number; name: string; period: string; description: string | null; period_key: string };
 type Fd = { id: number; form_id: number; key: string; label: string; type: string; options: string[] | null; required: boolean };
@@ -32,7 +33,7 @@ export default function ReportsClient({ me, forms, allForms, fields, subs, peopl
         <div style={{ display: 'grid', gap: 12 }}>{fields.filter(f => f.form_id === cur.id).map(f => <div key={f.id}><label style={{ fontSize: 12.5, fontWeight: 600, display: 'block', marginBottom: 4 }}>{f.label}{f.required && <span style={{ color: 'var(--bad)' }}> *</span>}{f.type.startsWith('auto') && <span className="pill" style={{ marginLeft: 6, fontSize: 10, background: 'var(--bg)', color: 'var(--muted)' }}>자동</span>}</label><Fld f={f} val={curSub?.data?.[f.key]} /></div>)}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}><button name="submit" value="0" className="btn ghost">임시저장</button><button name="submit" value="1" className="btn">제출</button><button type="button" className="btn ghost" onClick={() => r.push('/reports')}>닫기</button></div>
       </form>}
-      {view && <div className="card" style={{ borderColor: 'var(--accent)' }}><h3 style={{ margin: '0 0 10px', fontSize: 16, display: 'flex', justifyContent: 'space-between' }}><span>{fname(view.form_id)} <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{view.period_key} · {nm(view.user_id)} · {view.submitted_at?.slice(0, 16).replace('T', ' ')}</span></span><button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => r.push('/reports')}>닫기</button></h3>
+      {view && <div className="card" style={{ borderColor: 'var(--accent)' }}><h3 style={{ margin: '0 0 10px', fontSize: 16, display: 'flex', justifyContent: 'space-between' }}><span>{fname(view.form_id)} <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{view.period_key} · {nm(view.user_id)} · {fmtKST(view.submitted_at, true)}</span></span><button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => r.push('/reports')}>닫기</button></h3>
         <table><tbody>{fields.filter(f => f.form_id === view.form_id).map(f => <tr key={f.id}><td style={{ width: 200, color: 'var(--muted)', fontSize: 13, verticalAlign: 'top' }}>{f.label}</td><td style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{f.type.startsWith('auto') ? <span style={{ color: 'var(--muted)' }}>(제출 당시 자동값은 저장되지 않음)</span> : view.data?.[f.key] || <span style={{ color: 'var(--muted)' }}>미입력</span>}</td></tr>)}</tbody></table></div>}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 18 }}>
         <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>작성할 보고서</h3>

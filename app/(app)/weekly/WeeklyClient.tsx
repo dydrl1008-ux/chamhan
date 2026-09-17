@@ -3,7 +3,7 @@ import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveReport, addPipeline, updatePipeline } from './actions';
-import { won, man, fmtMD } from '@/lib/date/kst';
+import { won, man, fmtMD, fmtKST } from '@/lib/date/kst';
 import type { Profile } from '@/lib/auth/session';
 type K = { user_id: string; work_date: string; calls: number; new_cnt: number; margin: number; kakao_db: number; overtime: boolean; new_margin: number; work_report: string | null; feedback: string | null };
 type P = { id: number; owner_id: string; client: string; stage: string; expected_margin: string | null; next_action: string | null; risk: string | null; support: string | null; memo: string | null };
@@ -32,7 +32,7 @@ export default function WeeklyClient(p: { me: Profile; teams: { id: number; name
     <form action={async fd => { const x = await saveReport(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 18 }}>
       <input type="hidden" name="team_id" value={teamId} /><input type="hidden" name="week_start" value={ws} />
       <div style={{ background: 'linear-gradient(120deg,#101A4A,#26308F)', color: '#fff', borderRadius: 16, padding: '22px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
-        <div><h1 style={{ margin: '0 0 4px', fontSize: 20 }}>영업팀 팀장 주간보고</h1><div style={{ fontSize: 12.5, opacity: .85, display: 'flex', gap: 14 }}><span>{teams.find(t => t.id === teamId)?.name}</span><span>{fmtMD(ws)} ~ {fmtMD(we)}</span><span>{report?.status === 'submitted' ? `제출 완료 ${report.submitted_at?.slice(0, 10)}` : '작성 중'}</span></div></div>
+        <div><h1 style={{ margin: '0 0 4px', fontSize: 20 }}>영업팀 팀장 주간보고</h1><div style={{ fontSize: 12.5, opacity: .85, display: 'flex', gap: 14 }}><span>{teams.find(t => t.id === teamId)?.name}</span><span>{fmtMD(ws)} ~ {fmtMD(we)}</span><span>{report?.status === 'submitted' ? `제출 완료 ${fmtKST(report.submitted_at)}` : '작성 중'}</span></div></div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {me.role !== 'manager' && <select value={teamId} onChange={e => r.push(`/weekly?team=${e.target.value}&w=${ws}`)} style={{ width: 110, padding: '7px 10px', background: 'rgba(255,255,255,.14)', color: '#fff', borderColor: 'rgba(255,255,255,.3)' }}>{teams.map(t => <option key={t.id} value={t.id} style={{ color: '#111' }}>{t.name}</option>)}</select>}
           <select value={ws} onChange={e => r.push(`/weekly?team=${teamId}&w=${e.target.value}`)} style={{ width: 170, padding: '7px 10px', background: 'rgba(255,255,255,.14)', color: '#fff', borderColor: 'rgba(255,255,255,.3)' }}>{weeks.map(w => <option key={w} value={w} style={{ color: '#111' }}>{fmtMD(w)} ~ {fmtMD(w.slice(0, 0) + addDaysStr(w, 6))}</option>)}</select>

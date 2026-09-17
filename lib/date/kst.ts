@@ -12,3 +12,11 @@ export const fmtMD = (d: string) => d.slice(5).replace('-', '/');
 export function weekStartOf(d: string) { const x = new Date(d + 'T00:00:00Z'); const dow = (x.getUTCDay() + 6) % 7; return addDays(d, -dow); }
 export const won = (n: number | null | undefined) => '₩' + Math.round(Number(n ?? 0)).toLocaleString('ko-KR');
 export const man = (n: number | null | undefined) => (Math.round(Number(n ?? 0) / 10000)).toLocaleString('ko-KR') + '만';
+/** ISO(UTC) → 'MM/DD HH:mm' KST */
+export function fmtKST(iso: string | null | undefined, withYear = false) {
+  if (!iso) return '-';
+  const d = new Date(iso); if (isNaN(d.getTime())) return String(iso);
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: KST, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d);
+  const g = (t: string) => p.find(x => x.type === t)?.value ?? '';
+  return `${withYear ? g('year') + '-' : ''}${g('month')}/${g('day')} ${g('hour')}:${g('minute')}`;
+}
