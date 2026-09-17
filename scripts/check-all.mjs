@@ -30,7 +30,7 @@ try {
 
   // ---- 출퇴근 ----
   let r = await S1.c.rpc('attendance_check', { p_kind: 'in', p_time: minusMin(30), p_ip: '1.1.1.1', p_ua: 'check' });
-  ok('30분 전 시각 출근 → 차단', !!r.error, r.error?.message?.slice(0, 40));
+  ok('30분 전 시각 출근(직접 호출) → 차단', !!r.error, r.error?.message?.slice(0, 40));
   r = await S1.c.rpc('attendance_check', { p_kind: 'in', p_time: nowHM, p_ip: '1.1.1.1', p_ua: 'check' });
   ok('현재 시각 출근 → 기록(기존 기록 있으면 유지)', !r.error, r.error?.message);
   const attId = r.data?.id;
