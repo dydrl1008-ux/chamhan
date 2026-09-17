@@ -20,7 +20,7 @@ export async function runSync(from: string, to: string, triggeredBy: string): Pr
     const rows: SettleRow[] = []; const seen = new Set<string>(); const windows: string[] = [];
     for (let s = qFrom; s <= qTo; s = addDays(s, 5)) {
       const e = addDays(s, 4) > qTo ? qTo : addDays(s, 4);
-      const part = await fetchApprovals(cookie, s, e); windows.push(`${s.slice(5)}~${e.slice(5)}:${part.length}`); await new Promise(r => setTimeout(r, 150));
+      const part = await fetchApprovals(cookie, s, e); windows.push(`${s.slice(5)}~${e.slice(5)}:${part.length}`); await new Promise(r => setTimeout(r, 60));
       for (const r of part) { const k = JSON.stringify(r); if (!seen.has(k)) { seen.add(k); rows.push(r); } }
     }
     // 유일키 = 정산번호 + 승인번호 + 요청구분 (환불 건이 같은 정산번호를 쓰는 경우 대비)
