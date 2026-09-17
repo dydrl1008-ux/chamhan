@@ -6,7 +6,8 @@ import { checkAttendance } from './actions';
 import { nowTimeKST } from '@/lib/date/kst';
 export default function CheckCard({ today, checkIn, checkOut, isLate }: { today: string; checkIn: string | null; checkOut: string | null; isLate: boolean }) {
   const [tIn, setTIn] = useState(checkIn ?? '');
-  useEffect(() => { if (!checkIn) setTIn(nowTimeKST()); }, [checkIn]); const [tOut, setTOut] = useState(checkOut ?? '18:30');
+  const [tOut, setTOut] = useState(checkOut ?? '');
+  useEffect(() => { if (!checkIn) setTIn(nowTimeKST()); if (!checkOut) setTOut(nowTimeKST()); const t = setInterval(() => { if (!checkIn) setTIn(nowTimeKST()); if (!checkOut) setTOut(nowTimeKST()); }, 30000); return () => clearInterval(t); }, [checkIn, checkOut]);
   const [msg, setMsg] = useState(''); const [busy, setBusy] = useState(false); const r = useRouter();
   async function go(kind: 'in' | 'out') { setBusy(true); const res = await checkAttendance(kind, kind === 'in' ? tIn : tOut); setBusy(false); { notify(res.msg); setMsg(res.msg); }; if (res.ok) r.refresh(); }
   return (
