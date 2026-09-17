@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import NavLink from '@/components/NavLink';
 import { getProfile } from '@/lib/auth/session';
 import { redirect } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
@@ -12,34 +12,34 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div style={{ display: 'grid', gridTemplateColumns: '230px 1fr' }}>
       <aside className="side">
         <div style={{ color: '#fff', fontWeight: 800, fontSize: 18, padding: '4px 12px 18px' }}>워크허브</div>
-        <Link href="/">메인</Link>
-        <Link href="/issues">금일 이슈</Link>
-        <Link href="/attendance">출퇴근</Link>
-        <Link href="/leave">근태</Link>
+        <NavLink href="/">메인</NavLink>
+        <NavLink href="/issues">금일 이슈</NavLink>
+        <NavLink href="/attendance">출퇴근</NavLink>
+        <NavLink href="/leave">근태</NavLink>
         <div style={{ fontSize: 11, color: '#5C6890', padding: '14px 12px 4px' }}>영업</div>
-        {p.role !== 'head' && <Link href="/kpi">일간 KPI 보고</Link>}
-        {p.role === 'head' && <Link href="/kpi">일간 KPI 현황</Link>}
-        <Link href="/margin">영업 마진</Link>
-        {p.role !== 'staff' && <Link href="/weekly">팀장 주간보고</Link>}
-        <Link href="/plans">계획 캘린더</Link>
-        <Link href="/reports">보고서</Link>
-        <Link href="/products">상품 안내·접수</Link>
+        {p.role !== 'head' && <NavLink href="/kpi">일간 KPI 보고</NavLink>}
+        {p.role === 'head' && <NavLink href="/kpi">일간 KPI 현황</NavLink>}
+        <NavLink href="/margin">영업 마진</NavLink>
+        {p.role !== 'staff' && <NavLink href="/weekly">팀장 주간보고</NavLink>}
+        <NavLink href="/plans">계획 캘린더</NavLink>
+        <NavLink href="/reports">보고서</NavLink>
+        <NavLink href="/products">상품 안내·접수</NavLink>
         <div style={{ fontSize: 11, color: '#5C6890', padding: '14px 12px 4px' }}>기준·내 정보</div>
-        <Link href="/criteria">진급·인센티브 기준</Link>
-        <Link href="/me">마이페이지</Link>
+        <NavLink href="/criteria">진급·인센티브 기준</NavLink>
+        <NavLink href="/me">마이페이지</NavLink>
         {p.role === 'admin' && (<>
           <div style={{ fontSize: 11, color: '#5C6890', padding: '14px 12px 4px' }}>어드민</div>
-          <Link href="/admin/users">사용자 · 팀</Link>
-          <Link href="/admin/ips">허용 IP</Link>
-          <Link href="/admin/targets">월 목표 마진</Link>
-          <Link href="/admin/promotion">진급 도달 현황</Link>
-          <Link href="/admin/criteria">기준 관리</Link>
-          <Link href="/admin/forms">보고서 양식</Link>
-          <Link href="/admin/products">상품 관리</Link>
-          <Link href="/admin/promotions">프로모션</Link>
-          <Link href="/admin/duties">관리팀 담당업무</Link>
-          <Link href="/admin/pnl">영업이익 월별</Link>
-          <Link href="/admin/assets">자산·계정</Link>
+          <NavLink href="/admin/users">사용자 · 팀</NavLink>
+          <NavLink href="/admin/ips">허용 IP</NavLink>
+          <NavLink href="/admin/targets">월 목표 마진</NavLink>
+          <NavLink href="/admin/promotion">진급 도달 현황</NavLink>
+          <NavLink href="/admin/criteria">기준 관리</NavLink>
+          <NavLink href="/admin/forms">보고서 양식</NavLink>
+          <NavLink href="/admin/products">상품 관리</NavLink>
+          <NavLink href="/admin/promotions">프로모션</NavLink>
+          <NavLink href="/admin/duties">관리팀 담당업무</NavLink>
+          <NavLink href="/admin/pnl">영업이익 월별</NavLink>
+          <NavLink href="/admin/assets">자산·계정</NavLink>
         </>)}
         <div style={{ marginTop: 30, padding: 12, background: 'rgba(255,255,255,.05)', borderRadius: 12, fontSize: 12.5 }}>
           <div style={{ color: '#fff', fontWeight: 600 }}>{p.name}</div>
