@@ -6,7 +6,7 @@ type U = { id: string; name: string; email: string; role: string; team_id: numbe
 type T = { id: number; name: string; leader_id: string | null };
 const roleName: Record<string, string> = { admin: '어드민', head: '총책임자', manager: '팀장', staff: '직원' };
 
-export default function UsersClient({ users, teams }: { users: U[]; teams: T[] }) {
+export default function UsersClient({ users, teams, isAdmin }: { users: U[]; teams: T[]; isAdmin: boolean }) {
   const [msg, setMsg] = useState<{ t: string; temp?: string } | null>(null);
   const [edit, setEdit] = useState<U | null>(null);
   const tn = (id: number | null) => teams.find(t => t.id === id)?.name ?? '-';
@@ -23,7 +23,7 @@ export default function UsersClient({ users, teams }: { users: U[]; teams: T[] }
                 <td><b>{u.name}</b></td><td style={{ fontSize: 12.5, color: 'var(--muted)' }}>{u.email}</td>
                 <td><span className="pill">{roleName[u.role]}</span></td><td>{tn(u.team_id)}</td><td>{u.position ?? '-'}</td><td>{u.annual_leave_granted}</td><td>{u.is_mgmt ? '○' : ''}</td>
                 <td>{u.is_active ? '활성' : '비활성'}</td>
-                <td style={{ whiteSpace: 'nowrap' }}><button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => setEdit(u)}>편집</button> <button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={async () => { if (!confirm(`${u.name} 비밀번호를 재발급할까요?`)) return; const r = await resetPassword(u.id); { notify(r.msg); setMsg({ t: r.msg, temp: r.temp }); }; }}>비번 재발급</button></td>
+                <td style={{ whiteSpace: 'nowrap' }}>{(isAdmin || u.role !== 'admin') && <><button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => setEdit(u)}>편집</button> <button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={async () => { if (!confirm(`${u.name} 비밀번호를 재발급할까요?`)) return; const r = await resetPassword(u.id); { notify(r.msg); setMsg({ t: r.msg, temp: r.temp }); }; }}>비번 재발급</button></>}</td>
               </tr>))}</tbody>
           </table>
           {users.length === 0 && <p style={{ color: 'var(--muted)' }}>아직 사용자가 없습니다. 우측에서 첫 어드민을 초대하세요.</p>}
@@ -34,7 +34,7 @@ export default function UsersClient({ users, teams }: { users: U[]; teams: T[] }
             <form key={edit?.id ?? 'new'} action={async fd => { const r = edit ? await updateUser(fd) : await inviteUser(fd); { notify(r.msg); setMsg({ t: r.msg, temp: (r as any).temp }); }; if (r.ok) setEdit(null); }} style={{ display: 'grid', gap: 10 }}>
               {edit && <input type="hidden" name="id" value={edit.id} />}
               {!edit && <><input name="name" placeholder="이름" required /><input name="email" type="email" placeholder="이메일" required /></>}
-              <select name="role" defaultValue={edit?.role ?? 'staff'}><option value="staff">직원</option><option value="manager">팀장</option><option value="head">총책임자</option><option value="admin">어드민</option></select>
+              <select name="role" defaultValue={edit?.role ?? 'staff'}><option value="staff">직원</option><option value="manager">팀장</option><option value="head">총책임자</option>{isAdmin && <option value="admin">어드민</option>}</select>
               <select name="team_id" defaultValue={edit?.team_id ?? ''}><option value="">팀 없음</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
               <input name="position" placeholder="직급 (사원/주임/대리/팀장…)" defaultValue={edit?.position ?? ''} />
               {!edit && <input name="hired_at" type="date" />}

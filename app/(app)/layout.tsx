@@ -22,6 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavLink href="/margin">영업 마진</NavLink>
         {p.role !== 'staff' && <NavLink href="/weekly">팀장 주간보고</NavLink>}
         {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/settlement">정산 연동</NavLink>}
+        {(p.role === 'admin' || p.role === 'head') && <NavLink href="/users">사용자 · 팀</NavLink>}
         <NavLink href="/plans">계획 캘린더</NavLink>
         <NavLink href="/reports">보고서</NavLink>
         <NavLink href="/products">상품 안내·접수</NavLink>
@@ -30,7 +31,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavLink href="/me">마이페이지</NavLink>
         {p.role === 'admin' && (<>
           <div style={{ fontSize: 11, color: '#5C6890', padding: '14px 12px 4px' }}>어드민</div>
-          <NavLink href="/admin/users">사용자 · 팀</NavLink>
           <NavLink href="/admin/ips">허용 IP</NavLink>
           <NavLink href="/admin/targets">월 목표 마진</NavLink>
           <NavLink href="/admin/promotion">진급 도달 현황</NavLink>

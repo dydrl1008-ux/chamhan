@@ -1,6 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { requireRole } from '@/lib/auth/session';
+const MGR = ['admin', 'head'] as const;
+async function guard(role?: string, targetRole?: string) { const me = await requireRole([...MGR]); if (me.role === 'head' && (role === 'admin' || targetRole === 'admin')) throw new Error('총책임자는 어드민 계정을 다룰 수 없습니다'); return me; }
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { supabaseServer } from '@/lib/supabase/server';
 
@@ -8,7 +10,7 @@ function tempPassword() { return 'Wh!' + Math.random().toString(36).slice(2, 8) 
 
 /** 사용자 초대: auth 계정 생성(service role) → 프로필 upsert(admin_upsert_profile, 호출자 admin 검증) */
 export async function inviteUser(fd: FormData): Promise<{ ok: boolean; msg: string; temp?: string }> {
-  await requireRole(['admin']);
+  try { await guard(String(fd.get('role') || 'staff')); } catch (e: any) { return { ok: false, msg: e.message }; }
   const email = String(fd.get('email') || '').trim().toLowerCase();
   const name = String(fd.get('name') || '').trim();
   const role = String(fd.get('role') || 'staff');
@@ -33,12 +35,12 @@ export async function inviteUser(fd: FormData): Promise<{ ok: boolean; msg: stri
     await admin.auth.admin.deleteUser(created.user.id);   // 프로필 실패 시 auth 계정 롤백 (고아 계정 방지)
     return { ok: false, msg: `프로필 생성 실패: ${e2.message}` };
   }
-  revalidatePath('/admin/users');
+  revalidatePath('/users');
   return { ok: true, msg: `${name} 초대 완료`, temp };
 }
 
 export async function updateUser(fd: FormData): Promise<{ ok: boolean; msg: string }> {
-  await requireRole(['admin']);
+  try { const cur = await supabaseServer().from('profiles').select('role').eq('id', String(fd.get('id'))).single(); await guard(String(fd.get('role')), cur.data?.role); } catch (e: any) { return { ok: false, msg: e.message }; }
   const id = String(fd.get('id'));
   const patch = {
     role: String(fd.get('role')), team_id: fd.get('team_id') ? Number(fd.get('team_id')) : null,
@@ -47,12 +49,12 @@ export async function updateUser(fd: FormData): Promise<{ ok: boolean; msg: stri
   };
   const { error } = await supabaseServer().from('profiles').update(patch).eq('id', id);   // RLS: admin만 통과
   if (error) return { ok: false, msg: error.message };
-  revalidatePath('/admin/users');
+  revalidatePath('/users');
   return { ok: true, msg: '저장됨' };
 }
 
 export async function resetPassword(id: string): Promise<{ ok: boolean; msg: string; temp?: string }> {
-  await requireRole(['admin']);
+  try { const cur = await supabaseServer().from('profiles').select('role').eq('id', id).single(); await guard(undefined, cur.data?.role); } catch (e: any) { return { ok: false, msg: e.message }; }
   const temp = tempPassword();
   const { error } = await supabaseAdmin().auth.admin.updateUserById(id, { password: temp });
   return error ? { ok: false, msg: error.message } : { ok: true, msg: '임시 비밀번호 발급', temp };
