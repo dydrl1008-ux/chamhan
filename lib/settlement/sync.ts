@@ -16,7 +16,7 @@ export async function runSync(from: string, to: string, triggeredBy: string): Pr
     const map = await loadMap(); if (!map) return finish(false, '필드 매핑이 없습니다. 어드민 › 정산 연동 › 연결 테스트 후 매핑 저장');
     const cookie = await settleLogin();
     // 정산 API 는 조회기간을 '작업시작일' 로 거르므로, 요청일 기준으로 빠짐없이 받기 위해 앞뒤 31일을 넓혀 조회 (5일 단위 분할)
-    const qFrom = addDays(from, -31), qTo = addDays(to, 31);
+    const qFrom = addDays(from, -15), qTo = addDays(to, 15);   // reqDate 와 dispReqDate 차이(며칠) 대비
     const rows: SettleRow[] = []; const seen = new Set<string>(); const windows: string[] = [];
     for (let s = qFrom; s <= qTo; s = addDays(s, 5)) {
       const e = addDays(s, 4) > qTo ? qTo : addDays(s, 4);
