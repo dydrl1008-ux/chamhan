@@ -14,7 +14,14 @@ export async function runSync(from: string, to: string, triggeredBy: string): Pr
   const finish = async (ok: boolean, message: string, fetched = 0, applied = 0) => { if (run) await sb.from('settlement_sync_runs').update({ finished_at: new Date().toISOString(), ok, message, rows_fetched: fetched, rows_applied: applied }).eq('id', run.id); return { ok, msg: message, fetched, applied }; };
   try {
     const map = await loadMap(); if (!map) return finish(false, '필드 매핑이 없습니다. 어드민 › 정산 연동 › 연결 테스트 후 매핑 저장');
-    const cookie = await settleLogin(); const rows = await fetchApprovals(cookie, from, to);
+    const cookie = await settleLogin();
+    // 서버가 한 번에 돌려주는 건수에 상한이 있어 5일 단위로 나눠 조회 후 합침
+    const rows: SettleRow[] = []; const seen = new Set<string>(); const windows: string[] = [];
+    for (let s = from; s <= to; s = addDays(s, 5)) {
+      const e = addDays(s, 4) > to ? to : addDays(s, 4);
+      const part = await fetchApprovals(cookie, s, e); windows.push(`${s.slice(5)}~${e.slice(5)}:${part.length}`);
+      for (const r of part) { const k = JSON.stringify(r); if (!seen.has(k)) { seen.add(k); rows.push(r); } }
+    }
     // 유일키 = 정산번호 + 승인번호 + 요청구분 (환불 건이 같은 정산번호를 쓰는 경우 대비)
     const keyOf = (r: SettleRow) => [r[map.settle_no], r['confirmSeq'], r['reqGubun']].filter(v => v !== undefined && v !== null && String(v) !== '').map(String).join('|');
     const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: toNum(r[map.profit]), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date);
@@ -23,7 +30,7 @@ export async function runSync(from: string, to: string, triggeredBy: string): Pr
     for (let i = 0; i < items.length; i += 500) { const { error } = await sb.from('settlement_items').upsert(items.slice(i, i + 500), { onConflict: 'settle_no' }); if (error) return finish(false, 'settlement_items 저장 실패: ' + error.message, rows.length); }
     const { data: applied, error } = await sb.rpc('apply_settlement_margin', { p_from: from, p_to: to });
     if (error) return finish(false, 'KPI 반영 실패: ' + error.message, rows.length);
-    return finish(true, `${from}~${to} 정산 ${items.length}건 → KPI ${applied}건 반영`, items.length, Number(applied ?? 0));
+    return finish(true, `${from}~${to} 정산 ${items.length}건 → KPI ${applied}건 반영 [${windows.join(' ')}]`, items.length, Number(applied ?? 0));
   } catch (e: any) { return finish(false, e.message); }
 }
 export const defaultRange = () => { const t = todayKST(); return { from: addDays(t, -7), to: t }; };
