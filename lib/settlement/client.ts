@@ -21,11 +21,7 @@ export async function settleLogin(): Promise<string> {
   const loc = res.headers.get('location') ?? '';
   if (/error/i.test(loc)) throw new Error(`정산 사이트 로그인 거부 (아이디/비밀번호/회사코드 확인) → ${loc}`);
   if (res.status >= 400) throw new Error(`로그인 요청 실패 status ${res.status}`);
-  // 3) 세션 검증: 로그인 필요 API 하나 호출
-  const probe = await fetch(`${BASE()}/api/pages/sidelayout`, { headers: { Cookie: cookieStr(jar), Accept: '*/*', 'X-Requested-With': 'XMLHttpRequest', 'User-Agent': UA }, cache: 'no-store', redirect: 'manual' });
-  const ptxt = await probe.text();
-  let pj: any = null; try { pj = JSON.parse(ptxt); } catch {}
-  if (probe.status >= 300 || (pj && pj.error && pj.status)) throw new Error(`로그인 후 세션 확인 실패: login_proc status ${res.status}${loc ? ' → ' + loc : ''}, 쿠키 [${Object.keys(jar).join(',') || '없음'}], probe ${probe.status} ${pj ? `${pj.status} ${pj.error} ${pj.path ?? ''}` : ptxt.slice(0, 80)}`);
+  if (!jar['JSESSIONID'] && !Object.keys(jar).some(k => /SESSION/i.test(k))) throw new Error(`로그인 후 세션 쿠키 없음 (login_proc ${res.status}${loc ? ' → ' + loc : ''})`);
   return cookieStr(jar);
 }
 export async function fetchApprovals(cookie: string, from: string, to: string): Promise<SettleRow[]> {
