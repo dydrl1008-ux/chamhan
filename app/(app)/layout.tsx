@@ -12,6 +12,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <aside className="side">
         <div style={{ color: '#fff', fontWeight: 800, fontSize: 18, padding: '4px 12px 18px' }}>워크허브</div>
         <Link href="/">메인</Link>
+        <Link href="/issues">금일 이슈</Link>
+        <Link href="/attendance">출퇴근</Link>
+        <Link href="/leave">근태</Link>
         {p.role === 'admin' && (<>
           <div style={{ fontSize: 11, color: '#5C6890', padding: '14px 12px 4px' }}>어드민</div>
           <Link href="/admin/users">사용자 · 팀</Link>
