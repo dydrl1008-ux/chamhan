@@ -44,8 +44,9 @@ try {
   ok('직원2가 직원1 출퇴근 못 봄', (await cnt(S2.c, 'attendance', q => q.eq('user_id', S1.p.id))) === 0);
 
   // ---- 근태 2단계 ----
-  r = await S1.c.from('leave_requests').insert({ user_id: S1.p.id, type: 'annual', start_date: TD, end_date: TD, reason: '자동점검', requested_by: S1.p.id }).select('id').single();
-  const lv = r.data?.id; ok('직원1 연차 신청 → 대기', !r.error && lv, r.error?.message); if (lv) cleanup.push(['leave_requests', lv]);
+  r = await S1.c.from('leave_requests').insert({ user_id: S1.p.id, type: 'sick', start_date: TD, end_date: TD, reason: '자동점검', requested_by: S1.p.id }).select('id').single();
+  const lv = r.data?.id; ok('직원1 병가 신청 → 대기 (연차 잔여와 무관한 유형으로 흐름 점검)', !r.error && lv, r.error?.message); if (lv) cleanup.push(['leave_requests', lv]);
+  r = await S1.c.from('leave_requests').insert({ user_id: S1.p.id, type: 'annual', start_date: '2030-03-06', end_date: '2030-03-20', reason: '자동점검', requested_by: S1.p.id }); ok('연차 15일 신청(잔여 초과) → 차단', !!r.error && /잔여/.test(r.error?.message ?? ''), r.error?.message?.slice(0, 40)); if (r.data) {}
   r = await S1.c.from('leave_requests').insert({ user_id: S1.p.id, type: 'late', start_date: TD, end_date: TD, requested_by: S1.p.id }); ok('직원이 지각 직접 등록 → 차단', !!r.error);
   r = await S1.c.from('leave_requests').update({ status: 'approved' }).eq('id', lv).select('id'); ok('직원 본인 승인 → 차단', !!r.error || !r.data?.length);
   ok('직원2가 직원1 근태 못 봄', (await cnt(S2.c, 'leave_requests', q => q.eq('id', lv))) === 0);
@@ -104,12 +105,22 @@ try {
   r = await S1.c.from('incentive_tiers').insert({ scope: 'staff', label: 'x', min_margin: 0, rate: 9 }); ok('직원 구간 추가 → 차단', !!r.error);
   r = await S1.c.from('app_settings').select('key'); ok('직원은 기준 설정키만 읽음(admin_bypass 제외)', !r.error && !(r.data ?? []).some(x => x.key === 'admin_bypass_ip'), (r.data ?? []).map(x => x.key).join(','));
   r = await S1.c.rpc('my_directives', { p_limit: 3 }); ok('본인 지시사항 함수 호출', !r.error, r.error?.message);
+
+  // ---- 1-E: 상품·프로모션·어드민 전용·양식 ----
+  r = await S1.c.from('products').select('id'); ok('직원 상품 안내 열람', !r.error, r.error?.message);
+  r = await S1.c.from('products').insert({ name: '해킹' }); ok('직원 상품 등록 → 차단', !!r.error);
+  ok('직원 자산/계정 0행', (await cnt(S1.c, 'assets_accounts')) === 0 && (await cnt(S1.c, 'pnl_months')) === 0 && (await cnt(S1.c, 'mgmt_duties')) === 0);
+  ok('총괄도 자산/손익 0행 (어드민 전용)', (await cnt(H.c, 'assets_accounts')) === 0 && (await cnt(H.c, 'pnl_months')) === 0);
+  r = await S1.c.from('report_forms').insert({ name: 'x' }); ok('직원 양식 생성 → 차단', !!r.error);
+  r = await S1.c.rpc('my_forms'); ok('배정 양식 조회 함수', !r.error, `${r.data?.length ?? 0}개 배정`);
+  if (r.data?.length) { const f = r.data[0]; r = await S1.c.from('report_submissions').upsert({ form_id: f.id, user_id: S1.p.id, period_key: '2030-03-04', data: { t: '자동점검' }, status: 'draft' }, { onConflict: 'form_id,user_id,period_key' }).select('id').single(); ok('직원 양식 임시저장', !r.error, r.error?.message); if (r.data?.id) cleanup.push(['report_submissions', r.data.id]);
+    r = await S1.c.from('report_submissions').insert({ form_id: f.id, user_id: S2.p.id, period_key: '2030-03-04', data: {} }); ok('직원1이 직원2 이름으로 제출 → 차단', !!r.error); }
 } catch (e) { results.push({ name: '치명적 오류', pass: false, note: e.message }); }
 
 // ---- 정리 (service role 있으면 테스트 행 삭제) ----
 if (SVC && cleanup.length) {
   const A = createClient(URL_, SVC, { auth: { persistSession: false } });
-  const order = ['plans', 'weekly_member_notes', 'weekly_reports', 'monthly_targets', 'pipeline', 'issue_reads', 'issues', 'attendance_corrections', 'leave_requests', 'kpi_daily'];
+  const order = ['report_submissions', 'plans', 'weekly_member_notes', 'weekly_reports', 'monthly_targets', 'pipeline', 'issue_reads', 'issues', 'attendance_corrections', 'leave_requests', 'kpi_daily'];
   for (const t of order) for (const [tt, id] of cleanup) if (tt === t) await A.from(t).delete().eq('id', id);
   await A.from('leave_requests').delete().eq('reason', '자동점검');
   results.push({ name: '테스트 데이터 정리', pass: true, note: `${cleanup.length}건 삭제` });

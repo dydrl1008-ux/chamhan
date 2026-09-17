@@ -22,6 +22,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Link href="/margin">영업 마진</Link>
         {p.role !== 'staff' && <Link href="/weekly">팀장 주간보고</Link>}
         <Link href="/plans">계획 캘린더</Link>
+        <Link href="/reports">보고서</Link>
+        <Link href="/products">상품 안내·접수</Link>
         <div style={{ fontSize: 11, color: '#5C6890', padding: '14px 12px 4px' }}>기준·내 정보</div>
         <Link href="/criteria">진급·인센티브 기준</Link>
         <Link href="/me">마이페이지</Link>
@@ -32,6 +34,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/admin/targets">월 목표 마진</Link>
           <Link href="/admin/promotion">진급 도달 현황</Link>
           <Link href="/admin/criteria">기준 관리</Link>
+          <Link href="/admin/forms">보고서 양식</Link>
+          <Link href="/admin/products">상품 관리</Link>
+          <Link href="/admin/promotions">프로모션</Link>
+          <Link href="/admin/duties">관리팀 담당업무</Link>
+          <Link href="/admin/pnl">영업이익 월별</Link>
+          <Link href="/admin/assets">자산·계정</Link>
         </>)}
         <div style={{ marginTop: 30, padding: 12, background: 'rgba(255,255,255,.05)', borderRadius: 12, fontSize: 12.5 }}>
           <div style={{ color: '#fff', fontWeight: 600 }}>{p.name}</div>
