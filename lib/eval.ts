@@ -27,7 +27,8 @@ export async function evaluatePeople(today: string, onlyUser?: string) {
     const yearMargin = rows.reduce((a, x) => a + Number(x.margin), 0);
     const newMargin = Number(rows.find(x => x.month === ms)?.new_margin ?? 0);
     const c = C.find(x => x.from_position === p.position) ?? null;
-    const consecutiveOk = c ? prevMonths(c.consecutive_months).every(mo => Number(rows.find(x => x.month === mo)?.margin ?? 0) >= Number(c.monthly_margin_min)) : true;
+    // 연속 N개월: 진행 중인 이달은 제외하고 직전 완료된 N개월로 판정
+    const consecutiveOk = c ? prevMonths(c.consecutive_months + 1).slice(1).every(mo => Number(rows.find(x => x.month === mo)?.margin ?? 0) >= Number(c.monthly_margin_min)) : true;
     const y = (ly ?? []).find(x => x.user_id === p.id); const m = (lm ?? []).find(x => x.user_id === p.id);
     const late = Number(m?.late_cnt ?? 0), absent = Number(y?.absent_cnt ?? 0), sick = Number(m?.sick_cnt ?? 0);
     const tenure = monthsBetween(p.hired_at, today);

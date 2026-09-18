@@ -6,7 +6,7 @@ export default function PasswordChange() {
   const [pw, setPw] = useState(''); const [pw2, setPw2] = useState(''); const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (pw.length < 8) return notify('비밀번호는 8자 이상이어야 합니다', 'bad');
+    if (pw.length < 10 || !/[a-zA-Z]/.test(pw) || !/\d/.test(pw)) return notify('비밀번호는 10자 이상, 영문과 숫자를 모두 포함해야 합니다', 'bad');
     if (pw !== pw2) return notify('두 비밀번호가 다릅니다', 'bad');
     setBusy(true); const { error } = await supabaseBrowser().auth.updateUser({ password: pw }); setBusy(false);
     if (error) return notify('변경 실패: ' + error.message, 'bad');
@@ -15,7 +15,7 @@ export default function PasswordChange() {
   return (
     <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>비밀번호 변경</h3>
       <form onSubmit={submit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-        <input type="password" placeholder="새 비밀번호 (8자 이상)" value={pw} onChange={e => setPw(e.target.value)} autoComplete="new-password" required />
+        <input type="password" placeholder="새 비밀번호 (10자 이상, 영문+숫자)" value={pw} onChange={e => setPw(e.target.value)} autoComplete="new-password" required />
         <input type="password" placeholder="새 비밀번호 확인" value={pw2} onChange={e => setPw2(e.target.value)} autoComplete="new-password" required />
         <button className="btn" disabled={busy}>{busy ? '변경 중…' : '변경'}</button>
       </form>
