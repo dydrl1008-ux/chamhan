@@ -24,8 +24,8 @@ export async function settleLogin(): Promise<string> {
   if (!jar['JSESSIONID'] && !Object.keys(jar).some(k => /SESSION/i.test(k))) throw new Error(`로그인 후 세션 쿠키 없음 (login_proc ${res.status}${loc ? ' → ' + loc : ''})`);
   return cookieStr(jar);
 }
-export async function fetchApprovals(cookie: string, from: string, to: string): Promise<SettleRow[]> {
-  const url = `${BASE()}/api/pages/applypaymentapprmng?searchStartDate=${from}&searchEndDate=${to}&emplName=&applyStatus=&custName=&prodName=&reqGubun=`;
+export async function fetchApprovals(cookie: string, from: string, to: string, applyStatus = ''): Promise<SettleRow[]> {
+  const url = `${BASE()}/api/pages/applypaymentapprmng?searchStartDate=${from}&searchEndDate=${to}&emplName=&applyStatus=${encodeURIComponent(applyStatus)}&custName=&prodName=&reqGubun=`;
   const res = await fetch(url, { headers: { Cookie: cookie, Accept: '*/*', 'X-Requested-With': 'XMLHttpRequest', 'User-Agent': UA, Referer: `${BASE()}/` }, cache: 'no-store', redirect: 'manual' });
   const text = await res.text();
   let json: any; try { json = JSON.parse(text); } catch { throw new Error(`JSON 아님 (status ${res.status}): ` + text.slice(0, 120)); }

@@ -9,7 +9,7 @@ export default async function Page() {
   const me = await getProfile(); if (!me || !(me.role === 'admin' || me.role === 'head' || me.is_mgmt)) redirect('/');
   const sb = supabaseServer(); const today = todayKST();
   const [{ data: set }, { data: runs }, { data: empls }, { data: maps }, { data: people }, { count }] = await Promise.all([
-    sb.from('app_settings').select('key,value').in('key', ['settle_field_map', 'settle_vat_divisor']),
+    sb.from('app_settings').select('key,value').in('key', ['settle_field_map', 'settle_vat_divisor', 'settle_pending_code']),
     sb.from('settlement_sync_runs').select('*').order('id', { ascending: false }).limit(10),
     sb.rpc('settlement_empl_ids'),
     sb.from('settlement_empl_map').select('*'),
@@ -31,5 +31,5 @@ export default async function Page() {
   const emplRows = ((empls ?? []) as any[]).sort((a, b) => String(a.empl_id).localeCompare(String(b.empl_id)));
   const emplIds = emplRows.filter(e => !e.hidden).map(e => e.empl_id as string);
   const hiddenIds = emplRows.filter(e => e.hidden).map(e => ({ empl_id: e.empl_id as string, name: e.name as string }));
-  return <SettlementAdmin isAdmin={me.role === 'admin'} summary={summary} hiddenIds={hiddenIds} map={map} vat={v('settle_vat_divisor') || '1.1'} runs={runs ?? []} emplIds={emplIds} maps={maps ?? []} people={people ?? []} total={count ?? 0} today={today} envReady={!!(process.env.SETTLE_CO_CODE && process.env.SETTLE_USER_ID && process.env.SETTLE_USER_PW)} />;
+  return <SettlementAdmin isAdmin={me.role === 'admin'} summary={summary} hiddenIds={hiddenIds} pendingCode={v('settle_pending_code') || '01'} map={map} vat={v('settle_vat_divisor') || '1.1'} runs={runs ?? []} emplIds={emplIds} maps={maps ?? []} people={people ?? []} total={count ?? 0} today={today} envReady={!!(process.env.SETTLE_CO_CODE && process.env.SETTLE_USER_ID && process.env.SETTLE_USER_PW)} />;
 }
