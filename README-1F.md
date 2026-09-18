@@ -21,3 +21,9 @@
 2. 매일 06:00 KST 자동 실행(최근 7일). 결과는 워크허브 정산 연동 › 실행 이력에 `github-schedule` 로 표시
 3. 수동: Actions 탭 › settle-sync › **Run workflow** › from/to 입력 (예: 2026-07-21 / 2026-08-20)
 4. 실패 시 Actions 로그와 실행 이력 메시지에 원인 표시. 정산 사이트는 조회만 함
+
+## 정산 승인요청 실시간 감시 (관리팀 알림)
+1. Supabase › Database › Extensions: **pg_cron**, **pg_net** 활성화
+2. SQL `0020_settlement_pending.sql` 실행 → `checks/pending_setup.sql` 의 URL·CRON_SECRET 채워 실행
+3. 2분마다 워크허브 `/api/cron/pending` 호출 → 정산 사이트 최근 3일 조회(읽기만) → 새 승인요청은 `정산 승인 대기` 메뉴(관리팀·총괄·어드민)에 표시, 사이드바 빨간 배지. 사이트에서 승인/반려되면 다음 확인 때 자동 해소
+4. 외부 알림: Vercel 환경변수 `NOTIFY_WEBHOOK_URL` 에 웹훅 주소를 넣으면 새 건 발생 시 JSON POST (`text`, `count`, `items`). 솔라피 알림톡·카톡발송기·Slack 등 연결 가능

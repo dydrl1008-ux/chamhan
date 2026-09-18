@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, won } from '@/lib/date/kst';
+import { bizMonthOf } from '@/lib/date/period';
 export const dynamic = 'force-dynamic';
 export default async function Home() {
   const p = (await getProfile())!; const sb = supabaseServer(); const today = todayKST();
@@ -12,7 +13,7 @@ export default async function Home() {
     p.role === 'staff' ? Promise.resolve({ count: 0 }) : p.role === 'manager' ? sb.from('leave_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending').is('team_approved_at', null) : sb.from('leave_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     sb.from('profiles').select('id', { count: 'exact', head: true }),
   ]);
-  const ms = today.slice(0, 7) + '-01';
+  const ms = bizMonthOf(today) + '-01';
   const [{ data: kpiToday }, { data: myMonth }, { data: tgt }] = await Promise.all([
     sb.from('kpi_daily').select('id').eq('user_id', p.id).eq('work_date', today).maybeSingle(),
     sb.from('v_margin_monthly').select('margin').eq('user_id', p.id).eq('month', ms).maybeSingle(),

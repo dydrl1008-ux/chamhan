@@ -1,10 +1,11 @@
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, weekStartOf, won } from '@/lib/date/kst';
+import { bizMonthOf } from '@/lib/date/period';
 import ReportsClient from './ReportsClient';
 export const dynamic = 'force-dynamic';
 export default async function Page({ searchParams }: { searchParams: { f?: string; v?: string } }) {
-  const me = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const ms = today.slice(0, 7) + '-01';
+  const me = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const ms = bizMonthOf(today) + '-01';
   const pk = (p: string) => p === 'daily' ? today : p === 'weekly' ? weekStartOf(today) : p === 'monthly' ? today.slice(0, 7) : today;
   const [{ data: myForms }, { data: allForms }, { data: fields }, { data: subs }, { data: people }, { data: mt }, { data: mm }, { data: pr }, { data: lm }] = await Promise.all([
     sb.rpc('my_forms'), sb.from('report_forms').select('id,name,period').eq('is_active', true), sb.from('report_form_fields').select('*').order('sort_order'),

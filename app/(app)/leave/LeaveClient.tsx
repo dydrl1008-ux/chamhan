@@ -10,7 +10,7 @@ type Agg = { user_id: string; month?: string; year?: number; late_cnt: number; a
 const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각' };
 const stName: Record<string, [string, React.CSSProperties]> = { pending: ['대기', { background: '#FDF1DD', color: '#D97706' }], approved: ['승인', { background: 'var(--ok-soft, #E7F7EC)', color: 'var(--ok)' }], rejected: ['반려', { background: 'var(--bad-soft)', color: 'var(--bad)' }], cancelled: ['취소', { background: 'var(--bg)', color: 'var(--muted)' }] };
 
-export default function LeaveClient({ me, people, leaves, monthly, yearly, teams, month, today, selUser }: { me: Profile; people: P[]; leaves: L[]; monthly: Agg[]; yearly: Agg[]; teams: { id: number; name: string }[]; month: string; today: string; selUser: string }) {
+export default function LeaveClient({ me, people, leaves, monthly, yearly, teams, month, range, today, selUser }: { me: Profile; people: P[]; leaves: L[]; monthly: Agg[]; yearly: Agg[]; teams: { id: number; name: string }[]; month: string; range: [string, string]; today: string; selUser: string }) {
   const r = useRouter(); const [msg, setMsg] = useState('');
   const canManage = me.role !== 'staff';
   const canSeeAll = me.role === 'admin' || me.role === 'head';
@@ -22,9 +22,9 @@ export default function LeaveClient({ me, people, leaves, monthly, yearly, teams
   const M = (u: string) => monthly.find(a => a.user_id === u && a.month === month + '-01');
   const Y = (u: string) => yearly.find(a => a.user_id === u);
   const z = (a?: Agg) => a ?? { late_cnt: 0, absent_cnt: 0, sick_cnt: 0, annual_cnt: 0, half_cnt: 0, monthly_cnt: 0, annual_used: 0, monthly_used: 0 } as Agg;
-  const rows = leaves.filter(l => us.some(u => u.id === l.user_id) && (one ? true : l.status === 'pending' || l.start_date.startsWith(month)));
+  const rows = leaves.filter(l => us.some(u => u.id === l.user_id) && (one ? true : l.status === 'pending' || (l.start_date >= range[0] && l.start_date <= range[1])));
   const nav = (m: string, u: string) => r.push(`/leave?m=${m}&u=${u}`);
-  const months = Array.from({ length: Number(today.slice(5, 7)) }, (_, i) => `${today.slice(0, 4)}-${String(i + 1).padStart(2, '0')}`);
+  const curBm = Number(month.slice(0, 4)) === Number(today.slice(0, 4)) ? Number(today.slice(5, 7)) + (Number(today.slice(8, 10)) >= 21 ? 1 : 0) : 12; const months = Array.from({ length: Math.min(12, curBm) }, (_, i) => `${today.slice(0, 4)}-${String(i + 1).padStart(2, '0')}`);
   const tgt = one ?? people.find(p => p.id === me.id) ?? pool[0];
   const tm = z(tgt && M(tgt.id)), ty = z(tgt && Y(tgt.id));
   const cell = (a: number, b: number, warn?: string) => <td className="num" style={{ textAlign: 'right', color: warn }}><b>{a}</b><span style={{ color: 'var(--muted)', fontSize: 12 }}> / {b}</span></td>;
@@ -33,7 +33,7 @@ export default function LeaveClient({ me, people, leaves, monthly, yearly, teams
     <div style={{ display: 'grid', gap: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 20, margin: 0 }}>근태</h1>
-        <select value={month} onChange={e => nav(e.target.value, selUser)} style={{ width: 130 }}>{months.map(m => <option key={m} value={m}>{Number(m.slice(5))}월</option>)}</select>
+        <select value={month} onChange={e => nav(e.target.value, selUser)} style={{ width: 170 }}>{months.map(m => <option key={m} value={m}>{Number(m.slice(5))}월 ({m === month ? range[0].slice(5).replace('-', '/') + '~' + range[1].slice(5).replace('-', '/') : '21일~20일'})</option>)}</select>
         {canManage && <select value={selUser} onChange={e => nav(month, e.target.value)} style={{ width: 200 }}><option value="all">{canSeeAll ? '전체 인원' : '팀 전체'}</option>{pool.map(p => <option key={p.id} value={p.id}>{p.name} · {teams.find(t => t.id === p.team_id)?.name ?? '-'}</option>)}</select>}
         {msg && <span style={{ fontSize: 13, color: msg.includes('실패') || msg.includes('부족') || msg.includes('권한') ? 'var(--bad)' : 'var(--ok)' }}>{msg}</span>}
       </div>
@@ -42,7 +42,7 @@ export default function LeaveClient({ me, people, leaves, monthly, yearly, teams
           <div key={l} className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{l}</div><div style={{ fontSize: 24, fontWeight: 800 }}>{v}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{d}</div></div>))}
       </div>}
       {!one && <div className="card">
-        <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>근태 누계 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>각 칸 <b>{Number(month.slice(5))}월</b> / {today.slice(0, 4)}년 · 승인 건만</span></h3>
+        <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>근태 누계 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>각 칸 <b>{Number(month.slice(5))}월({range[0].slice(5).replace('-', '/')}~{range[1].slice(5).replace('-', '/')})</b> / {today.slice(0, 4)}년 · 승인 건만</span></h3>
         <div style={{ overflowX: 'auto' }}><table>
           <thead><tr><th>이름</th><th style={{ textAlign: 'right' }}>연차</th><th style={{ textAlign: 'right' }}>반차</th><th style={{ textAlign: 'right' }}>월차</th><th style={{ textAlign: 'right' }}>병가</th><th style={{ textAlign: 'right' }}>무단결근</th><th style={{ textAlign: 'right' }}>지각</th><th style={{ textAlign: 'right' }}>연차 사용/부여</th></tr></thead>
           <tbody>{(me.role === 'staff' ? pool.filter(p => p.id === me.id) : pool).map(u => { const m = z(M(u.id)), y = z(Y(u.id)); return (

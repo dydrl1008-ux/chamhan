@@ -2,10 +2,11 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, won, man, fmtMD } from '@/lib/date/kst';
 import { evaluatePeople } from '@/lib/eval';
+import { bizMonthOf, bizLabel } from '@/lib/date/period';
 import PasswordChange from '@/components/PasswordChange';
 export const dynamic = 'force-dynamic';
 export default async function MePage() {
-  const me = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const year = Number(today.slice(0, 4)); const ms = today.slice(0, 7) + '-01';
+  const me = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const year = Number(today.slice(0, 4)); const ms = bizMonthOf(today) + '-01';
   const [{ people, tiers }, { data: yl }, { data: pr }, { data: dir }, { data: tgt }, { data: teams }] = await Promise.all([
     evaluatePeople(today, me.id),
     sb.from('v_leave_yearly').select('*').eq('user_id', me.id).eq('year', year).maybeSingle(),
@@ -24,7 +25,7 @@ export default async function MePage() {
     <div style={{ display: 'grid', gap: 18 }}>
       <h1 style={{ fontSize: 20, margin: 0 }}>마이페이지 <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 400 }}>{me.name} · {me.position ?? '-'}{me.team_id ? ' · ' + teams?.find(t => t.id === me.team_id)?.name : ''} · 입사 {p?.hired_at ?? '-'}</span></h1>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
-        <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>이달 {isMgr ? '팀' : '내'} 마진</div><div style={{ fontSize: 22, fontWeight: 800, color: (p?.monthMargin ?? 0) < 0 ? 'var(--bad)' : 'inherit' }}>{won(p?.monthMargin)}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{tg ? `목표 ${won(tg)} · ${Math.round((p?.monthMargin ?? 0) / tg * 100)}%` : '목표 미배정'}</div></div>
+        <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{bizLabel(bizMonthOf(today))} {isMgr ? '팀' : '내'} 마진</div><div style={{ fontSize: 22, fontWeight: 800, color: (p?.monthMargin ?? 0) < 0 ? 'var(--bad)' : 'inherit' }}>{won(p?.monthMargin)}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{tg ? `목표 ${won(tg)} · ${Math.round((p?.monthMargin ?? 0) / tg * 100)}%` : '목표 미배정'}</div></div>
         <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>잔여 연차</div><div style={{ fontSize: 22, fontWeight: 800 }}>{granted - used}일</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>부여 {granted} · 사용 {used}</div></div>
         <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>올해 근태</div><div style={{ fontSize: 22, fontWeight: 800 }}>{Number(yl?.late_cnt ?? 0)}<span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}> 지각</span> {Number(yl?.absent_cnt ?? 0)}<span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}> 결근</span></div><div style={{ fontSize: 12, color: 'var(--muted)' }}>병가 {Number(yl?.sick_cnt ?? 0)} · 반차 {Number(yl?.half_cnt ?? 0)}</div></div>
         <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>이달 계획 달성</div><div style={{ fontSize: 22, fontWeight: 800 }}>{['daily', 'weekly', 'monthly'].map(t => rate(t)).filter(x => x !== null).length ? ['daily', 'weekly', 'monthly'].map(t => { const v = rate(t); return v === null ? '-' : v + '%'; }).join(' · ') : '-'}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>일일 · 주간 · 월</div></div>

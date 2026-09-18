@@ -1,5 +1,6 @@
 import NavLink from '@/components/NavLink';
 import { getProfile } from '@/lib/auth/session';
+import { supabaseServer } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 import Toast from '@/components/Toast';
@@ -8,6 +9,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!p) redirect('/login');
   if (!p.is_active) redirect('/login?inactive=1');
   const roleName = { admin: '어드민', head: '총책임자', manager: '팀장', staff: '직원' }[p.role];
+  let pendingCount = 0; if (p.role === 'admin' || p.role === 'head' || p.is_mgmt) { const { count } = await supabaseServer().from('settlement_pending').select('item_key', { count: 'exact', head: true }).is('resolved_at', null); pendingCount = count ?? 0; }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '230px 1fr' }}>
       <aside className="side">
@@ -22,6 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavLink href="/margin">영업 마진</NavLink>
         {p.role !== 'staff' && <NavLink href="/weekly">팀장 주간보고</NavLink>}
         {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/settlement">정산 연동</NavLink>}
+        {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/pending">정산 승인 대기{pendingCount ? <span style={{ marginLeft: 'auto', background: '#FF5A5F', color: '#fff', borderRadius: 10, fontSize: 10.5, fontWeight: 700, padding: '1px 7px', float: 'right' }}>{pendingCount}</span> : null}</NavLink>}
         {(p.role === 'admin' || p.role === 'head') && <NavLink href="/users">사용자 · 팀</NavLink>}
         <NavLink href="/plans">계획 캘린더</NavLink>
         <NavLink href="/reports">보고서</NavLink>
