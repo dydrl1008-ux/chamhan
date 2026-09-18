@@ -24,3 +24,13 @@ export async function removePlan(id: number): Promise<R> {
   if (error) return { ok: false, msg: error.message }; if (!data?.length) return { ok: false, msg: '본인 계획만 삭제할 수 있습니다.' };
   revalidatePath('/plans'); return { ok: true, msg: '삭제됨' };
 }
+
+export async function updatePlan(fd: FormData): Promise<R> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const id = Number(fd.get('id')); const title = String(fd.get('title') || '').trim(); if (!id || !title) return { ok: false, msg: '내용을 입력하세요.' };
+  const type = String(fd.get('type')); const s = String(fd.get('start_date')); const e = String(fd.get('end_date') || s);
+  if (!['daily', 'weekly', 'monthly'].includes(type) || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return { ok: false, msg: '입력값 확인' };
+  const { data, error } = await supabaseServer().from('plans').update({ type, title, detail: String(fd.get('detail') || ''), start_date: s, end_date: e < s ? s : e }).eq('id', id).select('id');
+  if (error) return { ok: false, msg: error.message }; if (!data?.length) return { ok: false, msg: '본인 계획만 수정할 수 있습니다.' };
+  revalidatePath('/plans'); revalidatePath('/me'); revalidatePath('/'); return { ok: true, msg: '수정됨' };
+}
