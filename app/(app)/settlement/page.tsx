@@ -24,7 +24,9 @@ export default async function Page() {
   for (const x of (sums ?? []) as any[]) { const mk = x.biz_month; const e = x.empl_id || '(없음)'; byMonth[mk] ??= {}; byMonth[mk][e] = { name: x.name ?? '', sum: Number(x.sum_profit) }; }
   const months = Object.keys(byMonth).sort().reverse().slice(0, 12);
   const emplAll = [...new Set(Object.values(byMonth).flatMap(m => Object.keys(m)))].sort();
-  const summary = { months, rows: emplAll.map(e => ({ empl: e, name: Object.values(byMonth).map(m => m[e]?.name).find(Boolean) ?? '', vals: months.map(mk => Math.ceil((byMonth[mk][e]?.sum ?? 0) / vat)) })) };
+  const summary = { months, rows: emplAll.map(e => ({ empl: e, name: Object.values(byMonth).map(m => m[e]?.name).find(Boolean) ?? '', vals: months.map(mk => Math.ceil((byMonth[mk][e]?.sum ?? 0) / vat)) })),
+    // 합계 = 전체 VAT포함 합을 한 번만 ÷1.1 올림 (정산 사이트 합계와 일치). 개인 값 합과 몇 원 차이 날 수 있음
+    totals: months.map(mk => Math.ceil(Object.values(byMonth[mk] ?? {}).reduce((a, x) => a + x.sum, 0) / vat)) };
   let map: Record<string, string> = {}; try { map = JSON.parse(v('settle_field_map') || '{}'); } catch {}
   const emplRows = ((empls ?? []) as any[]).sort((a, b) => String(a.empl_id).localeCompare(String(b.empl_id)));
   const emplIds = emplRows.filter(e => !e.hidden).map(e => e.empl_id as string);
