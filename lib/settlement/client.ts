@@ -6,8 +6,8 @@ function cookieJar(): Record<string, string> { return {}; }
 function absorb(jar: Record<string, string>, res: Response) { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(';'); const i = kv.indexOf('='); if (i > 0) jar[kv.slice(0, i).trim()] = kv.slice(i + 1).trim(); } }
 const cookieStr = (jar: Record<string, string>) => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
 
-export async function settleLogin(): Promise<string> {
-  const co = process.env.SETTLE_CO_CODE, id = process.env.SETTLE_USER_ID, pw = process.env.SETTLE_USER_PW;
+export async function settleLogin(cred?: { userId: string; userPw: string }): Promise<string> {
+  const co = process.env.SETTLE_CO_CODE, id = cred?.userId ?? process.env.SETTLE_USER_ID, pw = cred?.userPw ?? process.env.SETTLE_USER_PW;
   if (!co || !id || !pw) throw new Error('SETTLE_CO_CODE / SETTLE_USER_ID / SETTLE_USER_PW 환경변수 필요');
   const jar = cookieJar();
   // 1) 로그인 페이지: 초기 세션 + CSRF 토큰
@@ -19,7 +19,7 @@ export async function settleLogin(): Promise<string> {
   const res = await fetch(`${BASE()}/login_proc`, { method: 'POST', body, redirect: 'manual', cache: 'no-store', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA, Referer: `${BASE()}/login`, ...(cookieStr(jar) ? { Cookie: cookieStr(jar) } : {}) } });
   absorb(jar, res);
   const loc = res.headers.get('location') ?? '';
-  if (/error/i.test(loc)) throw new Error(`정산 사이트 로그인 거부 (아이디/비밀번호/회사코드 확인) → ${loc}`);
+  if (/error/i.test(loc)) throw new Error(`정산 사이트 로그인 거부 (아이디/비밀번호 확인)`);
   if (res.status >= 400) throw new Error(`로그인 요청 실패 status ${res.status}`);
   if (!jar['JSESSIONID'] && !Object.keys(jar).some(k => /SESSION/i.test(k))) throw new Error(`로그인 후 세션 쿠키 없음 (login_proc ${res.status}${loc ? ' → ' + loc : ''})`);
   return cookieStr(jar);

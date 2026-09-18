@@ -23,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {p.role !== 'head' && <NavLink href="/kpi">일간 KPI 보고</NavLink>}
         {p.role === 'head' && <NavLink href="/kpi">일간 KPI 현황</NavLink>}
         <NavLink href="/margin">영업 마진</NavLink>
+        <NavLink href="/settle-request">정산요청</NavLink>
         {p.role !== 'staff' && <NavLink href="/weekly">팀장 주간보고</NavLink>}
         {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/settlement">정산 연동</NavLink>}
         {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/settle-data">정산 데이터</NavLink>}

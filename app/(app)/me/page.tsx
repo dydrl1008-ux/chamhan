@@ -4,6 +4,7 @@ import { todayKST, won, man, fmtMD } from '@/lib/date/kst';
 import { evaluatePeople } from '@/lib/eval';
 import { bizMonthOf, bizLabel } from '@/lib/date/period';
 import PasswordChange from '@/components/PasswordChange';
+import SettleLink from '@/components/SettleLink';
 export const dynamic = 'force-dynamic';
 export default async function MePage() {
   const me = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const year = Number(today.slice(0, 4)); const ms = bizMonthOf(today) + '-01';
@@ -16,6 +17,7 @@ export default async function MePage() {
     sb.from('teams').select('id,name'),
   ]);
   const p = people[0]; const { data: prof } = await sb.from('profiles').select('annual_leave_granted').eq('id', me.id).single();
+  const { data: cred } = await sb.from('settlement_credentials').select('settle_user_id,verified_at,last_error').eq('user_id', me.id).maybeSingle();
   const granted = Number(prof?.annual_leave_granted ?? 0), used = Number(yl?.annual_used ?? 0);
   const tg = Number(tgt?.margin ?? 0);
   const bar = (v: number, c?: string) => <div style={{ height: 8, background: 'var(--line)', borderRadius: 6 }}><div style={{ width: `${Math.min(100, Math.max(0, v))}%`, height: '100%', background: c ?? 'var(--accent)', borderRadius: 6 }} /></div>;
@@ -49,7 +51,7 @@ export default async function MePage() {
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>{p.inc.next ? `다음 구간(${p.inc.next.label} ${(Number(p.inc.next.rate) * 100).toFixed(0)}%)까지 ${won(Number(p.inc.next.min_margin) - p.monthMargin)} 남음` : '최고 구간'} · 마이너스 마진은 0으로 계산</div>
           </>}</div>
       </div>
-      <PasswordChange />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}><PasswordChange /><SettleLink linked={!!cred} settleId={cred?.settle_user_id ?? ''} verifiedAt={cred?.verified_at ?? null} lastError={cred?.last_error ?? null} /></div>
       {me.role === 'staff' && <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>팀장 지시사항 · 피드백 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>제출된 주간보고 기준 · 최근 4주</span></h3>
         {(dir ?? []).map((d: any, i: number) => <div key={i} style={{ padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, marginBottom: 8 }}><div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{fmtMD(d.week_start)} 주</div>{d.common_directive && <div style={{ fontSize: 13, marginBottom: 4 }}><b>공통</b> {d.common_directive}</div>}{d.directive && <div style={{ fontSize: 13, marginBottom: 4 }}><b>지시</b> {d.directive}</div>}{d.feedback && <div style={{ fontSize: 13, color: 'var(--muted)' }}><b>피드백</b> {d.feedback}</div>}</div>)}
         {(dir ?? []).length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)' }}>아직 제출된 주간보고가 없습니다.</div>}</div>}
