@@ -11,8 +11,8 @@ type Rep = { id: number; goal_margin: number; issues: string | null; checkpoints
 const STAGES = ['콜', '연결', '카톡', '협상', '결제'];
 const stageStyle: Record<string, React.CSSProperties> = { 콜: { background: 'var(--bg)', color: 'var(--muted)' }, 연결: { background: 'var(--bg)', color: 'var(--muted)' }, 카톡: {}, 협상: { background: '#FDF1DD', color: '#D97706' }, 결제: { background: 'var(--ok-soft)', color: 'var(--ok)' } };
 
-export default function WeeklyClient(p: { me: Profile; teams: { id: number; name: string; leader_id: string | null }[]; teamId: number; ws: string; we: string; ps: string; pe: string; weeks: string[]; members: { id: string; name: string; position: string | null }[]; kpi: K[]; report: Rep; notes: { user_id: string; directive: string | null; feedback: string | null }[]; pipeline: P[]; targets: Record<string, number>; monthStart: string; monthEnd: string; monthKey: string }) {
-  const { me, teams, teamId, ws, we, ps, pe, weeks, members, kpi, report, notes, pipeline, targets, monthStart, monthEnd, monthKey } = p;
+export default function WeeklyClient(p: { me: Profile; teams: { id: number; name: string; leader_id: string | null }[]; teamId: number; ws: string; we: string; ps: string; pe: string; weeks: string[]; members: { id: string; name: string; position: string | null }[]; kpi: K[]; report: Rep; notes: { user_id: string; directive: string | null; feedback: string | null }[]; pipeline: P[]; targets: Record<string, number>; monthStart: string; monthEnd: string; monthKey: string; customers: string[] }) {
+  const { me, teams, teamId, ws, we, ps, pe, weeks, members, kpi, report, notes, pipeline, targets, monthStart, monthEnd, monthKey, customers } = p;
   const r = useRouter(); const [msg, setMsg] = useState(''); const [cps, setCps] = useState<string[]>(report?.checkpoints?.length ? report.checkpoints : ['']);
   const canEdit = me.role === 'admin' || (me.role === 'manager' && me.team_id === teamId);
   const ids = members.map(m => m.id);

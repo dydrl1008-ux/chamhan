@@ -19,19 +19,19 @@ export async function dismissPending(keys: string[], dismiss: boolean): Promise<
   return { ok: true, msg: dismiss ? `${keys.length}건 알림 해제` : `${keys.length}건 복원` };
 }
 
-import { settleLogin } from '@/lib/settlement/client';
+import { withSession } from '@/lib/settlement/pending';
 import { findRow, computeDefaults, approve, cancelApproval } from '@/lib/settlement/approve';
 const can = async () => { const me = await getProfile(); return me && (me.role === 'admin' || me.role === 'head' || me.is_mgmt) ? me : null; };
 /** 승인 팝업용: 사이트 현재 행 + 기본 계산값 */
 export async function loadApprove(settlementSeq: string): Promise<{ ok: boolean; msg: string; d?: any; row?: any }> {
   const me = await can(); if (!me) return { ok: false, msg: '권한 없음' };
-  try { const cookie = await settleLogin(); const r = await findRow(cookie, settlementSeq); if (!r) return { ok: false, msg: '정산 사이트에서 찾지 못함' };
+  try { const r = await withSession(c => findRow(c, settlementSeq, ['01'])); if (!r) { const o = await withSession(c => findRow(c, settlementSeq, ['02', '03'])); return { ok: false, msg: o ? `승인요청 상태가 아닙니다 (현재 ${o.statusName}). 목록을 새로고침하세요.` : '정산 사이트에서 승인요청 상태의 이 건을 찾지 못했습니다' }; }
     const d = computeDefaults(r); return { ok: true, msg: '', d, row: { settlementSeq: r.settlementSeq, empName: r.empName, custName: r.custName, prodName: r.prodName, reqGubunName: r.reqGubunName, gubunName: r.gubunName, dispReqDate: r.dispReqDate, incomAmt: r.incomAmt, statusName: r.statusName } }; }
   catch (e: any) { return { ok: false, msg: e.message }; }
 }
 export async function previewApprove(settlementSeq: string, confirmAmt: number): Promise<{ ok: boolean; d?: any; msg?: string }> {
   const me = await can(); if (!me) return { ok: false, msg: '권한 없음' };
-  try { const cookie = await settleLogin(); const r = await findRow(cookie, settlementSeq); if (!r) return { ok: false, msg: '못 찾음' }; return { ok: true, d: computeDefaults(r, confirmAmt) }; } catch (e: any) { return { ok: false, msg: e.message }; }
+  try { const r = await withSession(c => findRow(c, settlementSeq, ['01'])); if (!r) return { ok: false, msg: '못 찾음' }; return { ok: true, d: computeDefaults(r, confirmAmt) }; } catch (e: any) { return { ok: false, msg: e.message }; }
 }
 export async function doApprove(settlementSeq: string, confirmAmt: number | null, remark: string): Promise<{ ok: boolean; msg: string }> {
   const me = await can(); if (!me) return { ok: false, msg: '권한 없음' };

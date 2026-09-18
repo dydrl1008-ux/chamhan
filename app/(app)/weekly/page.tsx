@@ -24,5 +24,6 @@ export default async function WeeklyPage({ searchParams }: { searchParams: { tea
   ]);
   const { data: notes } = report ? await sb.from('weekly_member_notes').select('user_id,directive,feedback').eq('report_id', report.id) : { data: [] };
   const weeks = Array.from({ length: 6 }, (_, i) => addDays(thisWeek, -7 * i));
-  return <WeeklyClient me={me} teams={teams ?? []} teamId={teamId} ws={ws} we={we} ps={ps} pe={pe} weeks={weeks} members={members ?? []} kpi={kpi ?? []} report={report} notes={notes ?? []} pipeline={pipeline ?? []} targets={Object.fromEntries((targets ?? []).filter(t => t.user_id).map(t => [t.user_id!, Number(t.margin)]))} monthStart={ms} monthEnd={me2} monthKey={bm} />;
+  const { data: custs } = await sb.from('settlement_customers').select('cust_name').order('cust_name').limit(3000);
+  return <WeeklyClient customers={[...new Set((custs ?? []).map(c => c.cust_name).filter(Boolean))] as string[]} me={me} teams={teams ?? []} teamId={teamId} ws={ws} we={we} ps={ps} pe={pe} weeks={weeks} members={members ?? []} kpi={kpi ?? []} report={report} notes={notes ?? []} pipeline={pipeline ?? []} targets={Object.fromEntries((targets ?? []).filter(t => t.user_id).map(t => [t.user_id!, Number(t.margin)]))} monthStart={ms} monthEnd={me2} monthKey={bm} />;
 }

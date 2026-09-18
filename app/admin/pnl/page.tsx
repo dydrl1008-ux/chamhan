@@ -2,7 +2,9 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST } from '@/lib/date/kst';
 import { bizMonthOf, bizMonthRange } from '@/lib/date/period';
 import PnlAdmin from './PnlAdmin';
+import { fetchPayroll } from '@/lib/settlement/extra';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 export default async function Page({ searchParams }: { searchParams: { m?: string } }) {
   const sb = supabaseServer(); const today = todayKST();
   const month = /^\d{4}-\d{2}$/.test(searchParams.m ?? '') ? searchParams.m! : bizMonthOf(today);
@@ -15,5 +17,6 @@ export default async function Page({ searchParams }: { searchParams: { m?: strin
     sb.from('kpi_daily').select('margin').gte('work_date', bs).lte('work_date', be).limit(5000),
   ]);
   const marginSum = (margin ?? []).reduce((a, x) => a + Number(x.margin), 0);
-  return <PnlAdmin month={month} range={[bs, be]} cats={cats ?? []} mo={mo} items={items ?? []} summary={(summary ?? []).reverse()} marginSum={marginSum} />;
+  let commission = 0; try { const pr = await fetchPayroll(bs, be); commission = pr.reduce((a: number, x: any) => a + (Number(String(x.confirmRateAmt ?? '0').replace(/[^\d.-]/g, '')) || 0), 0); } catch {}
+  return <PnlAdmin month={month} range={[bs, be]} cats={cats ?? []} mo={mo} items={items ?? []} summary={(summary ?? []).reverse()} marginSum={marginSum} commission={commission} />;
 }

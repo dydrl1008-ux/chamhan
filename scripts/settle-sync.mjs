@@ -53,6 +53,12 @@ const toNum = v => { const n = Number(String(v ?? '0').replace(/[^\d.-]/g, ''));
     const { error: ed } = await sb.from('settlement_items').delete().gte('req_date', FROM).lte('req_date', TO); if (ed) return finish(false, '기간 정리 실패: ' + ed.message);
     for (let i = 0; i < items.length; i += 500) { const { error } = await sb.from('settlement_items').upsert(items.slice(i, i + 500), { onConflict: 'settle_no' }); if (error) return finish(false, '저장 실패: ' + error.message, rows.length); }
     const { data: applied, error } = await sb.rpc('apply_settlement_margin', { p_from: FROM, p_to: TO }); if (error) return finish(false, 'KPI 반영 실패: ' + error.message, rows.length);
-    await finish(true, `${FROM}~${TO} 정산 ${items.length}건 → KPI ${applied}건 반영 [${win.join(' ')}]`, items.length, Number(applied ?? 0));
+    // 고객 마스터도 함께 갱신 (자동완성·고객별 집계)
+    let custMsg = '';
+    try { const res = await fetch(`${BASE}/api/pages/customer?bizNo=&custName=&empId=`, { headers: { Cookie: cookie(), Accept: '*/*', 'X-Requested-With': 'XMLHttpRequest', 'User-Agent': UA, Referer: `${BASE}/` }, redirect: 'manual' }); const cs = JSON.parse(await res.text());
+      const crow = (Array.isArray(cs) ? cs : []).filter(c => c.bizNo).map(c => ({ biz_no: String(c.bizNo), cust_name: c.custName ?? null, emp_id: c.empId ?? null, owner_name: c.ownerName ?? null, cust_tel: c.custTel ?? null, mileage: toNum(c.mileage), incentive_rate: c.incentiveRate == null || c.incentiveRate === '' ? null : Number(c.incentiveRate), biz_type: c.bizType ?? null, use_ind: c.useInd ?? null, reg_date: toDate(c.regDate), synced_at: new Date().toISOString() }));
+      for (let i = 0; i < crow.length; i += 500) { const { error } = await sb.from('settlement_customers').upsert(crow.slice(i, i + 500), { onConflict: 'biz_no' }); if (error) throw error; }
+      custMsg = ` · 고객 ${crow.length}건`; } catch (e) { custMsg = ` · 고객 갱신 실패(${e.message})`; }
+    await finish(true, `${FROM}~${TO} 정산 ${items.length}건 → KPI ${applied}건 반영${custMsg} [${win.join(' ')}]`, items.length, Number(applied ?? 0));
   } catch (e) { await finish(false, e.message); }
 })();

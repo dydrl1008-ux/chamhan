@@ -6,7 +6,7 @@ const PENDING = ['승인요청', '정산요청', '대기'];   // 정산 사이�
 
 // 세션 재사용 (같은 서버 인스턴스에서 20분). 실패하면 재로그인 1회
 let cached: { cookie: string; at: number } | null = null;
-async function withSession<T>(fn: (cookie: string) => Promise<T>): Promise<T> {
+export async function withSession<T>(fn: (cookie: string) => Promise<T>): Promise<T> {
   if (!cached || Date.now() - cached.at > 20 * 60_000) cached = { cookie: await settleLogin(), at: Date.now() };
   try { return await fn(cached.cookie); }
   catch (e: any) { if (/세션|권한|401|403|302|JSON 아님/.test(e.message)) { cached = { cookie: await settleLogin(), at: Date.now() }; return fn(cached.cookie); } throw e; }

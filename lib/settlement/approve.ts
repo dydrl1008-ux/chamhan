@@ -6,11 +6,14 @@ const admin = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.
 const n = (v: unknown) => { const x = Number(String(v ?? '0').replace(/[^\d.-]/g, '')); return Number.isFinite(x) ? x : 0; };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
 
-/** 정산 사이트에서 해당 정산번호 행 조회 (상태 무관, 회사연도 범위) */
-export async function findRow(cookie: string, settlementSeq: string): Promise<SettleRow | null> {
+/** 정산 사이트에서 해당 정산번호 행 조회. 상태 필터로 좁혀 빠르게 (기본 01 승인요청 → 02 → 03 순) */
+export async function findRow(cookie: string, settlementSeq: string, statuses: string[] = ['01', '02', '03']): Promise<SettleRow | null> {
   const to = todayKST(); const y = Number(to.slice(0, 4)); const fy = to >= `${y}-12-21` ? `${y}-12-21` : `${y - 1}-12-21`;
-  const rows = await fetchApprovals(cookie, addDays(fy, -90), addDays(to, 1), '');
-  return rows.find(r => String(r.settlementSeq) === settlementSeq) ?? null;
+  for (const st of statuses) {
+    const rows = await fetchApprovals(cookie, addDays(fy, -90), addDays(to, 1), st);
+    const hit = rows.find(r => String(r.settlementSeq) === settlementSeq); if (hit) return hit;
+  }
+  return null;
 }
 /** 정산 사이트 승인 팝업과 동일한 계산 */
 export function computeDefaults(r: SettleRow, confirmAmtInput?: number) {
@@ -37,12 +40,12 @@ async function post(cookie: string, path: string, body: unknown) {
 /** 승인: 사이트 재조회로 실제 승인(02) 확인까지. actor 는 기록용 */
 export async function approve(settlementSeq: string, confirmAmtInput: number | undefined, remark: string, actorId: string) {
   const sb = admin(); const cookie = await settleLogin();
-  const r = await findRow(cookie, settlementSeq); if (!r) throw new Error('정산 사이트에서 해당 정산번호를 찾지 못했습니다');
+  const r = await findRow(cookie, settlementSeq, ['01']); if (!r) { const other = await findRow(cookie, settlementSeq, ['02', '03']); throw new Error(other ? `승인요청 상태가 아닙니다 (현재 ${other.statusName})` : '정산 사이트에서 승인요청 상태의 해당 정산번호를 찾지 못했습니다'); }
   if (String(r.applyStatus) !== '01') throw new Error(`승인요청 상태가 아닙니다 (현재 ${r.statusName})`);
   const d = computeDefaults(r, confirmAmtInput); const payload = buildPayload(r, d, remark);
   const res = await post(cookie, '', payload);
   const okNum = Number(res.text) > 0;
-  let verified = false; try { const after = await findRow(cookie, settlementSeq); verified = String(after?.applyStatus) === '02'; } catch {}
+  let verified = false; try { const after = await findRow(cookie, settlementSeq, ['02']); verified = String(after?.applyStatus) === '02'; } catch {}
   const ok = okNum && verified;
   await sb.from('settlement_actions').insert({ settlement_seq: settlementSeq, action: 'approve', payload, result: `${res.status} ${res.text.slice(0, 200)}${verified ? ' · 재조회 승인완료 확인' : ' · 재조회 미확인'}`, ok, actor_id: actorId });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.status} ${res.text.slice(0, 200)}`);
@@ -54,10 +57,10 @@ export async function approve(settlementSeq: string, confirmAmtInput: number | u
 /** 승인취소 (급여 처리된 건은 사이트가 거부) */
 export async function cancelApproval(settlementSeq: string, actorId: string) {
   const sb = admin(); const cookie = await settleLogin();
-  const r = await findRow(cookie, settlementSeq); if (!r) throw new Error('정산 사이트에서 해당 정산번호를 찾지 못했습니다');
+  const r = await findRow(cookie, settlementSeq, ['02', '01']); if (!r) throw new Error('정산 사이트에서 해당 정산번호를 찾지 못했습니다');
   const payload = { settlementSeq, refundInd: String(r.refundInd ?? '') };
   const res = await post(cookie, '/cancel', payload); const okNum = Number(res.text) > 0;
-  let verified = false; try { const after = await findRow(cookie, settlementSeq); verified = String(after?.applyStatus) === '03'; } catch {}
+  let verified = false; try { const after = await findRow(cookie, settlementSeq, ['03']); verified = String(after?.applyStatus) === '03'; } catch {}
   await sb.from('settlement_actions').insert({ settlement_seq: settlementSeq, action: 'cancel', payload, result: `${res.status} ${res.text.slice(0, 200)}${verified ? ' · 재조회 승인취소 확인' : ''}`, ok: okNum && verified, actor_id: actorId });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.status} ${res.text.slice(0, 200)}`);
   return { verified };

@@ -7,7 +7,8 @@ import ApproveModal from './ApproveModal';
 import { fmtKST, won } from '@/lib/date/kst';
 type P = { item_key: string; settle_no: string | null; empl_id: string | null; empl_name: string | null; cust_name: string | null; prod_name: string | null; req_gubun: string | null; amount: number; req_date: string | null; status: string | null; first_seen: string; dismissed_at: string | null };
 export default function PendingList({ open, dismissed }: { open: P[]; dismissed: P[] }) {
-  const r = useRouter(); const [sel, setSel] = useState<Set<string>>(new Set()); const [showDis, setShowDis] = useState(false); const [appr, setAppr] = useState<string | null>(null);
+  const r = useRouter(); const [sel, setSel] = useState<Set<string>>(new Set()); const [showDis, setShowDis] = useState(false); const [appr, setAppr] = useState<string | null>(null); const [gub, setGub] = useState('');
+  const gubuns = [...new Set(open.map(p => p.req_gubun ?? ''))].filter(Boolean); const shownOpen = open.filter(p => !gub || p.req_gubun === gub);
   const toggle = (k: string) => setSel(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
   const act = async (keys: string[], dismiss: boolean) => { const x = await dismissPending(keys, dismiss); notify(x.msg); setSel(new Set()); r.refresh(); };
   const Row = ({ p, dis }: { p: P; dis?: boolean }) => <tr key={p.item_key} style={{ opacity: dis ? .6 : 1 }}>
@@ -18,8 +19,8 @@ export default function PendingList({ open, dismissed }: { open: P[]; dismissed:
   return <>
     {appr && <ApproveModal settlementSeq={appr} onClose={() => setAppr(null)} />}
     <div className="card">
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}><span style={{ fontSize: 13, fontWeight: 600 }}>대기 {open.length}건</span>{sel.size > 0 && <button className="btn" style={{ padding: '5px 12px', fontSize: 12.5 }} onClick={() => { if (confirm(`${sel.size}건 알림 해제할까요? 목록·배지에서 빠지고, 정산 사이트에서 승인되면 처리됨으로 정리됩니다.`)) act([...sel], true); }}>선택 {sel.size}건 알림 해제</button>}<span style={{ fontSize: 12, color: 'var(--muted)' }}>승인 = 정산 사이트에 바로 반영 (입금금액 확인 후). 안 할 건은 알림 해제.</span></div>
-      <div style={{ overflowX: 'auto' }}><table>{head()}<tbody>{open.map(p => <Row key={p.item_key} p={p} />)}{open.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>대기 중인 승인요청 없음</td></tr>}</tbody></table></div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}><span style={{ fontSize: 13, fontWeight: 600 }}>대기 {open.length}건</span>{gubuns.length > 1 && <select value={gub} onChange={e => setGub(e.target.value)} style={{ width: 150, padding: '4px 8px', fontSize: 12.5 }}><option value="">전체 구분</option>{gubuns.map(g => <option key={g} value={g}>{g} ({open.filter(p => p.req_gubun === g).length})</option>)}</select>}{sel.size > 0 && <button className="btn" style={{ padding: '5px 12px', fontSize: 12.5 }} onClick={() => { if (confirm(`${sel.size}건 알림 해제할까요? 목록·배지에서 빠지고, 정산 사이트에서 승인되면 처리됨으로 정리됩니다.`)) act([...sel], true); }}>선택 {sel.size}건 알림 해제</button>}<span style={{ fontSize: 12, color: 'var(--muted)' }}>승인 = 정산 사이트에 바로 반영 (입금금액 확인 후). 안 할 건은 알림 해제.</span></div>
+      <div style={{ overflowX: 'auto' }}><table>{head()}<tbody>{shownOpen.map(p => <Row key={p.item_key} p={p} />)}{shownOpen.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>대기 중인 승인요청 없음</td></tr>}</tbody></table></div>
     </div>
     {dismissed.length > 0 && <div className="card"><button className="btn ghost" style={{ padding: '5px 12px', fontSize: 12.5 }} onClick={() => setShowDis(!showDis)}>{showDis ? '알림 해제 목록 접기' : `알림 해제한 건 ${dismissed.length}개 보기`}</button>
       {showDis && <div style={{ overflowX: 'auto', marginTop: 10 }}><table>{head(true)}<tbody>{dismissed.map(p => <Row key={p.item_key} p={p} dis />)}</tbody></table></div>}</div>}
