@@ -21,6 +21,7 @@ export async function saveFieldMap(fd: FormData): Promise<{ ok: boolean; msg: st
   const { error } = await sb.from('app_settings').upsert({ key: 'settle_field_map', value: JSON.stringify(m), updated_at: new Date().toISOString() });
   const { error: e2 } = await sb.from('app_settings').upsert({ key: 'settle_vat_divisor', value: String(Number(fd.get('vat')) || 1.1), updated_at: new Date().toISOString() });
   await sb.from('app_settings').upsert({ key: 'settle_pending_code', value: String(fd.get('pending_code') || '01').trim(), updated_at: new Date().toISOString() });
+  await sb.from('app_settings').upsert({ key: 'settle_pending_since', value: String(fd.get('pending_since') || '').trim(), updated_at: new Date().toISOString() });
   if (error || e2) return { ok: false, msg: (error ?? e2)!.message };
   revalidatePath('/settlement'); return { ok: true, msg: '매핑 저장' };
 }

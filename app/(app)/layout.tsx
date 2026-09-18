@@ -9,12 +9,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!p) redirect('/login');
   if (!p.is_active) redirect('/login?inactive=1');
   const roleName = { admin: '어드민', head: '총책임자', manager: '팀장', staff: '직원' }[p.role];
-  let pendingCount = 0; if (p.role === 'admin' || p.role === 'head' || p.is_mgmt) { const { count } = await supabaseServer().from('settlement_pending').select('item_key', { count: 'exact', head: true }).is('resolved_at', null); pendingCount = count ?? 0; }
+  let pendingCount = 0; if (p.role === 'admin' || p.role === 'head' || p.is_mgmt) { const { count } = await supabaseServer().from('settlement_pending').select('item_key', { count: 'exact', head: true }).is('resolved_at', null).is('dismissed_at', null); pendingCount = count ?? 0; }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '230px 1fr' }}>
       <aside className="side">
         <div style={{ color: '#fff', fontWeight: 800, fontSize: 18, padding: '4px 12px 18px' }}>워크허브</div>
         <NavLink href="/">메인</NavLink>
+        {p.role !== 'staff' && <NavLink href="/overview">직원 현황</NavLink>}
         <NavLink href="/issues">금일 이슈</NavLink>
         <NavLink href="/attendance">출퇴근</NavLink>
         <NavLink href="/leave">근태</NavLink>

@@ -15,7 +15,7 @@ create policy sp_read on settlement_pending for select using (is_admin() or my_r
 
 -- 확장: pg_cron + pg_net (Supabase Dashboard › Database › Extensions 에서 pg_cron, pg_net 활성화 필요)
 create extension if not exists pg_net;
-insert into app_settings(key,value) values ('pending_poll_url',''),('pending_poll_secret',''),('settle_pending_code','01') on conflict (key) do nothing;
+insert into app_settings(key,value) values ('pending_poll_url',''),('pending_poll_secret',''),('settle_pending_code','01'),('settle_pending_since','') on conflict (key) do nothing;
 -- 2분마다 워크허브 감시 API 호출. URL/시크릿은 app_settings 에서 읽음 (아래 setup 참고)
 create or replace function poll_settlement_pending() returns void language plpgsql security definer set search_path=public as $$
 declare v_url text; v_secret text;

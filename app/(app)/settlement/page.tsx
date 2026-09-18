@@ -9,7 +9,7 @@ export default async function Page() {
   const me = await getProfile(); if (!me || !(me.role === 'admin' || me.role === 'head' || me.is_mgmt)) redirect('/');
   const sb = supabaseServer(); const today = todayKST();
   const [{ data: set }, { data: runs }, { data: empls }, { data: maps }, { data: people }, { count }] = await Promise.all([
-    sb.from('app_settings').select('key,value').in('key', ['settle_field_map', 'settle_vat_divisor', 'settle_pending_code']),
+    sb.from('app_settings').select('key,value').in('key', ['settle_field_map', 'settle_vat_divisor', 'settle_pending_code', 'settle_pending_since']),
     sb.from('settlement_sync_runs').select('*').order('id', { ascending: false }).limit(10),
     sb.rpc('settlement_empl_ids'),
     sb.from('settlement_empl_map').select('*'),
