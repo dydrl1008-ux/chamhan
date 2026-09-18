@@ -24,7 +24,7 @@ export async function pollPending(_days = 3) {
   const now = new Date().toISOString();
   const open = rows.filter(r => PENDING.includes(String(r.statusName ?? '').trim()));
   const openKeys = new Set(open.map(keyOf));
-  const items = open.map(r => ({ item_key: keyOf(r), settle_no: String(r.settlementSeq ?? ''), empl_id: String(r.userId ?? ''), empl_name: String(r.empName ?? ''), cust_name: String(r.custName ?? ''), prod_name: String(r.prodName ?? ''), req_gubun: String(r.reqGubunName ?? r.gubunName ?? ''), amount: Number(String(r.incomAmt ?? '0').replace(/[^\d.-]/g, '')) || 0, req_date: String(r.dispReqDate ?? r.reqDate ?? '').slice(0, 10) || null, status: String(r.statusName ?? ''), last_seen: now, resolved_at: null, resolved_status: null }));
+  const items = open.map(r => ({ item_key: keyOf(r), settle_no: String(r.settlementSeq ?? ''), empl_id: String(r.userId ?? ''), empl_name: String(r.empName ?? ''), cust_name: String(r.custName ?? ''), prod_name: String(r.prodName ?? ''), req_gubun: String(r.reqGubunName ?? r.gubunName ?? ''), amount: Number(String(r.incomAmt ?? '0').replace(/[^\d.-]/g, '')) || 0, req_date: String(r.dispReqDate ?? r.reqDate ?? '').slice(0, 10) || null, req_date_raw: String(r.reqDate ?? '').slice(0, 10) || null, status: String(r.statusName ?? ''), last_seen: now, resolved_at: null, resolved_status: null }));
   const { data: existing, error: e0 } = await sb.from('settlement_pending').select('item_key,resolved_at,notified_at,dismissed_at');
   if (e0) throw new Error('pending 조회 실패: ' + e0.message);
   const openBefore = new Set((existing ?? []).filter(e => !e.resolved_at).map(e => e.item_key));
