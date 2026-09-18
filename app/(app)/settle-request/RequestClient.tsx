@@ -1,14 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { notify } from '@/components/Toast';
-import { loadForm, pickCustomer, pickProduct, submitRequest, myList, cancelMine, addCustomer, suggestSale } from './actions';
+import { loadForm, pickCustomer, pickProduct, submitRequest, myList, cancelMine, addCustomer, suggestSale, selfTest } from './actions';
 import { calc, type ReqInput } from '@/lib/settlement/calc';
 const w = (v: number) => '₩' + Math.round(v).toLocaleString('ko-KR');
 const L = ({ l, v, c }: { l: string; v: React.ReactNode; c?: string }) => <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid var(--line)' }}><span style={{ color: 'var(--muted)' }}>{l}</span><b style={{ color: c }}>{v}</b></div>;
 export default function RequestClient({ linked, settleId, lastError, today }: { linked: boolean; settleId: string; lastError: string; today: string }) {
   const [fd, setFd] = useState<any>(null); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [rows, setRows] = useState<any[]>([]); const [listErr, setListErr] = useState('');
   const [i, setI] = useState<ReqInput>({ prodId: '', custId: '', prodAmt: 0, prodIncentive: 0, saleAmt: 0, inflowCnt: 0, dateWorkFrom: today, dateWorkTo: today, saleTotalAmt: 0, gubun: '', mileageUseInd: false, useMileage: 0, custRate: 0, empRate: 0, existMileage: 0 });
-  const [custQ, setCustQ] = useState(''); const [prodQ, setProdQ] = useState(''); const [newCust, setNewCust] = useState(false); const [saleHint, setSaleHint] = useState<number | null>(null);
+  const [test, setTest] = useState<any>(null); const [custQ, setCustQ] = useState(''); const [prodQ, setProdQ] = useState(''); const [newCust, setNewCust] = useState(false); const [saleHint, setSaleHint] = useState<number | null>(null);
   const reloadForm = () => loadForm().then(x => { if (x.ok) setFd(x.data); });
   const trySuggest = async (custId: string, prodId: string) => { if (!custId || !prodId) return; const x = await suggestSale(custId, prodId); if (x.ok && x.saleAmt) { setSaleHint(x.saleAmt); setI(s => s.saleAmt ? s : { ...s, saleAmt: x.saleAmt! }); } else setSaleHint(null); };
   const refreshList = () => myList(60).then(x => x.ok ? setRows(x.rows ?? []) : setListErr(x.msg));
@@ -22,7 +22,8 @@ export default function RequestClient({ linked, settleId, lastError, today }: { 
   const stColor = (s: string) => s === '01' ? { background: '#FDF1DD', color: '#D97706' } : s === '02' ? { background: 'var(--ok-soft)', color: 'var(--ok)' } : { background: 'var(--bg)', color: 'var(--muted)' };
   return (
     <div style={{ display: 'grid', gap: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><h1 style={{ fontSize: 20, margin: 0 }}>정산요청</h1><span style={{ fontSize: 12.5, color: 'var(--muted)' }}>정산 계정 <b>{settleId}</b>로 접수 · 정산 사이트와 동일 계산</span>{lastError && <span className="pill" style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}>로그인 실패: 마이페이지에서 다시 연결</span>}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><h1 style={{ fontSize: 20, margin: 0 }}>정산요청</h1><span style={{ fontSize: 12.5, color: 'var(--muted)' }}>정산 계정 <b>{settleId}</b>로 접수 · 정산 사이트와 동일 계산</span>{lastError && <span className="pill" style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}>로그인 실패: 마이페이지에서 다시 연결</span>}<button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={async () => { setTest({ running: true }); const x = await selfTest(); setTest(x); }}>{test?.running ? '점검 중…' : '연결 점검'}</button></div>
+      {test && !test.running && <div className="card" style={{ borderColor: test.ok ? 'var(--ok)' : 'var(--bad)' }}><b style={{ fontSize: 13 }}>{test.msg}</b>{(test.steps ?? []).map((st: any, k: number) => <div key={k} style={{ fontSize: 12.5, padding: '3px 0' }}><span style={{ color: st.ok ? 'var(--ok)' : 'var(--bad)', fontWeight: 700 }}>{st.ok ? 'OK' : 'FAIL'}</span> {st.name} <span style={{ color: 'var(--muted)' }}>— {st.note}</span></div>)}</div>}
       {err && <div style={{ background: 'var(--bad-soft)', color: 'var(--bad)', padding: '10px 14px', borderRadius: 10, fontSize: 13 }}>{err}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 18 }}>
         <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>새 요청</h3>

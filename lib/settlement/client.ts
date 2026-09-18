@@ -27,6 +27,7 @@ export async function settleLogin(cred?: { userId: string; userPw: string }): Pr
 export async function fetchApprovals(cookie: string, from: string, to: string, applyStatus = ''): Promise<SettleRow[]> {
   const url = `${BASE()}/api/pages/applypaymentapprmng?searchStartDate=${from}&searchEndDate=${to}&emplName=&applyStatus=${encodeURIComponent(applyStatus)}&custName=&prodName=&reqGubun=`;
   const res = await fetch(url, { headers: { Cookie: cookie, Accept: '*/*', 'X-Requested-With': 'XMLHttpRequest', 'User-Agent': UA, Referer: `${BASE()}/` }, cache: 'no-store', redirect: 'manual' });
+  if (res.status === 302 || res.status === 401 || res.status === 403) throw new Error(`세션 만료 또는 권한 없음 (${res.status})`);
   const text = await res.text();
   let json: any; try { json = JSON.parse(text); } catch { throw new Error(`JSON 아님 (status ${res.status}): ` + text.slice(0, 120)); }
   if (json && !Array.isArray(json) && json.error && json.status) throw new Error(`정산 API 오류 ${json.status} ${json.error} (${json.path ?? ''}) — 세션/권한 문제`);

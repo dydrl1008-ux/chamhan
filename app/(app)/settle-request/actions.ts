@@ -48,3 +48,18 @@ export async function suggestSale(custId: string, prodId: string): Promise<R<{ s
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   try { const { cookie } = await userSession(me.id); return { ok: true, msg: '', saleAmt: await lastSaleAmt(cookie, custId, prodId) }; } catch (e: any) { return { ok: false, msg: e.message }; }
 }
+
+/** 쓰기 없이 실제 호출로 단계별 점검 */
+export async function selfTest(): Promise<R<{ steps: { name: string; ok: boolean; note: string }[] }>> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const steps: { name: string; ok: boolean; note: string }[] = []; const t0 = Date.now(); const ms = () => `${Date.now() - t0}ms`;
+  let cookie = '', settleUserId = '';
+  try { const s = await userSession(me.id); cookie = s.cookie; settleUserId = s.settleUserId; steps.push({ name: '1 본인 계정 로그인', ok: true, note: `${settleUserId} · ${ms()}` }); } catch (e: any) { steps.push({ name: '1 본인 계정 로그인', ok: false, note: e.message }); return { ok: false, msg: '로그인 단계 실패', steps }; }
+  let fd: any = null;
+  try { fd = await formData(cookie, settleUserId); steps.push({ name: '2 고객·상품·요청구분·인센율 조회', ok: fd.customers.length > 0 && fd.products.length > 0 && fd.gubuns.length > 0, note: `고객 ${fd.customers.length} · 상품 ${fd.products.length} · 구분 ${fd.gubuns.map((g: any) => g.name).join('/')} · 직원 인센율 ${fd.empRate} · ${ms()}` }); } catch (e: any) { steps.push({ name: '2 고객·상품·요청구분·인센율 조회', ok: false, note: e.message }); }
+  if (fd?.customers?.[0]) { try { const c = await custInfo(cookie, fd.customers[0].bizNo); steps.push({ name: '3 고객 정보(킵·인센율)', ok: c != null, note: `${fd.customers[0].name}: 킵 ${c?.mileage} · 인센 ${c?.incentiveRate} · ${ms()}` }); } catch (e: any) { steps.push({ name: '3 고객 정보', ok: false, note: e.message }); } }
+  if (fd?.products?.[0]) { try { const p = await prodInfo(cookie, fd.products[0].prodId); steps.push({ name: '4 상품 정보(상품가·상품인센)', ok: p != null, note: `${fd.products[0].name}: 상품가 ${p?.prodAmt} · 상품인센 ${p?.prodIncentive} · ${ms()}` }); } catch (e: any) { steps.push({ name: '4 상품 정보', ok: false, note: e.message }); } }
+  try { const rows = await myRequests(cookie, addDays(todayKST(), -30), todayKST()); steps.push({ name: '5 내 요청 목록(30일)', ok: true, note: `${rows.length}건 · 상태값 ${[...new Set(rows.map((r: any) => r.applyStatusName ?? r.applyStatus))].join('/') || '-'} · ${ms()}` }); } catch (e: any) { steps.push({ name: '5 내 요청 목록', ok: false, note: e.message }); }
+  const okAll = steps.every(s => s.ok);
+  return { ok: okAll, msg: okAll ? '읽기 단계 전부 정상 — 접수는 실제 테스트 1건으로 확인' : '실패 단계 확인', steps };
+}
