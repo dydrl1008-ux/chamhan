@@ -34,7 +34,7 @@ export default function SettlementAdmin({ isAdmin, summary, hiddenIds, map, vat,
             <div><button className="btn">매핑 저장</button> <span style={{ fontSize: 12, color: mapped ? 'var(--ok)' : 'var(--bad)' }}>{mapped ? '매핑 완료' : '매핑 필요'}</span></div>
           </form></div>}
         <div style={{ display: 'grid', gap: 18, alignContent: 'start' }}>
-          <div className="card"><h3 style={{ margin: '0 0 10px', fontSize: 15 }}>3. 동기화 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>GitHub Actions 매일 06:00 자동(최근 7일) · 아래는 소량 수동용</span></h3>
+          <div className="card"><h3 style={{ margin: '0 0 10px', fontSize: 15 }}>3. 동기화 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>GitHub Actions 매일 06:00 회사 연도(12/21~) 전체 재조회 · 아래는 소량 수동용</span></h3>
             <div style={{ fontSize: 12.5, background: 'var(--accent-soft)', color: 'var(--accent)', padding: '8px 12px', borderRadius: 8, marginBottom: 10 }}>긴 기간(한 달 이상)은 GitHub 저장소 › Actions › settle-sync › Run workflow 에서 시작일·종료일 넣고 실행하세요. 정산 사이트가 느려도 시간 제한 없이 끝까지 돕니다.</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ width: 150 }} /><span>~</span><input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ width: 150 }} /><button className="btn" disabled={busy || !mapped} onClick={runChunked}>{busy ? `실행 중… ${prog}` : '지금 동기화'}</button></div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>7일씩 나눠 순서대로 실행됩니다. 창을 닫지 마세요.</div>

@@ -1,10 +1,10 @@
 name: settle-sync
 on:
   schedule:
-    - cron: '0 21 * * *'        # 매일 06:00 KST (UTC 21:00) — 최근 7일
+    - cron: '0 21 * * *'        # 매일 06:00 KST (UTC 21:00) — 회사 연도(12/21~) 전체 재조회
   workflow_dispatch:            # 수동 실행 (기간 지정)
     inputs:
-      from: { description: '시작일 YYYY-MM-DD (비우면 최근 7일)', required: false }
+      from: { description: '시작일 YYYY-MM-DD (비우면 회사 연도 시작 12/21부터)', required: false }
       to:   { description: '종료일 YYYY-MM-DD', required: false }
 jobs:
   sync:

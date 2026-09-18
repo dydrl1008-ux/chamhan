@@ -9,7 +9,9 @@ const BASE = (env.SETTLE_BASE_URL || 'http://lchkgy.com').replace(/\/$/, '');
 const sb = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const kst = () => new Date(Date.now() + 9 * 3600e3); const iso = d => d.toISOString().slice(0, 10);
 const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return iso(x); };
-const today = iso(kst()); const TO = env.TO || today; const FROM = env.FROM || addDays(TO, -(Number(env.DAYS || 7) - 1));
+const today = iso(kst()); const TO = env.TO || today;
+const fyStart = (d) => { const y = Number(d.slice(0, 4)); const s = `${y}-12-21`; return d >= s ? s : `${y - 1}-12-21`; };   // 회사 연도 = 12/21 시작
+const FROM = env.FROM || fyStart(TO);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
 const jar = {}; const absorb = res => { for (const c of res.headers.getSetCookie?.() ?? []) { const [kv] = c.split(';'); const i = kv.indexOf('='); if (i > 0) jar[kv.slice(0, i).trim()] = kv.slice(i + 1).trim(); } };
 const cookie = () => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
@@ -43,7 +45,7 @@ const toNum = v => { const n = Number(String(v ?? '0').replace(/[^\d.-]/g, ''));
     const { data: ms } = await sb.from('app_settings').select('value').eq('key', 'settle_field_map').maybeSingle();
     const map = JSON.parse(ms?.value || '{}'); if (!map.settle_no || !map.empl_id || !map.req_date || !map.profit || !map.status) return finish(false, '필드 매핑 없음 (워크허브 정산 연동 화면에서 저장)');
     console.log(`동기화 ${FROM} ~ ${TO}`); await login();
-    const qFrom = addDays(FROM, -60), qTo = addDays(TO, 60); /* reqDate(원요청)와 dispReqDate(표시 요청일)가 두 달까지 벌어지는 환불 건 대비 */ const rows = []; const seen = new Set(); const win = [];
+    const qFrom = env.FROM ? addDays(FROM, -60) : addDays(FROM, -60), qTo = addDays(TO, 60); /* reqDate(원요청)와 dispReqDate(표시 요청일)가 두 달까지 벌어지는 환불 건 대비 */ const rows = []; const seen = new Set(); const win = [];
     for (let s = qFrom; s <= qTo; s = addDays(s, 5)) { const e = addDays(s, 4) > qTo ? qTo : addDays(s, 4); const part = await fetchWindow(s, e); win.push(`${s.slice(5)}~${e.slice(5)}:${part.length}`); for (const r of part) { const k = JSON.stringify(r); if (!seen.has(k)) { seen.add(k); rows.push(r); } } await sleep(300); }
     const keyOf = r => [r[map.settle_no], r.confirmSeq, r.reqGubun].filter(v => v != null && String(v) !== '').map(String).join('|');
     const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: toNum(r[map.profit]), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date && x.req_date >= FROM && x.req_date <= TO);
