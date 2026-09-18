@@ -36,7 +36,7 @@ export async function previewApprove(settlementSeq: string, confirmAmt: number):
 }
 export async function doApprove(settlementSeq: string, confirmAmt: number | null, remark: string): Promise<{ ok: boolean; msg: string }> {
   const me = await can(); if (!me) return { ok: false, msg: '권한 없음' };
-  try { const hint = await hintOf(settlementSeq); const r = await approve(settlementSeq, confirmAmt ?? undefined, remark, me.id, hint); revalidatePath('/pending'); revalidatePath('/'); return { ok: true, msg: `${settlementSeq} 승인${r.verified ? '완료 확인' : ' 전송됨'} · 입금 ${Number(r.d.confirmAmt).toLocaleString('ko-KR')} · 확정수수료 ${Number(r.d.confirmRateAmt).toLocaleString('ko-KR')}` }; }
+  try { const hint = await hintOf(settlementSeq); const r = await approve(settlementSeq, confirmAmt ?? undefined, remark, me.id, hint); revalidatePath('/pending'); revalidatePath('/'); const f = (v: number) => Number(v).toLocaleString('ko-KR'); return { ok: true, msg: r.site ? `${settlementSeq} ${r.site.statusName} · 정산 사이트 기록: 입금 ${f(r.site.confirmAmt)} / 확정수수료 ${f(r.site.confirmRateAmt)} / 적립킵 ${f(r.site.confirmMileage)} (승인번호 ${r.site.confirmSeq})${r.match ? ' ✓ 워크허브 계산과 일치' : ' ⚠ 워크허브 계산과 다름 — 사이트에서 확인'}` : `${settlementSeq} 승인 전송됨 · 입금 ${f(r.d.confirmAmt)} / 확정수수료 ${f(r.d.confirmRateAmt)} (사이트 재조회 미확인)` }; }
   catch (e: any) { revalidatePath('/pending'); return { ok: false, msg: e.message }; }
 }
 export async function doCancel(settlementSeq: string): Promise<{ ok: boolean; msg: string }> {

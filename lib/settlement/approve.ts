@@ -47,12 +47,14 @@ export async function approve(settlementSeq: string, confirmAmtInput: number | u
   const d = computeDefaults(r, confirmAmtInput); const payload = buildPayload(r, d, remark);
   const res = await post(cookie, '', payload);
   const okNum = Number(res.text) > 0;
-  let verified = false; try { const after = await findRow(cookie, settlementSeq, ['02'], String(r.reqDate ?? '').slice(0, 10)); verified = String(after?.applyStatus) === '02'; } catch {}
-  await sb.from('settlement_actions').insert({ settlement_seq: settlementSeq, action: 'approve', payload, result: `${res.status} ${res.text.slice(0, 200)}${verified ? ' · 재조회 승인완료 확인' : ' · 재조회 미확인(전송은 성공)'}`, ok: okNum, actor_id: actorId });
+  let verified = false; let site: { confirmAmt: number; confirmRateAmt: number; confirmMileage: number; statusName: string; confirmSeq: string } | null = null;
+  try { const after = await findRow(cookie, settlementSeq, ['02'], String(r.reqDate ?? '').slice(0, 10)); if (after) { verified = String(after.applyStatus) === '02'; site = { confirmAmt: n(after.confirmAmt), confirmRateAmt: n(after.confirmRateAmt), confirmMileage: n(after.confirmMileage), statusName: String(after.statusName ?? ''), confirmSeq: String(after.confirmSeq ?? '') }; } } catch {}
+  const match = site ? (site.confirmAmt === d.confirmAmt || d.refund) && (site.confirmRateAmt === d.confirmRateAmt || d.refund) : false;
+  await sb.from('settlement_actions').insert({ settlement_seq: settlementSeq, action: 'approve', payload: { ...payload, _site_after: site }, result: `${res.status} ${res.text.slice(0, 200)}${verified ? (match ? ' · 사이트 기록 일치' : ' · ⚠ 사이트 기록 불일치') : ' · 재조회 미확인(전송은 성공)'}`, ok: okNum, actor_id: actorId });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.status} ${res.text.slice(0, 200)}`);
   const now = new Date().toISOString();
   await sb.from('settlement_pending').update({ resolved_at: now, resolved_status: verified ? '승인완료 (워크허브에서 승인)' : '승인 전송됨 (확인 중)', resolved_by: actorId }).eq('settle_no', settlementSeq).is('resolved_at', null);
-  return { payload, d, verified };
+  return { payload, d, verified, site, match };
 }
 /** 승인취소 (급여 처리된 건은 사이트가 거부) */
 export async function cancelApproval(settlementSeq: string, actorId: string, hintDate?: string | null) {

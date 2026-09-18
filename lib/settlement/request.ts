@@ -70,3 +70,21 @@ export async function cancelRequest(userId: string, settlementSeq: string) {
   await admin().from('settlement_requests').insert({ user_id: userId, settlement_seq: settlementSeq, action: 'cancel', payload, result: `${res.status} ${res.text.slice(0, 200)}`, ok: okNum });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.text.slice(0, 200) || res.status}`);
 }
+
+/** 새 고객 등록 (정산 사이트 고객관리와 동일 POST). 사업자번호 필수, 중복이면 사이트가 거부 */
+export async function createCustomer(userId: string, c: { bizNo: string; custName: string; ownerName?: string; custTel?: string; custMail?: string; custAddr?: string; depositorName?: string; bizType?: string; bizClass?: string }) {
+  const { cookie, settleUserId } = await userSession(userId);
+  const bizNo = c.bizNo.replace(/[^\d]/g, ''); if (!bizNo) throw new Error('사업자번호는 필수입니다'); if (!c.custName?.trim()) throw new Error('고객명을 입력하세요');
+  if (c.custMail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.custMail)) throw new Error('이메일 형식이 올바르지 않습니다');
+  const payload = { isNew: true, bizNo, custName: c.custName.trim(), empId: settleUserId, ownerName: c.ownerName ?? '', custAddr: c.custAddr ?? '', custTel: c.custTel ?? '', custMail: c.custMail ?? '', depositorName: c.depositorName ?? '', mileage: 0, mileagePrev: 0, incentiveRate: 0, useInd: 'Y', bizType: c.bizType ?? '', bizClass: c.bizClass ?? '' };
+  const res = await send(cookie, '/api/pages/customer', 'POST', payload); const okNum = Number(res.text) > 0;
+  await admin().from('settlement_requests').insert({ user_id: userId, settlement_seq: null, action: 'create', payload: { _type: 'customer', ...payload }, result: `${res.status} ${res.text.slice(0, 200)}`, ok: okNum });
+  if (!okNum) throw new Error(`정산 사이트 응답: ${res.text.slice(0, 200) || res.status}`);
+  return { bizNo };
+}
+/** 같은 고객·상품의 최근 요청 판매가 (기본값 제안용) */
+export async function lastSaleAmt(cookie: string, custId: string, prodId: string): Promise<number | null> {
+  const rows = await myRequests(cookie, addDays(todayKST(), -180), todayKST()).catch(() => [] as SettleRow[]);
+  const hit = rows.filter(r => String(r.custId) === custId && String(r.prodId) === prodId).sort((a, b) => String(b.reqDate).localeCompare(String(a.reqDate)))[0];
+  return hit ? Number(hit.saleAmt) || null : null;
+}

@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
-import { saveCredential, userSession, formData, custInfo, prodInfo, createRequest, cancelRequest, myRequests, type ReqInput } from '@/lib/settlement/request';
+import { saveCredential, userSession, formData, custInfo, prodInfo, createRequest, cancelRequest, myRequests, createCustomer, lastSaleAmt, type ReqInput } from '@/lib/settlement/request';
 import { todayKST, addDays } from '@/lib/date/kst';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 export async function linkAccount(fd: FormData): Promise<R> {
@@ -36,4 +36,15 @@ export async function myList(days = 60): Promise<R<{ rows: any[] }>> {
 export async function cancelMine(seq: string): Promise<R> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   try { await cancelRequest(me.id, seq); revalidatePath('/settle-request'); return { ok: true, msg: `${seq} 요청취소 완료` }; } catch (e: any) { return { ok: false, msg: e.message }; }
+}
+
+export async function addCustomer(fd: FormData): Promise<R<{ bizNo: string }>> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const g = (k: string) => String(fd.get(k) || '').trim();
+  try { const r = await createCustomer(me.id, { bizNo: g('bizNo'), custName: g('custName'), ownerName: g('ownerName'), custTel: g('custTel'), custMail: g('custMail'), custAddr: g('custAddr'), depositorName: g('depositorName'), bizType: g('bizType'), bizClass: g('bizClass') }); return { ok: true, msg: `고객 '${g('custName')}' 등록됨`, bizNo: r.bizNo }; }
+  catch (e: any) { return { ok: false, msg: e.message }; }
+}
+export async function suggestSale(custId: string, prodId: string): Promise<R<{ saleAmt: number | null }>> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  try { const { cookie } = await userSession(me.id); return { ok: true, msg: '', saleAmt: await lastSaleAmt(cookie, custId, prodId) }; } catch (e: any) { return { ok: false, msg: e.message }; }
 }
