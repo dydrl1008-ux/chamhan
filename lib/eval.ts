@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase/server';
-import { evalPromotion, incentiveOf, monthsBetween, type Criteria, type Tier } from '@/lib/rules';
+import { evalPromotion, incentiveOf, monthsBetween, scopeFor, isTeamScope, type Criteria, type Tier } from '@/lib/rules';
 export type PersonEval = { id: string; name: string; position: string | null; team_id: number | null; role: string; hired_at: string | null; monthMargin: number; yearMargin: number; newMargin: number; consecutiveOk: boolean; late: number; absent: number; sick: number; tenure: number; promo: ReturnType<typeof evalPromotion>; inc: ReturnType<typeof incentiveOf> };
 /** RLS 범위 내 인원의 진급·인센티브 평가 (총괄·어드민=전사, 팀장=팀, 직원=본인) */
 export async function evaluatePeople(today: string, onlyUser?: string) {
@@ -11,15 +11,16 @@ export async function evaluatePeople(today: string, onlyUser?: string) {
     sb.from('v_leave_monthly').select('user_id,late_cnt,absent_cnt,sick_cnt').eq('month', ms),
     sb.from('promotion_criteria').select('*').eq('is_active', true).order('sort_order'),
     sb.from('incentive_tiers').select('*').eq('is_active', true).order('sort_order'),
-    sb.from('app_settings').select('key,value').in('key', ['new_margin_bonus_rate']),
+    sb.from('app_settings').select('key,value').in('key', ['new_margin_bonus_rate', 'incentive_team_scopes']),
     sb.from('teams').select('id,name'),
   ]);
   const newRate = Number(set?.find(s => s.key === 'new_margin_bonus_rate')?.value ?? 0);
+  const teamScopes = String(set?.find(s => s.key === 'incentive_team_scopes')?.value ?? '').split(',').map((x: string) => x.trim()).filter(Boolean);
   const T = (tiers ?? []) as Tier[]; const C = (crit ?? []) as Criteria[];
   const prevMonths = (n: number) => Array.from({ length: n }, (_, i) => { const d = new Date(Date.UTC(year, Number(today.slice(5, 7)) - 1 - i, 1)); return d.toISOString().slice(0, 10); });
   const out: PersonEval[] = (people ?? []).map(p => {
     const rows = (mm ?? []).filter(x => x.user_id === p.id);
-    const isMgr = p.role === 'manager';
+    const scope = scopeFor(T, p.position, p.role); const isMgr = isTeamScope(scope, teamScopes);
     const teamRows = isMgr ? (mm ?? []).filter(x => x.team_id === p.team_id) : [];
     const monthMargin = isMgr ? teamRows.filter(x => x.month === ms).reduce((a, x) => a + Number(x.margin), 0) : Number(rows.find(x => x.month === ms)?.margin ?? 0);
     const yearMargin = rows.reduce((a, x) => a + Number(x.margin), 0);
@@ -29,7 +30,7 @@ export async function evaluatePeople(today: string, onlyUser?: string) {
     const y = (ly ?? []).find(x => x.user_id === p.id); const m = (lm ?? []).find(x => x.user_id === p.id);
     const late = Number(m?.late_cnt ?? 0), absent = Number(y?.absent_cnt ?? 0), sick = Number(m?.sick_cnt ?? 0);
     const tenure = monthsBetween(p.hired_at, today);
-    return { ...p, monthMargin, yearMargin, newMargin, consecutiveOk, late, absent, sick, tenure, promo: evalPromotion(c, { monthMargin, yearMargin, consecutiveOk, late, absent, sick, tenure }), inc: incentiveOf(T, isMgr ? 'manager' : 'staff', monthMargin, newMargin, newRate) };
+    return { ...p, monthMargin, yearMargin, newMargin, consecutiveOk, late, absent, sick, tenure, promo: evalPromotion(c, { monthMargin, yearMargin, consecutiveOk, late, absent, sick, tenure }), inc: incentiveOf(T, scope, monthMargin, newMargin, newRate, isMgr) };
   });
-  return { people: out, tiers: T, criteria: C, newRate, teams: teams ?? [] };
+  return { people: out, tiers: T, criteria: C, newRate, teams: teams ?? [], teamScopes };
 }

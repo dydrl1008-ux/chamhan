@@ -2,9 +2,9 @@
 import { useState } from 'react';
 import { incentiveOf, type Tier } from '@/lib/rules';
 import { won, man } from '@/lib/date/kst';
-export default function Simulator({ tiers, newRate }: { tiers: Tier[]; newRate: number }) {
+export default function Simulator({ tiers, newRate, scope }: { tiers: Tier[]; newRate: number; scope: string }) {
   const [m, setM] = useState(10000000); const [nm, setNm] = useState(0);
-  const r = incentiveOf(tiers, 'staff', m, nm, newRate);
+  const r = incentiveOf(tiers, scope, m, nm, newRate);
   return (
     <div style={{ marginTop: 14, padding: 14, background: 'var(--bg)', borderRadius: 12 }}>
       <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>시뮬레이션</div>
