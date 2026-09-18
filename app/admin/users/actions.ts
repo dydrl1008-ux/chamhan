@@ -59,3 +59,10 @@ export async function resetPassword(id: string): Promise<{ ok: boolean; msg: str
   const { error } = await supabaseAdmin().auth.admin.updateUserById(id, { password: temp });
   return error ? { ok: false, msg: error.message } : { ok: true, msg: '임시 비밀번호 발급', temp };
 }
+
+export async function setActive(id: string, active: boolean): Promise<{ ok: boolean; msg: string }> {
+  try { const cur = await supabaseServer().from('profiles').select('role').eq('id', id).single(); await guard(undefined, cur.data?.role); } catch (e: any) { return { ok: false, msg: e.message }; }
+  const { error } = await supabaseServer().from('profiles').update({ is_active: active }).eq('id', id);
+  if (error) return { ok: false, msg: error.message };
+  revalidatePath('/users'); return { ok: true, msg: active ? '복직 처리됨' : '퇴사 처리됨 (로그인 차단, 기록 보존)' };
+}

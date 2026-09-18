@@ -1,13 +1,14 @@
 'use client';
 import { notify } from '@/components/Toast';
 import { useState } from 'react';
-import { inviteUser, updateUser, resetPassword } from './actions';
+import { inviteUser, updateUser, resetPassword, setActive } from './actions';
 type U = { id: string; name: string; email: string; role: string; team_id: number | null; is_mgmt: boolean; position: string | null; hired_at: string | null; annual_leave_granted: number; is_active: boolean };
 type T = { id: number; name: string; leader_id: string | null };
 const roleName: Record<string, string> = { admin: '어드민', head: '총책임자', manager: '팀장', staff: '직원' };
 
 export default function UsersClient({ users, teams, isAdmin }: { users: U[]; teams: T[]; isAdmin: boolean }) {
-  const [msg, setMsg] = useState<{ t: string; temp?: string } | null>(null);
+  const [msg, setMsg] = useState<{ t: string; temp?: string } | null>(null); const [showLeft, setShowLeft] = useState(false);
+  const shown = users.filter(u => showLeft ? !u.is_active : u.is_active);
   const [edit, setEdit] = useState<U | null>(null);
   const tn = (id: number | null) => teams.find(t => t.id === id)?.name ?? '-';
   return (
@@ -18,15 +19,16 @@ export default function UsersClient({ users, teams, isAdmin }: { users: U[]; tea
         <div className="card">
           <table>
             <thead><tr><th>이름</th><th>이메일</th><th>권한</th><th>팀</th><th>직급</th><th>연차</th><th>관리팀</th><th>상태</th><th></th></tr></thead>
-            <tbody>{users.map(u => (
+            <tbody>{shown.map(u => (
               <tr key={u.id} style={{ opacity: u.is_active ? 1 : .5 }}>
                 <td><b>{u.name}</b></td><td style={{ fontSize: 12.5, color: 'var(--muted)' }}>{u.email}</td>
                 <td><span className="pill">{roleName[u.role]}</span></td><td>{tn(u.team_id)}</td><td>{u.position ?? '-'}</td><td>{u.annual_leave_granted}</td><td>{u.is_mgmt ? '○' : ''}</td>
                 <td>{u.is_active ? '활성' : '비활성'}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{(isAdmin || u.role !== 'admin') && <><button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => setEdit(u)}>편집</button> <button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={async () => { if (!confirm(`${u.name} 비밀번호를 재발급할까요?`)) return; const r = await resetPassword(u.id); { notify(r.msg); setMsg({ t: r.msg, temp: r.temp }); }; }}>비번 재발급</button></>}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{(isAdmin || u.role !== 'admin') && <><button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => setEdit(u)}>편집</button> <button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={async () => { if (!confirm(`${u.name} 비밀번호를 재발급할까요?`)) return; const r = await resetPassword(u.id); { notify(r.msg); setMsg({ t: r.msg, temp: r.temp }); }; }}>비번 재발급</button> {u.is_active ? <button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12, color: 'var(--bad)' }} onClick={async () => { if (!confirm(`${u.name} 퇴사 처리할까요? 로그인이 막히고 목록에서 빠집니다. 기록(근태·KPI·정산)은 보존됩니다.`)) return; const r = await setActive(u.id, false); notify(r.msg); r.ok && location.reload(); }}>퇴사</button> : <button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={async () => { const r = await setActive(u.id, true); notify(r.msg); r.ok && location.reload(); }}>복직</button>}</>}</td>
               </tr>))}</tbody>
           </table>
-          {users.length === 0 && <p style={{ color: 'var(--muted)' }}>아직 사용자가 없습니다. 우측에서 첫 어드민을 초대하세요.</p>}
+          {shown.length === 0 && <p style={{ color: 'var(--muted)' }}>{showLeft ? '퇴사자 없음' : '아직 사용자가 없습니다. 우측에서 첫 어드민을 초대하세요.'}</p>}
+          <div style={{ marginTop: 10 }}><button className="btn ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => setShowLeft(!showLeft)}>{showLeft ? '재직자 보기' : `퇴사자 보기 (${users.filter(u => !u.is_active).length})`}</button></div>
         </div>
         <div style={{ display: 'grid', gap: 18, alignContent: 'start' }}>
           <div className="card">

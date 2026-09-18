@@ -1,6 +1,8 @@
 // 정산 사이트(lchkgy.com) → 워크허브 동기화 (GitHub Actions / PC 어디서든 실행). 정산 사이트는 조회만 함.
 // 환경변수: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SETTLE_CO_CODE, SETTLE_USER_ID, SETTLE_USER_PW, [SETTLE_BASE_URL], [FROM], [TO], [DAYS]
 import { createClient } from '@supabase/supabase-js';
+// Node 20 에는 WebSocket 이 없어 supabase-js 가 realtime 초기화에서 죽음 → 더미 주입 (이 스크립트는 realtime 안 씀)
+if (typeof globalThis.WebSocket === 'undefined') { globalThis.WebSocket = class { constructor() {} close() {} send() {} addEventListener() {} removeEventListener() {} }; }
 const env = process.env;
 for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SETTLE_CO_CODE', 'SETTLE_USER_ID', 'SETTLE_USER_PW']) if (!env[k]) { console.error('환경변수 없음: ' + k); process.exit(1); }
 const BASE = (env.SETTLE_BASE_URL || 'http://lchkgy.com').replace(/\/$/, '');

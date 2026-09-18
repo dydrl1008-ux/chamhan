@@ -44,3 +44,16 @@ export async function saveEmplMap(fd: FormData): Promise<{ ok: boolean; msg: str
   ['/settlement', '/margin', '/kpi', '/weekly', '/', '/me', '/admin/promotion'].forEach(p => revalidatePath(p));
   return { ok: true, msg: `담당자 매핑 저장 · KPI ${applied}건 즉시 재계산` };
 }
+
+export async function hideEmpl(emplId: string, hidden: boolean): Promise<{ ok: boolean; msg: string }> {
+  const me = await getProfile(); if (!me || !(me.role === 'admin' || me.role === 'head' || me.is_mgmt)) return { ok: false, msg: '권한 없음' };
+  const sb = supabaseServer();
+  const { error } = await sb.from('settlement_empl_map').upsert({ empl_id: emplId, hidden }, { onConflict: 'empl_id' });
+  if (error) return { ok: false, msg: error.message };
+  const adminSb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+  const { data: a } = await adminSb.from('settlement_items').select('req_date').order('req_date').limit(1).maybeSingle();
+  const { data: b } = await adminSb.from('settlement_items').select('req_date').order('req_date', { ascending: false }).limit(1).maybeSingle();
+  if (a?.req_date && b?.req_date) await adminSb.rpc('apply_settlement_margin', { p_from: a.req_date, p_to: b.req_date });
+  ['/settlement', '/margin', '/kpi', '/'].forEach(p => revalidatePath(p));
+  return { ok: true, msg: hidden ? `${emplId} 숨김 · KPI 재계산` : `${emplId} 복원` };
+}
