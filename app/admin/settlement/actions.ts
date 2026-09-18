@@ -5,6 +5,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { settleLogin, fetchApprovals, guessMap } from '@/lib/settlement/client';
 import { runSync } from '@/lib/settlement/sync';
 import { todayKST, addDays } from '@/lib/date/kst';
+import { createClient } from '@supabase/supabase-js';
 export async function testConnection(): Promise<{ ok: boolean; msg: string; keys?: string[]; sample?: Record<string, unknown>; guess?: Record<string, string>; count?: number }> {
   await requireRole(['admin']);
   try { const cookie = await settleLogin(); const to = todayKST(), from = addDays(to, -7); const rows = await fetchApprovals(cookie, from, to);
@@ -34,5 +35,12 @@ export async function saveEmplMap(fd: FormData): Promise<{ ok: boolean; msg: str
   const ids = fd.getAll('empl_id').map(String), users = fd.getAll('user_id').map(String);
   const rows = ids.map((empl_id, i) => ({ empl_id, user_id: users[i] || null })).filter(r => r.empl_id);
   for (const r of rows) { const { error } = await sb.from('settlement_empl_map').upsert(r); if (error) return { ok: false, msg: error.message }; }
-  revalidatePath('/settlement'); return { ok: true, msg: '담당자 매핑 저장 · 다음 동기화부터 반영' };
+  // 저장 즉시 저장된 정산 전체 기간에 대해 KPI 자동 마진 재계산 (정산 사이트 조회 없음)
+  const adminSb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+  const { data: rng } = await adminSb.from('settlement_items').select('req_date').order('req_date', { ascending: true }).limit(1).maybeSingle();
+  const { data: rng2 } = await adminSb.from('settlement_items').select('req_date').order('req_date', { ascending: false }).limit(1).maybeSingle();
+  let applied = 0;
+  if (rng?.req_date && rng2?.req_date) { const { data, error } = await adminSb.rpc('apply_settlement_margin', { p_from: rng.req_date, p_to: rng2.req_date }); if (error) return { ok: false, msg: '매핑은 저장됐으나 KPI 재계산 실패: ' + error.message }; applied = Number(data ?? 0); }
+  ['/settlement', '/margin', '/kpi', '/weekly', '/', '/me', '/admin/promotion'].forEach(p => revalidatePath(p));
+  return { ok: true, msg: `담당자 매핑 저장 · KPI ${applied}건 즉시 재계산` };
 }

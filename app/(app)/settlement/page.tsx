@@ -12,7 +12,7 @@ export default async function Page() {
   const [{ data: set }, { data: runs }, { data: empls }, { data: maps }, { data: people }, { count }] = await Promise.all([
     sb.from('app_settings').select('key,value').in('key', ['settle_field_map', 'settle_vat_divisor']),
     sb.from('settlement_sync_runs').select('*').order('id', { ascending: false }).limit(10),
-    sb.from('settlement_items').select('empl_id').gte('req_date', addDays(today, -90)),
+    sb.from('settlement_items').select('empl_id'),
     sb.from('settlement_empl_map').select('*'),
     sb.from('profiles').select('id,name,email').eq('is_active', true).order('name'),
     sb.from('settlement_items').select('settle_no', { count: 'exact', head: true }),
@@ -27,6 +27,6 @@ export default async function Page() {
   const emplAll = [...new Set(Object.values(byMonth).flatMap(m => Object.keys(m)))].sort();
   const summary = { months, rows: emplAll.map(e => ({ empl: e, name: Object.values(byMonth).map(m => m[e]?.name).find(Boolean) ?? '', vals: months.map(mk => Math.ceil((byMonth[mk][e]?.sum ?? 0) / vat)) })) };
   let map: Record<string, string> = {}; try { map = JSON.parse(v('settle_field_map') || '{}'); } catch {}
-  const emplIds = [...new Set((empls ?? []).map(e => e.empl_id).filter(Boolean))] as string[];
+  const emplIds = ([...new Set((empls ?? []).map(e => e.empl_id).filter(Boolean))] as string[]).sort();
   return <SettlementAdmin isAdmin={me.role === 'admin'} summary={summary} map={map} vat={v('settle_vat_divisor') || '1.1'} runs={runs ?? []} emplIds={emplIds} maps={maps ?? []} people={people ?? []} total={count ?? 0} today={today} envReady={!!(process.env.SETTLE_CO_CODE && process.env.SETTLE_USER_ID && process.env.SETTLE_USER_PW)} />;
 }
