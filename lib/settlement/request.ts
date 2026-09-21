@@ -51,7 +51,7 @@ export const prodItems = async (cookie: string, prodId: string): Promise<{ prodI
 /** 정산요청 생성 → 오늘 요청 목록 재조회로 생성 확인 */
 export async function createRequest(userId: string, i: ReqInput & { reqDate?: string; memo?: string; items?: { prodId: string; seq: number; name: string; inputValue: string }[] }) {
   const { cookie, settleUserId } = await userSession(userId); const c = calc(i);
-  if (!i.custId || !i.prodId) throw new Error('고객·상품을 선택하세요'); if (!i.dateWorkFrom || !i.dateWorkTo) throw new Error('작업 기간을 입력하세요'); if (i.inflowCnt <= 0 && !['05', '06'].includes(i.gubun)) throw new Error('유입수를 입력하세요'); if (!i.gubun) throw new Error('요청구분을 선택하세요');
+  if (!i.custId || !i.prodId) throw new Error('고객·상품을 선택하세요'); if (!i.dateWorkFrom || !i.dateWorkTo) throw new Error('작업 기간을 입력하세요'); if (!Number.isFinite(i.inflowCnt) || i.inflowCnt < 0) throw new Error('유입수는 0 이상이어야 합니다'); if (!i.gubun) throw new Error('요청구분을 선택하세요');
   if (i.mileageUseInd && c.useMileage <= 0) throw new Error('킵 사용 체크 시 금액을 입력하세요'); if (i.mileageUseInd && c.useMileage > i.existMileage) throw new Error(`킵 잔여(${i.existMileage.toLocaleString()})보다 많이 쓸 수 없습니다`);
   const reqDate = i.reqDate && /^\d{4}-\d{2}-\d{2}$/.test(i.reqDate) ? i.reqDate : todayKST();
   // 정산 사이트 화면(fn_savePaymentGrid)과 동일한 키 구성. tbSettlementProdItemDtoList 는 서버가 필수로 읽으므로 항상 배열
