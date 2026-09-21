@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
-import { saveCredential, userSession, formData, custInfo, prodInfo, createRequest, cancelRequest, myRequests, createCustomer, lastSaleAmt, type ReqInput } from '@/lib/settlement/request';
+import { saveCredential, userSession, formData, custInfo, prodInfo, prodItems, createRequest, cancelRequest, myRequests, createCustomer, lastSaleAmt, type ReqInput } from '@/lib/settlement/request';
 import { todayKST, addDays } from '@/lib/date/kst';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 export async function linkAccount(fd: FormData): Promise<R> {
@@ -19,11 +19,11 @@ export async function pickCustomer(bizNo: string): Promise<R<{ mileage: number; 
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   try { const { cookie } = await userSession(me.id); const c = await custInfo(cookie, bizNo); return { ok: true, msg: '', mileage: Number(c?.mileage ?? 0) || 0, rate: Number(c?.incentiveRate ?? 0) || 0 }; } catch (e: any) { return { ok: false, msg: e.message }; }
 }
-export async function pickProduct(prodId: string): Promise<R<{ prodAmt: number; prodIncentive: number }>> {
+export async function pickProduct(prodId: string): Promise<R<{ prodAmt: number; prodIncentive: number; items: { prodId: string; seq: number; name: string }[] }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
-  try { const { cookie } = await userSession(me.id); const p = await prodInfo(cookie, prodId); return { ok: true, msg: '', prodAmt: Number(p?.prodAmt ?? 0) || 0, prodIncentive: Number(p?.prodIncentive ?? 0) || 0 }; } catch (e: any) { return { ok: false, msg: e.message }; }
+  try { const { cookie } = await userSession(me.id); const [p, items] = await Promise.all([prodInfo(cookie, prodId), prodItems(cookie, prodId).catch(() => [])]); return { ok: true, msg: '', prodAmt: Number(p?.prodAmt ?? 0) || 0, prodIncentive: Number(p?.prodIncentive ?? 0) || 0, items }; } catch (e: any) { return { ok: false, msg: e.message }; }
 }
-export async function submitRequest(i: ReqInput): Promise<R<{ seq: string | null }>> {
+export async function submitRequest(i: ReqInput & { reqDate?: string; memo?: string; items?: { prodId: string; seq: number; name: string; inputValue: string }[] }): Promise<R<{ seq: string | null }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   try { const r = await createRequest(me.id, i); revalidatePath('/settle-request'); return { ok: true, msg: r.seq ? `정산요청 ${r.seq} 접수됨 · 예상정산 ${r.calc.expectRateAmt.toLocaleString('ko-KR')}원` : '접수됐습니다 (정산번호는 목록에서 확인)', seq: r.seq }; }
   catch (e: any) { return { ok: false, msg: e.message }; }

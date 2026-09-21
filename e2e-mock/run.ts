@@ -1,7 +1,7 @@
 process.env.SETTLE_BASE_URL = 'http://127.0.0.1:18080'; process.env.SETTLE_CO_CODE = 'C001'; process.env.SETTLE_USER_ID = 'admin'; process.env.SETTLE_USER_PW = 'adminpw'; process.env.ASSET_SECRET = 'test-secret-1234567890'; process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://x'; process.env.SUPABASE_SERVICE_ROLE_KEY = 'x';
 import { store } from './stubs/supabase-js';
 import { settleLogin, fetchApprovals } from '@/lib/settlement/client';
-import { saveCredential, userSession, formData, custInfo, prodInfo, createRequest, cancelRequest, myRequests, createCustomer, lastSaleAmt } from '@/lib/settlement/request';
+import { saveCredential, userSession, formData, custInfo, prodInfo, prodItems, createRequest, cancelRequest, myRequests, createCustomer, lastSaleAmt } from '@/lib/settlement/request';
 import { calc } from '@/lib/settlement/calc';
 import { approve, cancelApproval, findRow, computeDefaults } from '@/lib/settlement/approve';
 import { pollPending } from '@/lib/settlement/pending';
@@ -17,7 +17,9 @@ const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const c1 = await custInfo(cookie, '1111111111'); const p1 = await prodInfo(cookie, 'PD-0001'); T('고객 킵 50000·상품가 27.5', Number(c1.mileage) === 50000 && Number(p1.prodAmt) === 27.5);
   // ---- 접수: 셀팜 신규 10일, 판매총액 0, 킵 사용 20000 ----
   const i1 = { prodId: 'PD-0001', custId: '1111111111', prodAmt: 27.5, prodIncentive: 0, saleAmt: 0, inflowCnt: 1200, dateWorkFrom: today, dateWorkTo: today, saleTotalAmt: 100000, gubun: '01', mileageUseInd: true, useMileage: 20000, custRate: 0, empRate: 1, existMileage: 50000 };
-  const r1 = await createRequest('u-yong', i1); const st1 = await state(); const row1 = st1.settlement.find((x: any) => x.settlementSeq === r1.seq);
+  const defs = await prodItems(cookie, 'PD-0001'); T('상품 항목 정의 조회 (계정/비번/슬롯번호/특이사항)', defs.length === 4 && defs[0].name === '계정');
+  const r1 = await createRequest('u-yong', { ...i1, memo: '연동테스트', items: defs.map(d => ({ ...d, inputValue: d.name === '계정' ? 'newyong1008' : d.name === '비번' ? '1234' : '' })) }); const st1 = await state(); const row1 = st1.settlement.find((x: any) => x.settlementSeq === r1.seq);
+  T('신버전 payload: reqDate·memo·상품항목 4개 저장', row1?.memo === '연동테스트' && row1?.reqDate === today && st1.settlementProdItems.filter((x: any) => x.settlementSeq === r1.seq).length === 4 && st1.settlementProdItems.find((x: any) => x.settlementSeq === r1.seq && x.name === '계정')?.inputValue === 'newyong1008');
   T('접수 → 정산번호 발급·승인요청 상태·담당자=본인', !!r1.seq && row1?.applyStatus === '01' && row1?.userId === 'yongyong', r1.seq);
   T('접수 값: 상품총액 33000·예상수수료 round((100000-33000)/1.1)=60909·입금예정 80000', row1.prodTotalAmt === '33000' && row1.expectRateAmt === '60909' && row1.expectAmt === '80000', `${row1.prodTotalAmt}/${row1.expectRateAmt}/${row1.expectAmt}`);
   T('킵 20000 차감 (50000→30000)', st1.customers[0].mileage === 30000 && st1.mileageHis.some((h: any) => h.page === 'AQ' && h.by === 'yongyong'));

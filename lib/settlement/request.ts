@@ -45,22 +45,26 @@ export async function formData(cookie: string, settleUserId: string) {
 }
 export const custInfo = (cookie: string, bizNo: string) => getJ(cookie, `/api/pages/applypayment/custinfo?bizNo=${encodeURIComponent(bizNo)}`);
 export const prodInfo = (cookie: string, prodId: string) => getJ(cookie, `/api/pages/applypayment/prodinfo?prodId=${encodeURIComponent(prodId)}&baseDate=${todayKST()}`);
+/** 상품별 입력 항목 정의 (계정·비번·슬롯번호 등). 없으면 [] */
+export const prodItems = async (cookie: string, prodId: string): Promise<{ prodId: string; seq: number; name: string }[]> => { const j = await getJ(cookie, `/api/pages/applypayment/prodItem/list/${encodeURIComponent(prodId)}`); return (Array.isArray(j) ? j : []).map((x: any) => ({ prodId: String(x.prodId ?? prodId), seq: Number(x.seq), name: String(x.name ?? '') })); };
 
 /** 정산요청 생성 → 오늘 요청 목록 재조회로 생성 확인 */
-export async function createRequest(userId: string, i: ReqInput) {
+export async function createRequest(userId: string, i: ReqInput & { reqDate?: string; memo?: string; items?: { prodId: string; seq: number; name: string; inputValue: string }[] }) {
   const { cookie, settleUserId } = await userSession(userId); const c = calc(i);
   if (!i.custId || !i.prodId) throw new Error('고객·상품을 선택하세요'); if (!i.dateWorkFrom || !i.dateWorkTo) throw new Error('작업 기간을 입력하세요'); if (i.inflowCnt <= 0 && !['05', '06'].includes(i.gubun)) throw new Error('유입수를 입력하세요'); if (!i.gubun) throw new Error('요청구분을 선택하세요');
   if (i.mileageUseInd && c.useMileage <= 0) throw new Error('킵 사용 체크 시 금액을 입력하세요'); if (i.mileageUseInd && c.useMileage > i.existMileage) throw new Error(`킵 잔여(${i.existMileage.toLocaleString()})보다 많이 쓸 수 없습니다`);
-  const payload = { rowStatus: 'C', userId: settleUserId, custId: i.custId, prodId: i.prodId, prodAmt: String(i.prodAmt), saleAmt: String(i.saleAmt), inflowCnt: String(i.inflowCnt), saleTotalAmt: String(i.saleTotalAmt), prodTotalAmt: String(c.prodTotalAmt), expectAmt: String(c.expectAmt), expectRateAmt: String(c.expectRateAmt), dateWorkFrom: i.dateWorkFrom, dateWorkTo: i.dateWorkTo, workDay: String(c.workDay), incentiveRate: String(c.incentiveRate), mileageUseInd: i.mileageUseInd ? 'Y' : 'N', useMileage: String(c.useMileage), existMileage: String(i.existMileage), gubun: i.gubun, prodIncentiveInd: c.prodIncentiveInd, prodIncentive: String(i.prodIncentive) };
-  const before = await myRequests(cookie, todayKST(), todayKST()).catch(() => [] as any[]);
+  const reqDate = i.reqDate && /^\d{4}-\d{2}-\d{2}$/.test(i.reqDate) ? i.reqDate : todayKST();
+  // 정산 사이트 화면(fn_savePaymentGrid)과 동일한 키 구성. tbSettlementProdItemDtoList 는 서버가 필수로 읽으므로 항상 배열
+  const payload = { rowStatus: 'C', settlementSeq: '', reqDate, userId: settleUserId, custId: i.custId, prodId: i.prodId, prodAmt: String(i.prodAmt), saleAmt: String(i.saleAmt), inflowCnt: String(i.inflowCnt), saleTotalAmt: String(i.saleTotalAmt), prodTotalAmt: String(c.prodTotalAmt), expectAmt: String(c.expectAmt), expectRateAmt: String(c.expectRateAmt), confirmAmt: '', dateWorkFrom: i.dateWorkFrom, dateWorkTo: i.dateWorkTo, workDay: String(c.workDay), incentiveRate: String(c.incentiveRate), custIncentiveRate: String(i.custRate), empIncentiveRate: String(i.empRate), mileageUseInd: i.mileageUseInd ? 'Y' : 'N', useMileage: String(c.useMileage), existMileage: String(i.existMileage), curExistMileage: String(i.existMileage), gubun: i.gubun, prodIncentiveInd: c.prodIncentiveInd, prodIncentive: String(i.prodIncentive), memo: (i.memo ?? '').slice(0, 500), tbSettlementProdItemDtoList: (i.items ?? []).map(x => ({ prodId: x.prodId, seq: x.seq, name: x.name, inputValue: x.inputValue ?? '' })) };
+  const before = await myRequests(cookie, reqDate, reqDate).catch(() => [] as any[]);
   const res = await send(cookie, '/api/pages/applypayment', 'POST', payload); const okNum = Number(res.text) > 0;
   let seq: string | null = null;
-  if (okNum) { const after = await myRequests(cookie, todayKST(), todayKST()).catch(() => [] as any[]); const bs = new Set(before.map(x => String(x.settlementSeq))); const fresh = after.filter(x => !bs.has(String(x.settlementSeq)) && String(x.custId) === i.custId && String(x.prodId) === i.prodId); seq = fresh.at(-1)?.settlementSeq ? String(fresh.at(-1)!.settlementSeq) : null; }
+  if (okNum) { const after = await myRequests(cookie, reqDate, reqDate).catch(() => [] as any[]); const bs = new Set(before.map(x => String(x.settlementSeq))); const fresh = after.filter(x => !bs.has(String(x.settlementSeq)) && String(x.custId) === i.custId && String(x.prodId) === i.prodId); seq = fresh.at(-1)?.settlementSeq ? String(fresh.at(-1)!.settlementSeq) : null; }
   await admin().from('settlement_requests').insert({ user_id: userId, settlement_seq: seq, action: 'create', payload, result: `${res.status} ${res.text.slice(0, 200)}`, ok: okNum });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.text.slice(0, 200) || res.status}`);
   return { seq, calc: c };
 }
-export async function myRequests(cookie: string, from: string, to: string): Promise<SettleRow[]> { const j = await getJ(cookie, `/api/pages/applypayment?searchStartDate=${from}&searchEndDate=${to}&custName=&prodName=&isAdmin=false`); return Array.isArray(j) ? j : []; }
+export async function myRequests(cookie: string, from: string, to: string): Promise<SettleRow[]> { const j = await getJ(cookie, `/api/pages/applypayment?searchStartDate=${from}&searchEndDate=${to}&custName=&prodName=&isAdmin=false`); return Array.isArray(j) ? j : (j?.data ?? j?.list ?? []); }
 export async function cancelRequest(userId: string, settlementSeq: string) {
   const { cookie } = await userSession(userId);
   const list = await myRequests(cookie, addDays(todayKST(), -120), todayKST()); const row = list.find(r => String(r.settlementSeq) === settlementSeq);
