@@ -21,7 +21,7 @@ export default function ApproveModal({ settlementSeq, onClose }: { settlementSeq
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, marginBottom: 10 }}>{[['작업 기간', `${String(st.row.dateWorkFrom ?? '').slice(5)} ~ ${String(st.row.dateWorkTo ?? '').slice(5)}`], ['작업일수', `${st.row.workDay ?? '-'}일`], ['유입수', String(st.row.inflowCnt ?? '-')], ['상품가 / 판매가', `${st.row.prodAmt ?? '-'} / ${st.row.saleAmt ?? '-'}`]].map(([l, v]) => <div key={l} style={{ background: 'var(--bg)', borderRadius: 8, padding: '6px 8px' }}><div style={{ fontSize: 10.5, color: 'var(--muted)' }}>{l}</div><div style={{ fontSize: 13, fontWeight: 700 }}>{v}</div></div>)}</div>
           {st.row.memo && <div style={{ fontSize: 12.5, background: '#FDF1DD', padding: '6px 10px', borderRadius: 8, marginBottom: 8 }}>메모: {st.row.memo}</div>}
           {st.d.refund ? <>
-            <L l="환불 구분" v={st.d.gubunName} /><L l="환불일수" v={st.d.refundWorkDay + '일'} /><L l="환불금액(상품가)" v={w(Number(st.d.refundProdTotalAmt || 0))} /><L l="환불수수료(예정)" v={w(Number(st.d.refundExpectRateAmt || 0))} />
+            <L l="환불 구분" v={st.d.gubunName} /><L l="환불일수" v={st.d.refundWorkDay + '일'} /><L l="환불 상품가 기준 (상품가×유입×환불일수)" v={w(Number(st.d.refundSaleTotalAmt || 0))} /><L l="환불금액 — 판매가 기준 (입금 확정액으로 기록)" v={w(Number(st.d.refundProdTotalAmt || 0))} /><L l="환불수수료 (담당자 차감)" v={w(Number(st.d.refundExpectRateAmt || 0))} c="var(--accent)" />
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>환불 건은 정산 사이트가 환불금액·수수료를 자동 확정합니다 (입력 없음).</div>
           </> : <>
             <L l="상품총액 (상품가×유입수×작업일, VAT포함)" v={w(calc.prodTotalAmt)} /><L l="판매총액" v={w(calc.saleTotalAmt)} /><L l="사용 마일리지" v={w(calc.useMileage)} /><L l="입금예정 (판매총액−마일리지)" v={w(calc.expectedAmt)} />
