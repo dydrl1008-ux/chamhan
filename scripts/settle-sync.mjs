@@ -38,6 +38,9 @@ async function fetchWindow(s, e, attempt = 1) {
 }
 const toDate = v => { const m = String(v ?? '').match(/(\d{4})[-./]?(\d{2})[-./]?(\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
 const toNum = v => { const n = Number(String(v ?? '0').replace(/[^\d.-]/g, '')); return Number.isFinite(n) ? Math.round(n) : 0; };
+// 영업이익 산출 규칙: 일반 건 = 사이트 영업이익(incomAmt). 환불 건 = 상품가 기준 환불액(돌아오는 원가) − 판매가 기준 환불액(돌려주는 매출)
+//  → 10일치 원가가 신규 때 −로 잡혔으면 환불 4일치는 +4일치 원가로 되돌아옴 (사이트 뷰의 −값은 쓰지 않음)
+const profitOf = (r, map) => String(r.refundInd ?? '') === 'Y' ? toNum(r.refundSaleTotalAmt) - toNum(r.refundProdTotalAmt) : toNum(r[map.profit]);
 (async () => {
   const { data: run } = await sb.from('settlement_sync_runs').insert({ range_from: FROM, range_to: TO, triggered_by: env.TRIGGERED_BY || 'github-actions' }).select('id').single();
   const finish = async (ok, message, fetched = 0, applied = 0) => { if (run) await sb.from('settlement_sync_runs').update({ finished_at: new Date().toISOString(), ok, message, rows_fetched: fetched, rows_applied: applied }).eq('id', run.id); console.log((ok ? 'OK ' : 'FAIL ') + message); if (!ok) process.exit(1); };
@@ -48,7 +51,7 @@ const toNum = v => { const n = Number(String(v ?? '0').replace(/[^\d.-]/g, ''));
     const qFrom = env.FROM ? addDays(FROM, -60) : addDays(FROM, -60), qTo = addDays(TO, 60); /* reqDate(원요청)와 dispReqDate(표시 요청일)가 두 달까지 벌어지는 환불 건 대비 */ const rows = []; const seen = new Set(); const win = [];
     for (let s = qFrom; s <= qTo; s = addDays(s, 5)) { const e = addDays(s, 4) > qTo ? qTo : addDays(s, 4); const part = await fetchWindow(s, e); win.push(`${s.slice(5)}~${e.slice(5)}:${part.length}`); for (const r of part) { const k = JSON.stringify(r); if (!seen.has(k)) { seen.add(k); rows.push(r); } } await sleep(300); }
     const keyOf = r => [r[map.settle_no], r.confirmSeq, r.reqGubun].filter(v => v != null && String(v) !== '').map(String).join('|');
-    const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: toNum(r[map.profit]), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date && x.req_date >= FROM && x.req_date <= TO);
+    const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: profitOf(r, map), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date && x.req_date >= FROM && x.req_date <= TO);
     if (rows.length && !items.length) return finish(false, `매핑 필드에서 값을 못 읽음 (키: ${Object.keys(rows[0]).join(',')})`, rows.length);
     const { error: ed } = await sb.from('settlement_items').delete().gte('req_date', FROM).lte('req_date', TO); if (ed) return finish(false, '기간 정리 실패: ' + ed.message);
     for (let i = 0; i < items.length; i += 500) { const { error } = await sb.from('settlement_items').upsert(items.slice(i, i + 500), { onConflict: 'settle_no' }); if (error) return finish(false, '저장 실패: ' + error.message, rows.length); }

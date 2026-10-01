@@ -5,6 +5,9 @@ export type FieldMap = { settle_no: string; empl_id: string; req_date: string; p
 const admin = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
 const toDate = (v: unknown) => { const s = String(v ?? '').trim(); const m = s.match(/(\d{4})[-./]?(\d{2})[-./]?(\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}` : null; };
 const toNum = (v: unknown) => { const n = Number(String(v ?? '0').replace(/[^\d.-]/g, '')); return Number.isFinite(n) ? Math.round(n) : 0; };
+// 영업이익 산출 규칙: 일반 건 = 사이트 영업이익(incomAmt). 환불 건 = 상품가 기준 환불액(돌아오는 원가) − 판매가 기준 환불액(돌려주는 매출)
+//  → 10일치 원가가 신규 때 −로 잡혔으면 환불 4일치는 +4일치 원가로 되돌아옴 (사이트 뷰의 −값은 쓰지 않음)
+const profitOf = (r: SettleRow, profitKey: string) => String(r.refundInd ?? '') === 'Y' ? toNum(r.refundSaleTotalAmt) - toNum(r.refundProdTotalAmt) : toNum(r[profitKey]);
 export async function loadMap(): Promise<FieldMap | null> {
   const { data } = await admin().from('app_settings').select('value').eq('key', 'settle_field_map').maybeSingle();
   try { const m = JSON.parse(data?.value || '{}'); return m.settle_no && m.empl_id && m.req_date && m.profit && m.status ? { status_ok: '승인완료', ...m } : null; } catch { return null; }
@@ -25,7 +28,7 @@ export async function runSync(from: string, to: string, triggeredBy: string): Pr
     }
     // 유일키 = 정산번호 + 승인번호 + 요청구분 (환불 건이 같은 정산번호를 쓰는 경우 대비)
     const keyOf = (r: SettleRow) => [r[map.settle_no], r['confirmSeq'], r['reqGubun']].filter(v => v !== undefined && v !== null && String(v) !== '').map(String).join('|');
-    const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: toNum(r[map.profit]), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date && x.req_date >= from && x.req_date <= to);
+    const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: profitOf(r, map.profit), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date && x.req_date >= from && x.req_date <= to);
     if (rows.length && !items.length) return finish(false, `매핑된 필드에서 값을 못 읽음 (키: ${Object.keys(rows[0]).join(',')})`, rows.length);
     { const { error: ed } = await sb.from('settlement_items').delete().gte('req_date', from).lte('req_date', to); if (ed) return finish(false, '기간 정리 실패: ' + ed.message, rows.length); }
     for (let i = 0; i < items.length; i += 500) { const { error } = await sb.from('settlement_items').upsert(items.slice(i, i + 500), { onConflict: 'settle_no' }); if (error) return finish(false, 'settlement_items 저장 실패: ' + error.message, rows.length); }
