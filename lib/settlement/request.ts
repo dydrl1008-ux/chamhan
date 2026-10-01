@@ -43,6 +43,8 @@ export async function formData(cookie: string, settleUserId: string) {
   const gubuns: { code: string; name: string }[] = ((codes?.SE02 ?? []) as any[]).map(x => ({ code: String(x.baseCode), name: String(x.codeName) }));
   return { customers: (customers as any[]).map(c => ({ bizNo: String(c.bizNo), name: String(c.custName), empId: String(c.empId ?? '') })), products: (products as any[]).map(p => ({ prodId: String(p.prodId), name: String(p.prodName) })), gubuns, empRate: Number(rate) || 0 };
 }
+/** SE02 코드 (groupCode A=정산요청 구분, B=환불 구분) */
+export async function gubunCodes(cookie: string, groupCode: 'A' | 'B'): Promise<{ code: string; name: string }[]> { const r = await send(cookie, '/api/system/codes/pages', 'POST', [{ patternCode: 'SE02', groupCode }]); let j: any = {}; try { j = JSON.parse(r.text); } catch {} return ((j?.SE02 ?? []) as any[]).map(x => ({ code: String(x.baseCode), name: String(x.codeName) })); }
 export const custInfo = (cookie: string, bizNo: string) => getJ(cookie, `/api/pages/applypayment/custinfo?bizNo=${encodeURIComponent(bizNo)}`);
 export const prodInfo = (cookie: string, prodId: string) => getJ(cookie, `/api/pages/applypayment/prodinfo?prodId=${encodeURIComponent(prodId)}&baseDate=${todayKST()}`);
 /** 상품별 입력 항목 정의 (계정·비번·슬롯번호 등). 없으면 [] */

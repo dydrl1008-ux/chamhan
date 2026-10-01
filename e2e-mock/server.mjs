@@ -43,7 +43,7 @@ http.createServer(async (req, res) => {
   if (path === '/api/pages/customer' && req.method === 'GET') return send(res, 200, customers.map(c => ({ ...c, mileage: String(c.mileage), incentiveRate: String(c.incentiveRate), useInd: 'Y', regDate: '2026-01-01' })));
   if (path === '/api/pages/customer' && req.method === 'POST') { const p = JSON.parse(body); if (p.isNew && customers.some(c => c.bizNo === p.bizNo)) return send(res, 500, '동일한 사업번호와 직원의 데이터가 존재합니다.'); if (!p.bizNo) return send(res, 500, 'bizNo required'); customers.push({ bizNo: p.bizNo, custName: p.custName, empId: p.empId, mileage: 0, incentiveRate: Number(p.incentiveRate) || 0 }); return send(res, 200, '2'); }
   if (path === '/api/pages/product/pop/list') return send(res, 200, products);
-  if (path === '/api/system/codes/pages' && req.method === 'POST') return send(res, 200, { SE02: codes.SE02 });
+  if (path === '/api/system/codes/pages' && req.method === 'POST') { const p = JSON.parse(body); const g = p?.[0]?.groupCode; return send(res, 200, { SE02: g === 'B' ? codes.SE02.filter(c => ['04', '07'].includes(c.baseCode)) : codes.SE02.filter(c => !['04', '07'].includes(c.baseCode)) }); }
   if (path === '/__state') return send(res, 200, { settlement, settlementmst, customers, mileageHis, settlementProdItems, log });
   return send(res, 404, { status: 404, error: 'Not Found', path });
 }).listen(18080, () => console.log('mock on 18080'));
