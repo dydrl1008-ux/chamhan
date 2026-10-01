@@ -47,7 +47,8 @@ export async function middleware(req: NextRequest) {
       setAll: (list: CookieToSet[]) => { list.forEach(({ name, value }) => req.cookies.set(name, value)); res = NextResponse.next({ request: req }); list.forEach(({ name, value, options }) => res.cookies.set(name, value, options)); },
     },
   });
-  const { data: { user } } = await sb.auth.getUser();
+  // 미들웨어는 '로그인 여부'만 보면 되므로 쿠키 세션으로 판단 (네트워크 왕복 없음). 실제 사용자 검증은 페이지의 getProfile(getUser) 에서 수행.
+  const { data: { session } } = await sb.auth.getSession(); const user = session?.user ?? null;
 
   if (!allowed) {
     // admin 우회 옵션이 켜져 있고 로그인된 admin이면 통과

@@ -1,6 +1,7 @@
 import NavLink from '@/components/NavLink';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
+const g = globalThis as any; async function cachedPendingCount(): Promise<number> { const c = g.__pendingCnt as { at: number; v: number } | undefined; if (c && Date.now() - c.at < 30_000) return c.v; const { count } = await supabaseServer().from('settlement_pending').select('item_key', { count: 'exact', head: true }).is('resolved_at', null).is('dismissed_at', null); g.__pendingCnt = { at: Date.now(), v: count ?? 0 }; return count ?? 0; }
 import { redirect } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 import Toast from '@/components/Toast';
@@ -9,7 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!p) redirect('/login');
   if (!p.is_active) redirect('/login?inactive=1');
   const roleName = { admin: '어드민', head: '총책임자', manager: '팀장', staff: '직원' }[p.role];
-  let pendingCount = 0; if (p.role === 'admin' || p.role === 'head' || p.is_mgmt) { const { count } = await supabaseServer().from('settlement_pending').select('item_key', { count: 'exact', head: true }).is('resolved_at', null).is('dismissed_at', null); pendingCount = count ?? 0; }
+  let pendingCount = 0; if (p.role === 'admin' || p.role === 'head' || p.is_mgmt) { pendingCount = await cachedPendingCount(); }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '230px 1fr' }}>
       <aside className="side">
