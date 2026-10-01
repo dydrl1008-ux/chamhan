@@ -40,6 +40,7 @@ export async function cancelMine(seq: string): Promise<R> {
 
 export async function addCustomer(fd: FormData): Promise<R<{ bizNo: string }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  if (!(me.role === 'admin' || me.role === 'head' || me.is_mgmt)) return { ok: false, msg: '고객 등록은 관리팀·총괄·어드민만 가능합니다. 관리팀에 요청하세요.' };
   const g = (k: string) => String(fd.get(k) || '').trim();
   try { const r = await createCustomer(me.id, { bizNo: g('bizNo'), custName: g('custName'), ownerName: g('ownerName'), custTel: g('custTel'), custMail: g('custMail'), custAddr: g('custAddr'), depositorName: g('depositorName'), bizType: g('bizType'), bizClass: g('bizClass') }); return { ok: true, msg: `고객 '${g('custName')}' 등록됨`, bizNo: r.bizNo }; }
   catch (e: any) { return { ok: false, msg: e.message }; }
@@ -62,4 +63,9 @@ export async function selfTest(): Promise<R<{ steps: { name: string; ok: boolean
   try { const rows = await myRequests(cookie, addDays(todayKST(), -30), todayKST()); steps.push({ name: '5 내 요청 목록(30일)', ok: true, note: `${rows.length}건 · 상태값 ${[...new Set(rows.map((r: any) => r.applyStatusName ?? r.applyStatus))].join('/') || '-'} · ${ms()}` }); } catch (e: any) { steps.push({ name: '5 내 요청 목록', ok: false, note: e.message }); }
   const okAll = steps.every(s => s.ok);
   return { ok: okAll, msg: okAll ? '읽기 단계 전부 정상 — 접수는 실제 테스트 1건으로 확인' : '실패 단계 확인', steps };
+}
+
+export async function requestItems(settlementSeq: string, prodId: string): Promise<R<{ items: { seq: number; name: string; inputValue: string }[] }>> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  try { const { cookie } = await userSession(me.id); const { origProdItems } = await import('@/lib/settlement/refund'); return { ok: true, msg: '', items: await origProdItems(cookie, settlementSeq, prodId) }; } catch (e: any) { return { ok: false, msg: e.message }; }
 }
