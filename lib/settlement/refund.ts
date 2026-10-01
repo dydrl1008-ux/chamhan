@@ -23,6 +23,7 @@ export async function createRefund(userId: string, orig: SettleRow, inp: { refun
   const { cookie } = await userSession(userId);
   const gubun = ['05', '06'].includes(String(orig.gubun)) ? '07' : inp.gubun;   // 선입금 원건은 환불구분 07 고정 (사이트와 동일)
   if (!gubun) throw new Error('환불구분을 선택하세요');
+  if (!['04', '07'].includes(gubun) && !/환불/.test(String(inp.gubun))) { const { formData } = await import('./request'); const fd = await formData(cookie, String(orig.userId)); const g = fd.gubuns.find(x => x.code === gubun); if (!g || !/환불/.test(g.name)) throw new Error(`환불 건의 구분은 환불 코드(환불 킵 등)여야 합니다 (선택: ${g?.name ?? gubun})`); }
   if (!Number.isFinite(inp.refundInflowCnt) || inp.refundInflowCnt < 0) throw new Error('유입수는 0 이상');
   const c = refundCalc({ prodAmt: n(orig.prodAmt), saleAmt: n(orig.saleAmt), refundInflowCnt: inp.refundInflowCnt, dateWorkFrom: String(orig.dateWorkFrom), dateWorkTo: String(orig.dateWorkTo), refundDate: inp.refundDate, workDay: n(orig.workDay), incentiveRate: n(orig.incentiveRate), prodIncentiveInd: String(orig.prodIncentiveInd ?? 'N'), prodIncentive: n(orig.prodIncentive), gubun });
   if (c.err) throw new Error(c.err);
