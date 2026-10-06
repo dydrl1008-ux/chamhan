@@ -1,5 +1,5 @@
 import { settleLogin, type SettleRow } from './client';
-const BASE = () => (process.env.SETTLE_BASE_URL || 'http://lchkgy.com').replace(/\/$/, '');
+const BASE = () => (process.env.SETTLE_BASE_URL || 'https://chamhan.info').replace(/\/$/, '');
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
 async function getJson(cookie: string, path: string): Promise<SettleRow[]> {
   const res = await fetch(`${BASE()}${path}`, { headers: { Cookie: cookie, Accept: '*/*', 'X-Requested-With': 'XMLHttpRequest', 'User-Agent': UA, Referer: `${BASE()}/` }, cache: 'no-store', redirect: 'manual' });

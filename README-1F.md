@@ -1,8 +1,8 @@
-# 워크허브 1-F — 정산 사이트(lchkgy.com) 연동
+# 워크허브 1-F — 정산 사이트(chamhan.info) 연동
 
 ## 적용
 1. SQL `0012_1f_settlement_sync.sql`
-2. Vercel 환경변수: `SETTLE_CO_CODE`(회사코드) · `SETTLE_USER_ID` · `SETTLE_USER_PW`(정산 어드민 계정) · `CRON_SECRET`(임의 문자열 32자, Vercel cron 인증) · `SETTLE_BASE_URL`(기본 http://lchkgy.com) → Redeploy
+2. Vercel 환경변수: `SETTLE_CO_CODE`(회사코드) · `SETTLE_USER_ID` · `SETTLE_USER_PW`(정산 어드민 계정) · `CRON_SECRET`(임의 문자열 32자, Vercel cron 인증) · `SETTLE_BASE_URL`(기본 https://chamhan.info) → Redeploy
 3. 어드민 › 정산 연동:
    - **연결 테스트** → 로그인·최근 30일 조회 성공 시 JSON 키 목록과 샘플이 표시됨
    - 정산번호 / 담당자ID / 요청일 / 영업이익 / 진행상태 키를 골라 **매핑 저장** (자동 추정값이 먼저 채워짐, 샘플 값 보고 확인)
@@ -17,7 +17,7 @@
 
 ## 자동 동기화 (GitHub Actions) — Vercel 시간 제한 없이
 1. GitHub 저장소 › Settings › Secrets and variables › Actions › **New repository secret** 로 6개 등록:
-   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SETTLE_BASE_URL`(http://lchkgy.com), `SETTLE_CO_CODE`, `SETTLE_USER_ID`, `SETTLE_USER_PW`
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SETTLE_BASE_URL`(https://chamhan.info), `SETTLE_CO_CODE`, `SETTLE_USER_ID`, `SETTLE_USER_PW`
 2. 매일 06:00 KST 자동 실행(최근 7일). 결과는 워크허브 정산 연동 › 실행 이력에 `github-schedule` 로 표시
 3. 수동: Actions 탭 › settle-sync › **Run workflow** › from/to 입력 (예: 2026-07-21 / 2026-08-20)
 4. 실패 시 Actions 로그와 실행 이력 메시지에 원인 표시. 정산 사이트는 조회만 함

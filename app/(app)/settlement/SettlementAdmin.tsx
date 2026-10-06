@@ -16,7 +16,7 @@ export default function SettlementAdmin({ isAdmin, summary, hiddenIds, pendingCo
   const mapped = !!(map.settle_no && map.empl_id && map.req_date && map.profit && map.status);
   return (
     <div style={{ display: 'grid', gap: 18 }}>
-      <h1 style={{ fontSize: 20, margin: 0 }}>정산 연동 <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 400 }}>lchkgy.com 정산승인 → 담당자·요청일별 영업이익 ÷{vat} → KPI 자동 마진 · 누적 {total.toLocaleString()}건</span></h1>
+      <h1 style={{ fontSize: 20, margin: 0 }}>정산 연동 <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 400 }}>chamhan.info 정산승인 → 담당자·요청일별 영업이익 ÷{vat} → KPI 자동 마진 · 누적 {total.toLocaleString()}건</span></h1>
       {isAdmin && !envReady && <div style={{ background: 'var(--bad-soft)', color: 'var(--bad)', padding: '10px 14px', borderRadius: 10, fontSize: 13 }}>Vercel 환경변수 <b>SETTLE_CO_CODE · SETTLE_USER_ID · SETTLE_USER_PW</b>(정산 사이트 어드민 계정)가 없습니다. 추가 후 Redeploy.</div>}
       <div className="card"><h3 style={{ margin: '0 0 10px', fontSize: 15 }}>정산 담당자별 월 마진 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>정산 ID 기준 · 승인완료 · ÷{vat} 올림 · 21일~20일 월 · 매핑 여부와 무관</span></h3>
         <div style={{ overflowX: 'auto' }}><table><thead><tr><th>정산 ID</th><th>이름</th><th>워크허브 계정</th>{summary.months.map(m => <th key={m} style={{ textAlign: 'right' }}>{Number(m.slice(5))}월</th>)}</tr></thead><tbody>

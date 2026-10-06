@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { settleLogin, fetchApprovals, type SettleRow } from './client';
 import { todayKST, addDays } from '@/lib/date/kst';
-const BASE = () => (process.env.SETTLE_BASE_URL || 'http://lchkgy.com').replace(/\/$/, '');
+const BASE = () => (process.env.SETTLE_BASE_URL || 'https://chamhan.info').replace(/\/$/, '');
 const admin = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
 const n = (v: unknown) => { const x = Number(String(v ?? '0').replace(/[^\d.-]/g, '')); return Number.isFinite(x) ? x : 0; };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';

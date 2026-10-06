@@ -27,7 +27,7 @@ async function hintOf(settlementSeq: string) { const { supabaseServer } = await 
 export async function loadApprove(settlementSeq: string): Promise<{ ok: boolean; msg: string; d?: any; row?: any }> {
   const me = await can(); if (!me) return { ok: false, msg: '권한 없음' };
   try { const hint = await hintOf(settlementSeq); const r = await withSession(c => findRow(c, settlementSeq, ['01'], hint)); if (!r) { const o = await withSession(c => findRow(c, settlementSeq, ['02', '03'], hint)); return { ok: false, msg: o ? `승인요청 상태가 아닙니다 (현재 ${o.statusName}). 목록을 새로고침하세요.` : '정산 사이트에서 승인요청 상태의 이 건을 찾지 못했습니다' }; }
-    const d = computeDefaults(r); return { ok: true, msg: '', d, row: { settlementSeq: r.settlementSeq, empName: r.empName, userId: r.userId, custName: r.custName, prodName: r.prodName, reqGubunName: r.reqGubunName, gubunName: r.gubunName, dispReqDate: r.dispReqDate, incomAmt: r.incomAmt, statusName: r.statusName, workDay: r.workDay, dateWorkFrom: r.dateWorkFrom, dateWorkTo: r.dateWorkTo, inflowCnt: r.inflowCnt, prodAmt: r.prodAmt, saleAmt: r.saleAmt, memo: r.memo } }; }
+    const d = computeDefaults(r); return { ok: true, msg: '', d, row: { settlementSeq: r.settlementSeq, prodId: r.prodId, empName: r.empName, userId: r.userId, custName: r.custName, prodName: r.prodName, reqGubunName: r.reqGubunName, gubunName: r.gubunName, dispReqDate: r.dispReqDate, incomAmt: r.incomAmt, statusName: r.statusName, workDay: r.workDay, dateWorkFrom: r.dateWorkFrom, dateWorkTo: r.dateWorkTo, inflowCnt: r.inflowCnt, prodAmt: r.prodAmt, saleAmt: r.saleAmt, memo: r.memo } }; }
   catch (e: any) { return { ok: false, msg: e.message }; }
 }
 export async function previewApprove(settlementSeq: string, confirmAmt: number): Promise<{ ok: boolean; d?: any; msg?: string }> {
@@ -43,4 +43,9 @@ export async function doCancel(settlementSeq: string): Promise<{ ok: boolean; ms
   const me = await can(); if (!me) return { ok: false, msg: '권한 없음' };
   try { const hint = await hintOf(settlementSeq); const r = await cancelApproval(settlementSeq, me.id, hint); revalidatePath('/pending'); return { ok: true, msg: `${settlementSeq} 승인취소${r.verified ? ' 확인' : ' 전송 (사이트에서 확인)'}` }; }
   catch (e: any) { return { ok: false, msg: e.message }; }
+}
+
+export async function approveItems(settlementSeq: string, prodId: string): Promise<{ ok: boolean; items: { seq: number; name: string; inputValue: string }[] }> {
+  const me = await can(); if (!me) return { ok: false, items: [] };
+  try { const items = await withSession(async c => { const { origProdItems } = await import('@/lib/settlement/refund'); return origProdItems(c, settlementSeq, prodId); }); return { ok: true, items }; } catch { return { ok: false, items: [] }; }
 }

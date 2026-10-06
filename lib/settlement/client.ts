@@ -1,5 +1,5 @@
-// 정산 사이트(lchkgy.com) 클라이언트 — 서버 전용. 로그인(POST /login_proc, JSESSIONID) 후 정산승인 API 조회
-const BASE = () => (process.env.SETTLE_BASE_URL || 'http://lchkgy.com').replace(/\/$/, '');
+// 정산 사이트(chamhan.info) 클라이언트 — 서버 전용. 로그인(POST /login_proc, JSESSIONID) 후 정산승인 API 조회
+const BASE = () => (process.env.SETTLE_BASE_URL || 'https://chamhan.info').replace(/\/$/, '');
 export type SettleRow = Record<string, unknown>;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
 function cookieJar(): Record<string, string> { return {}; }
@@ -11,12 +11,14 @@ export async function settleLogin(cred?: { userId: string; userPw: string }): Pr
   if (!co || !id || !pw) throw new Error('SETTLE_CO_CODE / SETTLE_USER_ID / SETTLE_USER_PW 환경변수 필요');
   const jar = cookieJar();
   // 1) 로그인 페이지: 초기 세션 + CSRF 토큰
-  const pre = await fetch(`${BASE()}/login`, { redirect: 'manual', cache: 'no-store', headers: { 'User-Agent': UA } });
+  let pre: Response;
+  try { pre = await fetch(`${BASE()}/login`, { redirect: 'manual', cache: 'no-store', headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(15000) }); }
+  catch (e: any) { throw new Error(`정산 사이트(${BASE()}) 접속 불가 — 주소 변경/사이트 다운/네트워크 확인 (${e?.cause?.code ?? e?.name ?? e?.message ?? e})`); }
   absorb(jar, pre); const html = await pre.text();
   const csrf = html.match(/name="_csrf"[^>]*value="([^"]+)"/)?.[1] ?? html.match(/value="([^"]+)"[^>]*name="_csrf"/)?.[1] ?? html.match(/<meta name="_csrf" content="([^"]+)"/)?.[1];
   // 2) 로그인
   const body = new URLSearchParams({ coCode: co, userId: id, userPw: pw, ...(csrf ? { _csrf: csrf } : {}) });
-  const res = await fetch(`${BASE()}/login_proc`, { method: 'POST', body, redirect: 'manual', cache: 'no-store', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA, Referer: `${BASE()}/login`, ...(cookieStr(jar) ? { Cookie: cookieStr(jar) } : {}) } });
+  const res = await fetch(`${BASE()}/login_proc`, { method: 'POST', body, redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA, Referer: `${BASE()}/login`, ...(cookieStr(jar) ? { Cookie: cookieStr(jar) } : {}) } });
   absorb(jar, res);
   const loc = res.headers.get('location') ?? '';
   if (/error/i.test(loc)) throw new Error(`정산 사이트 로그인 거부 (아이디/비밀번호 확인)`);

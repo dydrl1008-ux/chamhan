@@ -5,7 +5,7 @@ import type { SettleRow } from './client';
 import { todayKST, addDays } from '@/lib/date/kst';
 import { refundCalc } from './refundCalc';
 export { refundCalc, type RefundCalcIn } from './refundCalc';
-const BASE = () => (process.env.SETTLE_BASE_URL || 'http://lchkgy.com').replace(/\/$/, '');
+const BASE = () => (process.env.SETTLE_BASE_URL || 'https://chamhan.info').replace(/\/$/, '');
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
 const admin = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
 const H = (cookie: string, json = false) => ({ Cookie: cookie, Accept: '*/*', 'X-Requested-With': 'XMLHttpRequest', 'User-Agent': UA, Referer: `${BASE()}/`, ...(json ? { 'Content-Type': 'application/json' } : {}) });

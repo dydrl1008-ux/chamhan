@@ -16,7 +16,7 @@ export default async function PendingPage() {
     sb.from('settlement_pending').select('*').not('resolved_at', 'is', null).order('resolved_at', { ascending: false }).limit(30),
     sb.from('settlement_pending').select('*').is('resolved_at', null).not('dismissed_at', 'is', null).order('dismissed_at', { ascending: false }),
   ]);
-  const base = process.env.SETTLE_BASE_URL || 'http://lchkgy.com';
+  const base = process.env.SETTLE_BASE_URL || 'https://chamhan.info';
   return (
     <div style={{ display: 'grid', gap: 18 }}>
       <AutoRefresh seconds={120} />
