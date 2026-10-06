@@ -71,7 +71,9 @@ export async function cancelRequest(userId: string, settlementSeq: string) {
   const { cookie } = await userSession(userId);
   const list = await myRequests(cookie, addDays(todayKST(), -120), todayKST()); const row = list.find(r => String(r.settlementSeq) === settlementSeq);
   if (!row) throw new Error('내 요청 목록에서 찾지 못했습니다'); if (String(row.applyStatus) !== '01') throw new Error(`승인요청 상태만 취소 가능 (현재 ${row.applyStatusName ?? row.applyStatus})`);
-  const payload = { settlementDtoList: [{ settlementSeq, custId: row.custId, mileageUseInd: row.mileageUseInd, useMileage: row.useMileage, userId: row.userId }] };
+  // 사이트와 동일하게 그리드 행 전체 전달 (새 버전은 checkApplyStatus/cancel SQL 에 prodId·custId·userId 모두 필요 — prodId 빠지면 '승인요청건만 삭제 가능합니다')
+  if (!row.prodId) throw new Error('요청 건에 상품ID가 없어 취소할 수 없습니다');
+  const payload = { settlementDtoList: [{ ...row, settlementSeq }] };
   const res = await send(cookie, '/api/pages/applypayment/cancel', 'POST', payload); const okNum = Number(res.text) > 0;
   await admin().from('settlement_requests').insert({ user_id: userId, settlement_seq: settlementSeq, action: 'cancel', payload, result: `${res.status} ${res.text.slice(0, 200)}`, ok: okNum });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.text.slice(0, 200) || res.status}`);
