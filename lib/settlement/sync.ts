@@ -19,7 +19,7 @@ export async function runSync(from: string, to: string, triggeredBy: string): Pr
     const map = await loadMap(); if (!map) return finish(false, '필드 매핑이 없습니다. 어드민 › 정산 연동 › 연결 테스트 후 매핑 저장');
     const cookie = await settleLogin();
     // 정산 API 는 조회기간을 '작업시작일' 로 거르므로, 요청일 기준으로 빠짐없이 받기 위해 앞뒤 31일을 넓혀 조회 (5일 단위 분할)
-    const qFrom = addDays(from, -15), qTo = addDays(to, 15);   // reqDate 와 dispReqDate 차이(며칠) 대비
+    const qFrom = addDays(from, -60), qTo = addDays(to, 60);   // 환불 건은 사이트가 환불일로 거르므로 원요청일과 두 달까지 벌어질 수 있음 (settle-sync.mjs 와 동일)
     const rows: SettleRow[] = []; const seen = new Set<string>(); const windows: string[] = [];
     for (let s = qFrom; s <= qTo; s = addDays(s, 5)) {
       const e = addDays(s, 4) > qTo ? qTo : addDays(s, 4);
@@ -30,6 +30,10 @@ export async function runSync(from: string, to: string, triggeredBy: string): Pr
     const keyOf = (r: SettleRow) => [r[map.settle_no], r['confirmSeq'], r['reqGubun']].filter(v => v !== undefined && v !== null && String(v) !== '').map(String).join('|');
     const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: profitOf(r, map.profit), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date && x.req_date >= from && x.req_date <= to);
     if (rows.length && !items.length) return finish(false, `매핑된 필드에서 값을 못 읽음 (키: ${Object.keys(rows[0]).join(',')})`, rows.length);
+    // 안전장치: 사이트는 세션이 끊겨도 200 + 빈 배열을 주므로, 기존 저장분이 있는데 조회가 비거나 반토막이면 삭제하지 않고 중단
+    { const { count } = await sb.from('settlement_items').select('settle_no', { count: 'exact', head: true }).gte('req_date', from).lte('req_date', to); const existing = count ?? 0;
+      if (existing > 0 && items.length === 0) return finish(false, `조회 0건인데 저장된 ${existing}건 있음 — 세션 만료/사이트 문제 의심, 삭제하지 않음`, rows.length);
+      if (existing >= 20 && items.length < existing * 0.5) return finish(false, `조회 ${items.length}건 < 저장 ${existing}건의 절반 — 사이트 응답 이상 의심, 삭제하지 않음`, rows.length); }
     { const { error: ed } = await sb.from('settlement_items').delete().gte('req_date', from).lte('req_date', to); if (ed) return finish(false, '기간 정리 실패: ' + ed.message, rows.length); }
     for (let i = 0; i < items.length; i += 500) { const { error } = await sb.from('settlement_items').upsert(items.slice(i, i + 500), { onConflict: 'settle_no' }); if (error) return finish(false, 'settlement_items 저장 실패: ' + error.message, rows.length); }
     const { data: applied, error } = await sb.rpc('apply_settlement_margin', { p_from: from, p_to: to });

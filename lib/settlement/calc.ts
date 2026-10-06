@@ -5,11 +5,13 @@ export function calc(i: ReqInput) {
   const prodIncentiveInd = i.prodIncentive > 0 ? 'Y' : 'N';
   const incentiveRate = prodIncentiveInd === 'Y' ? 0 : i.custRate > 0 ? i.custRate : i.empRate;
   const prodTotalAmt = Math.floor(i.prodAmt * i.inflowCnt * workDay);
+  if (['05', '06'].includes(i.gubun)) i = { ...i, mileageUseInd: false, useMileage: 0 };   // 사이트: 05/06 선택 시 킵 사용 체크 해제·비활성
   const useMileage = i.mileageUseInd ? i.useMileage : 0;
   const costAmt = i.saleTotalAmt - prodTotalAmt;
   let expectRateAmt: number, expectAmt: number;
   if (['05', '06'].includes(i.gubun)) { expectRateAmt = -Math.round(i.saleTotalAmt / 1.1); expectAmt = -(i.saleTotalAmt - useMileage); }
   else { expectRateAmt = Math.round(costAmt * incentiveRate / 1.1); expectAmt = i.saleTotalAmt - useMileage; }
   if (prodIncentiveInd === 'Y') expectRateAmt = workDay * i.prodIncentive * i.inflowCnt;
+  if (!i.mileageUseInd) expectAmt = i.saleTotalAmt;   // 사이트 저장 로직: 킵 미사용이면 expectAmt = 판매총액 (05/06 은 킵 사용 불가라 항상 양수)
   return { workDay, prodIncentiveInd, incentiveRate, prodTotalAmt, costAmt, expectRateAmt, expectAmt, useMileage };
 }

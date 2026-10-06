@@ -28,7 +28,7 @@ export function computeDefaults(r: SettleRow, confirmAmtInput?: number) {
   let confirmMileage = 0, confirmMaxAmt = confirmAmt, costAmt = confirmAmt + useMileage - prodTotalAmt;
   if (expectedAmt < confirmAmt) { confirmMileage = confirmAmt - expectedAmt; confirmMaxAmt = expectedAmt; costAmt = expectedAmt + useMileage - prodTotalAmt; }
   let confirmRateAmt = String(r.prodIncentiveInd ?? '') === 'Y' ? expectRateAmt : Math.round(costAmt * incentiveRate / 1.1);
-  if (fixedAmt) confirmRateAmt = -saleTotalAmt;
+  // 새 버전 사이트: 05/06 도 depositSum() 이 마지막에 돌아 확정수수료 = round(영업이익×요율/1.1) (구버전의 -판매총액 고정은 사라짐)
   return { refund, fixedAmt, prodTotalAmt, saleTotalAmt, useMileage, expectRateAmt, incentiveRate, expectedAmt, confirmAmt, confirmMileage, confirmMaxAmt, costAmt, confirmRateAmt, gubun, gubunName: String(r.gubunName ?? ''), prodIncentiveInd: String(r.prodIncentiveInd ?? 'N'),
     refundWorkDay: String(r.refundWorkDay ?? ''), refundProdTotalAmt: String(r.refundProdTotalAmt ?? ''), refundSaleTotalAmt: String(r.refundSaleTotalAmt ?? ''), refundExpectRateAmt: String(r.refundExpectRateAmt ?? ''), statusName: String(r.statusName ?? ''), applyStatus: String(r.applyStatus ?? '') };
 }
@@ -48,7 +48,7 @@ export async function approve(settlementSeq: string, confirmAmtInput: number | u
   const res = await post(cookie, '', payload);
   const okNum = Number(res.text) > 0;
   let verified = false; let site: { confirmAmt: number; confirmRateAmt: number; confirmMileage: number; statusName: string; confirmSeq: string } | null = null;
-  try { const after = await findRow(cookie, settlementSeq, ['02'], String(r.reqDate ?? '').slice(0, 10)); if (after) { verified = String(after.applyStatus) === '02'; site = { confirmAmt: n(after.confirmAmt), confirmRateAmt: n(after.confirmRateAmt), confirmMileage: n(after.confirmMileage), statusName: String(after.statusName ?? ''), confirmSeq: String(after.confirmSeq ?? '') }; } } catch {}
+  try { const after = await findRow(cookie, settlementSeq, ['02'], String(r.dispReqDate ?? r.reqDate ?? '').slice(0, 10)); if (after) { verified = String(after.applyStatus) === '02'; site = { confirmAmt: n(after.confirmAmt), confirmRateAmt: n(after.confirmRateAmt), confirmMileage: n(after.confirmMileage), statusName: String(after.statusName ?? ''), confirmSeq: String(after.confirmSeq ?? '') }; } } catch {}
   const match = site ? (site.confirmAmt === d.confirmAmt || d.refund) && (site.confirmRateAmt === d.confirmRateAmt || d.refund) : false;
   await sb.from('settlement_actions').insert({ settlement_seq: settlementSeq, action: 'approve', payload: { ...payload, _site_after: site }, result: `${res.status} ${res.text.slice(0, 200)}${verified ? (match ? ' · 사이트 기록 일치' : ' · ⚠ 사이트 기록 불일치') : ' · 재조회 미확인(전송은 성공)'}`, ok: okNum, actor_id: actorId });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.status} ${res.text.slice(0, 200)}`);
@@ -62,7 +62,7 @@ export async function cancelApproval(settlementSeq: string, actorId: string, hin
   const r = await findRow(cookie, settlementSeq, ['02', '01'], hintDate); if (!r) throw new Error('정산 사이트에서 해당 정산번호를 찾지 못했습니다');
   const payload = { settlementSeq, refundInd: String(r.refundInd ?? '') };
   const res = await post(cookie, '/cancel', payload); const okNum = Number(res.text) > 0;
-  let verified = false; try { const after = await findRow(cookie, settlementSeq, ['03'], String(r.reqDate ?? '').slice(0, 10)); verified = String(after?.applyStatus) === '03'; } catch {}
+  let verified = false; try { const after = await findRow(cookie, settlementSeq, ['03'], String(r.dispReqDate ?? r.reqDate ?? '').slice(0, 10)); verified = String(after?.applyStatus) === '03'; } catch {}
   await sb.from('settlement_actions').insert({ settlement_seq: settlementSeq, action: 'cancel', payload, result: `${res.status} ${res.text.slice(0, 200)}${verified ? ' · 재조회 승인취소 확인' : ''}`, ok: okNum && verified, actor_id: actorId });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.status} ${res.text.slice(0, 200)}`);
   await sb.from('settlement_pending').update({ resolved_at: new Date().toISOString(), resolved_status: verified ? '반려 (워크허브에서 승인취소)' : '승인취소 전송됨', resolved_by: actorId }).eq('settle_no', settlementSeq).is('resolved_at', null);

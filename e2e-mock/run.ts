@@ -54,8 +54,8 @@ const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   try { await cancelRequest('u-yong', r1.seq!); T('승인취소된 건 요청취소 → 차단', false); } catch (e: any) { T('승인요청 아닌 건 요청취소 → 차단', /승인요청 상태만/.test(e.message)); }
   // ---- 선입금(05) 접수·승인 고정값 ----
   const r3 = await createRequest('u-yong', { prodId: 'PD-0060', custId: '2222222222', prodAmt: 0, prodIncentive: 0, saleAmt: 0, inflowCnt: 0, dateWorkFrom: today, dateWorkTo: today, saleTotalAmt: 110000, gubun: '05', mileageUseInd: false, useMileage: 0, custRate: 0.5, empRate: 1, existMileage: 0 });
-  const st6 = await state(); const row3 = st6.settlement.find((x: any) => x.settlementSeq === r3.seq); T('선입금(05) 접수: 예상수수료 -100000, 입금예정 -110000', row3.expectRateAmt === '-100000' && row3.expectAmt === '-110000');
-  const ap3 = await approve(r3.seq!, 123, '', 'u-admin'); T('선입금 승인: 입금=판매총액 110000 고정, 수수료 -110000', ap3.site?.confirmAmt === 110000 && ap3.site?.confirmRateAmt === -110000, JSON.stringify(ap3.site));
+  const st6 = await state(); const row3 = st6.settlement.find((x: any) => x.settlementSeq === r3.seq); T('선입금(05) 접수: 예상수수료 -100000, 입금예정 110000(킵 미사용 → 판매총액, 새 버전 저장 로직)', row3.expectRateAmt === '-100000' && row3.expectAmt === '110000', `${row3.expectRateAmt}/${row3.expectAmt}`);
+  const ap3 = await approve(r3.seq!, 123, '', 'u-admin'); T('선입금 승인: 입금=판매총액 110000 고정, 수수료=round(110000×0.5/1.1)=50000 (새 버전 depositSum)', ap3.site?.confirmAmt === 110000 && ap3.site?.confirmRateAmt === 50000, JSON.stringify(ap3.site));
   // ---- 상품인센 상품 접수 ----
   const r4 = await createRequest('u-yong', { prodId: 'PD-0099', custId: '2222222222', prodAmt: 10, prodIncentive: 3, saleAmt: 0, inflowCnt: 100, dateWorkFrom: today, dateWorkTo: today, saleTotalAmt: 5000, gubun: '01', mileageUseInd: false, useMileage: 0, custRate: 0.5, empRate: 1, existMileage: 0 });
   const st7 = await state(); const row4 = st7.settlement.find((x: any) => x.settlementSeq === r4.seq); T('상품인센 상품: 인센율 0, 예상수수료 1×3×100=300', row4.incentiveRate === '0' && row4.expectRateAmt === '300' && row4.prodIncentiveInd === 'Y');

@@ -6,6 +6,7 @@ on:
     inputs:
       from: { description: '시작일 YYYY-MM-DD (비우면 회사 연도 시작 12/21부터)', required: false }
       to:   { description: '종료일 YYYY-MM-DD', required: false }
+      force: { description: '조회 건수가 저장분보다 크게 줄어도 덮어쓰기 (1 = 강제)', required: false }
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -25,4 +26,5 @@ jobs:
           SETTLE_USER_PW: ${{ secrets.SETTLE_USER_PW }}
           FROM: ${{ github.event.inputs.from }}
           TO: ${{ github.event.inputs.to }}
+          FORCE: ${{ github.event.inputs.force }}
           TRIGGERED_BY: github-${{ github.event_name }}

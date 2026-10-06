@@ -53,6 +53,10 @@ const profitOf = (r, map) => String(r.refundInd ?? '') === 'Y' ? toNum(r.refundS
     const keyOf = r => [r[map.settle_no], r.confirmSeq, r.reqGubun].filter(v => v != null && String(v) !== '').map(String).join('|');
     const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: profitOf(r, map), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date && x.req_date >= FROM && x.req_date <= TO);
     if (rows.length && !items.length) return finish(false, `매핑 필드에서 값을 못 읽음 (키: ${Object.keys(rows[0]).join(',')})`, rows.length);
+    // 안전장치: 세션 만료 시 사이트는 200 + 빈 배열 → 기존 저장분이 있는데 조회가 비거나 반토막이면 삭제하지 않고 중단 (FORCE=1 이면 통과)
+    { const { count } = await sb.from('settlement_items').select('settle_no', { count: 'exact', head: true }).gte('req_date', FROM).lte('req_date', TO); const existing = count ?? 0;
+      if (!env.FORCE && existing > 0 && items.length === 0) return finish(false, `조회 0건인데 저장된 ${existing}건 있음 — 세션 만료/사이트 문제 의심, 삭제하지 않음`, rows.length);
+      if (!env.FORCE && existing >= 20 && items.length < existing * 0.5) return finish(false, `조회 ${items.length}건 < 저장 ${existing}건의 절반 — 사이트 응답 이상 의심, 삭제하지 않음 (의도한 것이면 FORCE=1)`, rows.length); }
     const { error: ed } = await sb.from('settlement_items').delete().gte('req_date', FROM).lte('req_date', TO); if (ed) return finish(false, '기간 정리 실패: ' + ed.message);
     for (let i = 0; i < items.length; i += 500) { const { error } = await sb.from('settlement_items').upsert(items.slice(i, i + 500), { onConflict: 'settle_no' }); if (error) return finish(false, '저장 실패: ' + error.message, rows.length); }
     const { data: applied, error } = await sb.rpc('apply_settlement_margin', { p_from: FROM, p_to: TO }); if (error) return finish(false, 'KPI 반영 실패: ' + error.message, rows.length);
