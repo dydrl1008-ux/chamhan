@@ -5,7 +5,7 @@ export function refundCalc(i: RefundCalcIn) {
   let err = '';
   if (!i.refundDate) err = '환불요청일을 입력하세요';
   else if (d1 < d2) err = '환불요청일은 정산요청의 작업종료일 이전이어야 합니다';
-  else if (d2 < d3) err = '환불요청일은 작업시작일 이후여야 합니다';
+  else if (d2 < d3 - 864e5) err = '환불요청일은 작업시작일 전날 이후여야 합니다 (전날 = 전체 기간 환불)';  // 사이트와 동일: 환불일수 = 종료일 − 환불요청일. 시작일 전날로 넣으면 전체 일수(1일 작업 포함) 환불
   const refundWorkDay = err ? 0 : Math.abs((d1 - d2) / 864e5);
   if (!err && refundWorkDay > i.workDay) err = '환불요청 일 수는 정산요청 일 수보다 많을 수 없습니다';
   const byProd = Math.floor(i.prodAmt * i.refundInflowCnt * refundWorkDay);   // 상품가 × 유입수 × 환불일수
