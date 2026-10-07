@@ -48,10 +48,12 @@ const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   }
   // ---- 감시: 승인요청 1건 감지 ----
   const pp = await pollPending(); T('승인 대기 감시: 신규 1건, 코드 01', pp.open === 1 && pp.fresh.length === 1 && pp.code === '01' && pp.healthy, JSON.stringify(pp.dist));
+  { const it = store.settlement_items?.find((x: any) => x.raw?.settlementSeq === r1.seq); T('승인요청 건 → settlement_items 에 승인요청 상태로 저장 (마진 포함)', !!it && it.status === '승인요청' && it.req_date === today, JSON.stringify(it && { status: it.status, req_date: it.req_date, profit: it.profit })); }
   // ---- 승인 (어드민): 입금 100000 그대로 → 사이트 기록 대조 ----
   const ac = await settleLogin(); const found = await findRow(ac, r1.seq!, ['01']); T('승인 대상 조회(±3일 창)', !!found);
   const d0 = computeDefaults(found!); T('팝업 기본값: 입금=입금예정 80000, 수수료=round((80000+20000-33000)/1.1)=60909', d0.confirmAmt === 80000 && d0.confirmRateAmt === 60909, `${d0.confirmAmt}/${d0.confirmRateAmt}`);
   const ap = await approve(r1.seq!, 95000, '테스트', 'u-admin');   // 초과 입금 15000 → 마일리지 적립
+  { const it = store.settlement_items?.find((x: any) => x.raw?.settlementSeq === r1.seq); T('승인 후 settlement_items 상태 승인완료 (사이트 기록으로 갱신)', !!it && it.status === '승인완료', JSON.stringify(it && { status: it.status, profit: it.profit })); T('승인 전후 행 중복 없음 (키 교체)', store.settlement_items.filter((x: any) => x.raw?.settlementSeq === r1.seq).length === 1); }
   const st3 = await state(); const mst = st3.settlementmst.find((m: any) => m.settlementSeq === r1.seq);
   T('승인 → 사이트 상태 02·승인번호·기록값 = 워크허브 값', ap.verified && ap.match && mst.confirmAmt === '95000' && mst.confirmMileage === '15000' && mst.confirmRateAmt === String(Math.round((80000 + 20000 - 33000) * 1 / 1.1)), JSON.stringify({ mst, site: ap.site }));
   T('초과 입금 15000 → 고객 킵 적립 (30000→45000)', st3.customers[0].mileage === 45000);
@@ -60,7 +62,7 @@ const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   // ---- 감시: 처리됨 ----
   const pp2 = await pollPending(); T('감시: 승인된 건 대기에서 해소', pp2.open === 0 && pp2.resolved === 0 /* approve 가 이미 resolved 처리 */ || pp2.open === 0);
   // ---- 승인취소 ----
-  const cx = await cancelApproval(r1.seq!, 'u-admin'); const st4 = await state(); T('승인취소 → 상태 03·승인기록 삭제', cx.verified && st4.settlement.find((x: any) => x.settlementSeq === r1.seq).applyStatus === '03' && !st4.settlementmst.some((m: any) => m.settlementSeq === r1.seq));
+  const cx = await cancelApproval(r1.seq!, 'u-admin'); const st4 = await state(); { const it = store.settlement_items?.find((x: any) => x.raw?.settlementSeq === r1.seq); T('승인취소 후 settlement_items 상태 승인취소 (마진 제외)', !!it && it.status === '승인취소'); } T('승인취소 → 상태 03·승인기록 삭제', cx.verified && st4.settlement.find((x: any) => x.settlementSeq === r1.seq).applyStatus === '03' && !st4.settlementmst.some((m: any) => m.settlementSeq === r1.seq));
   // ---- 직원 요청취소 (승인요청 상태 건) ----
   const r2 = await createRequest('u-yong', { ...i1, mileageUseInd: false, useMileage: 0, saleTotalAmt: 50000 });
   await cancelRequest('u-yong', r2.seq!); const st5 = await state(); T('직원 요청취소 → 상태 C', st5.settlement.find((x: any) => x.settlementSeq === r2.seq).applyStatus === 'C');

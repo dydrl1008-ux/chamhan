@@ -12,6 +12,23 @@ export async function loadMap(): Promise<FieldMap | null> {
   const { data } = await admin().from('app_settings').select('value').eq('key', 'settle_field_map').maybeSingle();
   try { const m = JSON.parse(data?.value || '{}'); return m.settle_no && m.empl_id && m.req_date && m.profit && m.status ? { status_ok: '승인완료', ...m } : null; } catch { return null; }
 }
+/** 조회 행 → settlement_items 저장(삭제 없이 upsert) + 해당 기간 KPI 마진 재계산. 승인 대기 폴링에서 승인요청 건을 바로 마진에 반영할 때 사용 */
+export async function upsertRows(rows: SettleRow[]): Promise<{ saved: number; from?: string; to?: string }> {
+  const map = await loadMap(); if (!map || !rows.length) return { saved: 0 };
+  const sb = admin();
+  const keyOf = (r: SettleRow) => [r[map.settle_no], r['confirmSeq'], r['reqGubun']].filter(v => v !== undefined && v !== null && String(v) !== '').map(String).join('|');
+  const items = rows.map(r => ({ settle_no: keyOf(r), empl_id: String(r[map.empl_id] ?? '').trim(), req_date: toDate(r[map.req_date]), profit: profitOf(r, map.profit), status: String(r[map.status] ?? '').trim(), raw: r })).filter(x => x.settle_no && x.req_date);
+  if (!items.length) return { saved: 0 };
+  // 같은 정산번호·요청구분의 옛 키(승인 전 키에는 confirmSeq 가 없음) 제거 → 승인요청 행과 승인완료 행이 중복 집계되지 않게
+  { const seqs = [...new Set(items.map(x => String(x.raw[map.settle_no] ?? '')).filter(Boolean))]; const newKeys = new Set(items.map(x => x.settle_no));
+    const { data: old } = await sb.from('settlement_items').select('settle_no, raw').in('raw->>' + map.settle_no, seqs);
+    const stale = (old ?? []).filter((o: any) => !newKeys.has(o.settle_no) && items.some(x => String(x.raw[map.settle_no]) === String(o.raw?.[map.settle_no]) && String(x.raw.reqGubun ?? '') === String(o.raw?.reqGubun ?? ''))).map((o: any) => o.settle_no);
+    if (stale.length) await sb.from('settlement_items').delete().in('settle_no', stale); }
+  for (let i = 0; i < items.length; i += 500) { const { error } = await sb.from('settlement_items').upsert(items.slice(i, i + 500), { onConflict: 'settle_no' }); if (error) throw new Error('settlement_items 저장 실패: ' + error.message); }
+  const ds = items.map(x => x.req_date!).sort(); const from = ds[0], to = ds[ds.length - 1];
+  const { error } = await sb.rpc('apply_settlement_margin', { p_from: from, p_to: to }); if (error) throw new Error('KPI 반영 실패: ' + error.message);
+  return { saved: items.length, from, to };
+}
 export async function runSync(from: string, to: string, triggeredBy: string): Promise<{ ok: boolean; msg: string; fetched: number; applied: number }> {
   const sb = admin(); const { data: run } = await sb.from('settlement_sync_runs').insert({ range_from: from, range_to: to, triggered_by: triggeredBy }).select('id').single();
   const finish = async (ok: boolean, message: string, fetched = 0, applied = 0) => { if (run) await sb.from('settlement_sync_runs').update({ finished_at: new Date().toISOString(), ok, message, rows_fetched: fetched, rows_applied: applied }).eq('id', run.id); return { ok, msg: message, fetched, applied }; };

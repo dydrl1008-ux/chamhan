@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { settleLogin, fetchApprovals, type SettleRow } from './client';
 import { todayKST, addDays } from '@/lib/date/kst';
+import { origProdItems } from './refund';
 const admin = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
 const PENDING = ['승인요청', '정산요청', '대기'];   // 정산 사이트 statusName 중 '미승인' 으로 볼 값
 
@@ -34,12 +35,23 @@ export async function pollPending(_days = 3) {
   // 신규 = 처음 보는 건 + 해소됐다가 다시 승인요청으로 올라온 건 (무시한 건 제외)
   const fresh = items.filter(i => !openBefore.has(i.item_key) && !dismissed.has(i.item_key));
   if (items.length) { const { error } = await sb.from('settlement_pending').upsert(items, { onConflict: 'item_key' }); if (error) throw new Error('pending 저장 실패: ' + error.message); }
+  // 상품 정보(계정·비번·슬롯번호): 아직 없는 건만 조회해 저장 (한 번에 최대 40건, 2개씩 병렬)
+  try {
+    const { data: need } = await sb.from('settlement_pending').select('item_key,settle_no,empl_id').is('resolved_at', null).is('prod_items', null).limit(40);
+    const byKey = new Map(open.map(r => [keyOf(r), r]));
+    const targets = (need ?? []).map(n => ({ n, r: byKey.get(n.item_key) })).filter(x => x.r);
+    for (let i = 0; i < targets.length; i += 2) {
+      await Promise.all(targets.slice(i, i + 2).map(async ({ n, r }) => { try { const its = await withSession(c => origProdItems(c, String(r!.settlementSeq), String(r!.prodId))); await sb.from('settlement_pending').update({ prod_items: its ?? [] }).eq('item_key', n.item_key); } catch { await sb.from('settlement_pending').update({ prod_items: [] }).eq('item_key', n.item_key); } }));
+    }
+  } catch {}
   // 해소: 조회 결과에 없는 대기 건.
   //  - 상태 필터 조회가 0건이면 '전부 처리됨' 일 수도, 사이트 오류일 수도 있으므로 최근 7일 일반 조회로 사이트 정상 여부를 확인한 뒤에만 해소
   //  - 조회 결과에 승인요청 상태가 하나도 없는데 다른 상태만 있으면(코드 잘못) 해소하지 않음
   let resolved = 0; let healthy = rows.length > 0 && open.length > 0;
   if (rows.length > 0 && open.length === 0) healthy = false;                     // 코드 오류 의심
   if (rows.length === 0) { try { const probe = await withSession(c => fetchApprovals(c, addDays(to, -7), addDays(to, 1), '')); healthy = probe.length > 0; } catch { healthy = false; } }
+  // 승인요청 건도 마진에 바로 반영 (settlement_items upsert + KPI 재계산). 승인취소된 건은 다음 동기화에서 상태 갱신
+  if (healthy && open.length) { try { const { upsertRows } = await import('./sync'); await upsertRows(open); } catch (e) { console.error('pending→margin 반영 실패', (e as Error).message); } }
   if (healthy) {
     const toResolve = (existing ?? []).filter(e => !e.resolved_at && !openKeys.has(e.item_key));
     if (toResolve.length) { const { error } = await sb.from('settlement_pending').update({ resolved_at: now, resolved_status: '처리됨 (승인요청 목록에서 제외)' }).in('item_key', toResolve.map(e => e.item_key)); if (error) throw new Error('해소 처리 실패: ' + error.message); resolved = toResolve.length; }

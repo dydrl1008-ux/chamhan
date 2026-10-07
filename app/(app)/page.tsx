@@ -6,6 +6,7 @@ import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth } from '@/lib/date/pe
 import { evaluatePeople } from '@/lib/eval';
 export const dynamic = 'force-dynamic';
 const Card = ({ l, v, d, c, href }: { l: string; v: React.ReactNode; d?: React.ReactNode; c?: string; href?: string }) => <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{l}</div><div style={{ fontSize: 22, fontWeight: 800, color: c }}>{v}</div>{d && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{d}</div>}{href && <Link href={href} style={{ fontSize: 12 }}>바로가기 →</Link>}</div>;
+const Pend = ({ v }: { v: number }) => v ? <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400, marginLeft: 6 }} title="정산 사이트 승인요청 상태 (승인 전) — 합계·목표에는 미포함">+대기 {won(v)}</span> : null;
 const bar = (p: number, c?: string) => <div style={{ height: 8, background: 'var(--line)', borderRadius: 6, marginTop: 6 }}><div style={{ width: `${Math.min(100, Math.max(0, p))}%`, height: '100%', background: c ?? 'var(--accent)', borderRadius: 6 }} /></div>;
 const pct = (a: number, b: number) => b ? Math.round(a / b * 100) : 0;
 const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각' };
@@ -26,7 +27,7 @@ export default async function Home() {
     const [{ people }, { data: att }, { data: kpi }, { data: tgt }, { data: pend }, { data: plans }, { data: dir }] = await Promise.all([
       evaluatePeople(today, p.id),
       sb.from('attendance').select('check_in,check_out,is_late').eq('user_id', p.id).eq('work_date', today).maybeSingle(),
-      sb.from('kpi_daily').select('margin,margin_auto,margin_manual').eq('user_id', p.id).eq('work_date', today).maybeSingle(),
+      sb.from('kpi_daily').select('margin,margin_auto,margin_manual,margin_pending').eq('user_id', p.id).eq('work_date', today).maybeSingle(),
       sb.from('monthly_targets').select('margin').eq('user_id', p.id).eq('month', bm + '-01').maybeSingle(),
       sb.from('leave_requests').select('type,start_date,status,team_approved_at').eq('user_id', p.id).eq('status', 'pending'),
       sb.from('plans').select('id,title,is_done').eq('user_id', p.id).eq('is_active', true).eq('type', 'daily').lte('start_date', today).gte('end_date', today),
@@ -40,8 +41,8 @@ export default async function Home() {
         {promoBox}{issueBox}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
           <Card l="오늘 출근" v={att?.check_in ? att.check_in.slice(0, 5) : '미체크'} d={att?.check_in ? (att.is_late ? '지각' : '정상') + (att.check_out ? ` · 퇴근 ${att.check_out.slice(0, 5)}` : '') : '자리에 앉으면 기록'} c={att?.check_in ? (att.is_late ? '#D97706' : 'var(--ok)') : 'var(--bad)'} href="/attendance" />
-          <Card l="오늘 KPI" v={kpi ? won(kpi.margin) : '미제출'} d={kpi ? `정산 ${won(kpi.margin_auto)} + 추가 ${won(kpi.margin_manual)}` : '퇴근 전 제출'} c={kpi ? 'var(--ok)' : 'var(--bad)'} href="/kpi" />
-          <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{bizLabel(bm)} 마진</div><div style={{ fontSize: 22, fontWeight: 800, color: mm < 0 ? 'var(--bad)' : 'inherit' }}>{won(mm)}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{tg ? `목표 ${man(tg)} · ${pct(mm, tg)}%` : '목표 미배정'}</div>{tg ? bar(r * 100, r >= 1 ? 'var(--ok)' : r >= .7 ? '#D97706' : undefined) : null}</div>
+          <Card l="오늘 KPI" v={kpi ? won(kpi.margin) : '미제출'} d={kpi ? <>정산 {won(kpi.margin_auto)} + 추가 {won(kpi.margin_manual)}<Pend v={Number(kpi.margin_pending ?? 0)} /></> : '퇴근 전 제출'} c={kpi ? 'var(--ok)' : 'var(--bad)'} href="/kpi" />
+          <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{bizLabel(bm)} 마진</div><div style={{ fontSize: 22, fontWeight: 800, color: mm < 0 ? 'var(--bad)' : 'inherit' }}>{won(mm)}<Pend v={me?.monthPending ?? 0} /></div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{tg ? `목표 ${man(tg)} · ${pct(mm, tg)}%` : '목표 미배정'}</div>{tg ? bar(r * 100, r >= 1 ? 'var(--ok)' : r >= .7 ? '#D97706' : undefined) : null}</div>
           <Card l="예상 인센티브" v={won(me?.inc.total ?? 0)} d={me?.inc.tier ? `${me.inc.scope} · ${me.inc.tier.label}${me.inc.next ? ` · 다음 구간까지 ${man(Number(me.inc.next.min_margin) - mm)}` : ''}` : '기준 없음'} href="/me" />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
@@ -81,7 +82,7 @@ export default async function Home() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><h1 style={{ fontSize: 20, margin: 0 }}>{p.name}님, {today}</h1><span style={{ fontSize: 13, color: 'var(--muted)' }}>{isMgr ? tn(p.team_id) : '전사'} · {bizLabel(bm)}</span><Link href="/overview" className="btn ghost" style={{ padding: '4px 10px', fontSize: 12, textDecoration: 'none' }}>직원 현황 →</Link></div>
       {promoBox}{issueBox}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14 }}>
-        <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{isMgr ? '팀' : '전사'} 마진 (오늘까지)</div><div style={{ fontSize: 22, fontWeight: 800, color: mm < 0 ? 'var(--bad)' : 'inherit' }}>{won(mm)}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{tg ? `목표 ${man(tg)} · ${pct(mm, tg)}%` : '목표 미배정'}</div>{tg ? bar(r * 100, r >= 1 ? 'var(--ok)' : r >= .7 ? '#D97706' : undefined) : null}</div>
+        <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{isMgr ? '팀' : '전사'} 마진 (오늘까지)</div><div style={{ fontSize: 22, fontWeight: 800, color: mm < 0 ? 'var(--bad)' : 'inherit' }}>{won(mm)}<Pend v={staff.reduce((a, x) => a + x.monthPending, 0)} /></div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{tg ? `목표 ${man(tg)} · ${pct(mm, tg)}%` : '목표 미배정'}</div>{tg ? bar(r * 100, r >= 1 ? 'var(--ok)' : r >= .7 ? '#D97706' : undefined) : null}</div>
         <Card l="지난달 같은 시점 대비" v={<span style={{ color: diff >= 0 ? 'var(--ok)' : 'var(--bad)' }}>{diff >= 0 ? '▲' : '▼'} {man(Math.abs(diff))}</span>} d={`${Number(prevBizMonth(bm).slice(5))}월 ${pSame.slice(5).replace('-', '/')}까지 ${won(prvSame)}`} />
         <Card l="오늘 출근" v={`${rows.length - noAtt.length}/${rows.length}`} d={noAtt.length ? `미체크: ${noAtt.map(x => x.name).join(', ')}` : '전원 체크'} c={noAtt.length ? 'var(--bad)' : 'var(--ok)'} href="/attendance" />
         <Card l="오늘 KPI 제출" v={`${staff.length - noKpi.length}/${staff.length}`} d={noKpi.length ? `미제출: ${noKpi.map(x => x.name).join(', ')}` : '전원 제출'} c={noKpi.length ? 'var(--bad)' : 'var(--ok)'} href="/kpi" />
@@ -90,7 +91,7 @@ export default async function Home() {
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, teamsShown.length))},1fr)`, gap: 14 }}>
         {teamsShown.map(t => { const tm = staff.filter(x => x.team_id === t.id); const tids = tm.map(x => x.id); const m = tm.reduce((a, x) => a + x.monthMargin, 0); const tt = tids.reduce((a, id) => a + Number(targets?.find(y => y.user_id === id)?.margin ?? 0), 0); const w = wr?.find(x => x.team_id === t.id); return (
           <div key={t.id} className="card"><h3 style={{ margin: '0 0 8px', fontSize: 15, display: 'flex', justifyContent: 'space-between' }}><span>{t.name} <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{tm.length}명</span></span><span className="pill" style={w?.status === 'submitted' ? { background: 'var(--ok-soft)', color: 'var(--ok)' } : { background: '#FDF1DD', color: '#D97706' }}>주간보고 {w?.status === 'submitted' ? '제출' : w ? '작성중' : '미작성'}</span></h3>
-            <div style={{ fontSize: 20, fontWeight: 800, color: m < 0 ? 'var(--bad)' : 'inherit' }}>{won(m)} <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{tt ? `/ ${man(tt)} · ${pct(m, tt)}%` : ''}</span></div>{tt ? bar(pct(m, tt), m / tt >= 1 ? 'var(--ok)' : undefined) : null}
+            <div style={{ fontSize: 20, fontWeight: 800, color: m < 0 ? 'var(--bad)' : 'inherit' }}>{won(m)} <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{tt ? `/ ${man(tt)} · ${pct(m, tt)}%` : ''}</span><Pend v={tm.reduce((a, x) => a + x.monthPending, 0)} /></div>{tt ? bar(pct(m, tt), m / tt >= 1 ? 'var(--ok)' : undefined) : null}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>{tm.map(x => { const a = att?.some(y => y.user_id === x.id); const l = lvToday?.some(y => y.user_id === x.id); const k = kpiT?.some(y => y.user_id === x.id); const ok = (a || l) && k; return <span key={x.id} className="pill" style={{ background: ok ? 'var(--ok-soft)' : 'var(--bad-soft)', color: ok ? 'var(--ok)' : 'var(--bad)' }} title={`${l ? '휴가' : a ? '출근' : '미체크'} · ${k ? 'KPI 제출' : 'KPI 미제출'}`}>{x.name}</span>; })}</div>
           </div>); })}
       </div>

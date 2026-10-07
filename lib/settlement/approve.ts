@@ -47,16 +47,23 @@ export async function approve(settlementSeq: string, confirmAmtInput: number | u
   const d = computeDefaults(r, confirmAmtInput); const payload = buildPayload(r, d, remark);
   const res = await post(cookie, '', payload);
   const okNum = Number(res.text) > 0;
-  let verified = false; let site: { confirmAmt: number; confirmRateAmt: number; confirmMileage: number; statusName: string; confirmSeq: string } | null = null;
-  try { const after = await findRow(cookie, settlementSeq, ['02'], String(r.dispReqDate ?? r.reqDate ?? '').slice(0, 10)); if (after) { verified = String(after.applyStatus) === '02'; site = { confirmAmt: n(after.confirmAmt), confirmRateAmt: n(after.confirmRateAmt), confirmMileage: n(after.confirmMileage), statusName: String(after.statusName ?? ''), confirmSeq: String(after.confirmSeq ?? '') }; } } catch {}
+  let verified = false; let site: { confirmAmt: number; confirmRateAmt: number; confirmMileage: number; statusName: string; confirmSeq: string } | null = null; let afterRow: SettleRow | null = null;
+  try { const after = await findRow(cookie, settlementSeq, ['02'], String(r.dispReqDate ?? r.reqDate ?? '').slice(0, 10)); if (after) { afterRow = after; verified = String(after.applyStatus) === '02'; site = { confirmAmt: n(after.confirmAmt), confirmRateAmt: n(after.confirmRateAmt), confirmMileage: n(after.confirmMileage), statusName: String(after.statusName ?? ''), confirmSeq: String(after.confirmSeq ?? '') }; } } catch {}
   const match = site ? (site.confirmAmt === d.confirmAmt || d.refund) && (site.confirmRateAmt === d.confirmRateAmt || d.refund) : false;
   await sb.from('settlement_actions').insert({ settlement_seq: settlementSeq, action: 'approve', payload: { ...payload, _site_after: site }, result: `${res.status} ${res.text.slice(0, 200)}${verified ? (match ? ' · 사이트 기록 일치' : ' · ⚠ 사이트 기록 불일치') : ' · 재조회 미확인(전송은 성공)'}`, ok: okNum, actor_id: actorId });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.status} ${res.text.slice(0, 200)}`);
   const now = new Date().toISOString();
   await sb.from('settlement_pending').update({ resolved_at: now, resolved_status: verified ? '승인완료 (워크허브에서 승인)' : '승인 전송됨 (확인 중)', resolved_by: actorId }).eq('settle_no', settlementSeq).is('resolved_at', null);
+  // 마진 즉시 반영: 사이트 승인 기록(확정 금액 기준 영업이익)으로 저장, 재조회 못 했으면 상태만 승인완료로
+  if (afterRow) { try { const { upsertRows } = await import('./sync'); await upsertRows([afterRow]); } catch (e) { console.error('승인 건 마진 반영 실패', (e as Error).message); } } else await markItemsStatus(settlementSeq, '승인완료');
   return { payload, d, verified, site, match };
 }
 /** 승인취소 (급여 처리된 건은 사이트가 거부) */
+/** 저장된 정산 행(settlement_items)의 상태를 바꾸고 해당 날짜 KPI 마진 재계산 (승인요청→승인완료/승인취소 즉시 반영) */
+async function markItemsStatus(settlementSeq: string, status: string) {
+  try { const sb = admin(); const { data } = await sb.from('settlement_items').update({ status }).eq('raw->>settlementSeq', settlementSeq).select('req_date');
+    const ds = (data ?? []).map((x: any) => x.req_date).sort(); if (ds.length) await sb.rpc('apply_settlement_margin', { p_from: ds[0], p_to: ds[ds.length - 1] }); } catch (e) { console.error('settlement_items 상태 갱신 실패', (e as Error).message); }
+}
 export async function cancelApproval(settlementSeq: string, actorId: string, hintDate?: string | null) {
   const sb = admin(); const cookie = await settleLogin();
   const r = await findRow(cookie, settlementSeq, ['02', '01'], hintDate); if (!r) throw new Error('정산 사이트에서 해당 정산번호를 찾지 못했습니다');
@@ -66,5 +73,6 @@ export async function cancelApproval(settlementSeq: string, actorId: string, hin
   await sb.from('settlement_actions').insert({ settlement_seq: settlementSeq, action: 'cancel', payload, result: `${res.status} ${res.text.slice(0, 200)}${verified ? ' · 재조회 승인취소 확인' : ''}`, ok: okNum && verified, actor_id: actorId });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.status} ${res.text.slice(0, 200)}`);
   await sb.from('settlement_pending').update({ resolved_at: new Date().toISOString(), resolved_status: verified ? '반려 (워크허브에서 승인취소)' : '승인취소 전송됨', resolved_by: actorId }).eq('settle_no', settlementSeq).is('resolved_at', null);
+  await markItemsStatus(settlementSeq, '승인취소');   // 마진에서 즉시 제외
   return { verified };
 }
