@@ -35,10 +35,11 @@ const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   try { await createCustomer('u-yong', { bizNo: '3333333333', custName: '중복' }); T('중복 고객 → 거부', false); } catch (e: any) { T('중복 고객 → 사이트 거부 메시지 전달', /동일한/.test(e.message), e.message); }
   // ---- 고객 등록 + 직원 배정 (관리팀, 어드민 세션) ----
   { const cu = await import('@/lib/settlement/customers');
-    const emps = await cu.empList(); T('직원 목록 (admin 제외)', emps.length === 2 && !emps.some(e => e.empId === 'admin'), JSON.stringify(emps));
+    const emps0 = await cu.empList(); T('직원 목록: 워크허브 연결된 계정만 (yongyong 만 연결됨)', emps0.length === 1 && emps0[0].empId === 'yongyong' && emps0[0].workhubName === '권용기', JSON.stringify(emps0));
+    await saveCredential('u-typ', 'typ2uh', 'tt'); const emps = await cu.empList(); T('typ2uh 연결 후 직원 2명, admin 제외', emps.length === 2 && !emps.some(e => e.empId === 'admin'), JSON.stringify(emps));
     const r = await cu.createAndAssign('u-mgmt', { bizNo: '444-44-44444', custName: '배정테스트', incentiveRate: 0.3 }, ['typ2uh']); const st = await state();
     T('고객 등록 + typ2uh 배정, 어드민 자동배정 제거', r.added.length === 1 && st.empCustomer.some((m: any) => m.empId === 'typ2uh' && m.bizNo === '4444444444') && !st.empCustomer.some((m: any) => m.empId === 'admin' && m.bizNo === '4444444444'), JSON.stringify(st.empCustomer));
-    await saveCredential('u-typ', 'typ2uh', 'tt'); const fdT = await formData((await userSession('u-typ')).cookie, 'typ2uh'); T('배정된 직원 정산요청 고객목록에 보임', fdT.customers.some((c: any) => c.bizNo === '4444444444'));
+    const fdT = await formData((await userSession('u-typ')).cookie, 'typ2uh'); T('배정된 직원 정산요청 고객목록에 보임', fdT.customers.some((c: any) => c.bizNo === '4444444444'));
     const fdY = await formData(cookie, 'yongyong'); T('미배정 직원에게는 안 보임', !fdY.customers.some((c: any) => c.bizNo === '4444444444'));
     const a2 = await cu.assign('u-mgmt', '4444444444', ['yongyong', 'typ2uh']); T('추가 배정: 신규 1 · 중복 1 건너뜀', a2.added.length === 1 && a2.skipped.length === 1, JSON.stringify(a2));
     const asg = await cu.customerAssignments(); T('고객별 배정 현황', (asg.byBiz['4444444444'] ?? []).length === 2, JSON.stringify(asg.byBiz));

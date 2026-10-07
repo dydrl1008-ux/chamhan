@@ -1,5 +1,5 @@
 // 메모리 Supabase 스텁 (eq/is/in/order/limit/maybeSingle/single/insert/upsert/update/delete/rpc)
-const tables: Record<string, any[]> = { settlement_credentials: [], settlement_actions: [], settlement_requests: [], settlement_pending: [], settlement_empl_map: [], app_settings: [{ key: 'settle_pending_code', value: '01' }] };
+const tables: Record<string, any[]> = { settlement_credentials: [], settlement_actions: [], settlement_requests: [], settlement_pending: [], settlement_empl_map: [], profiles: [{ id: 'u-yong', name: '권용기', is_active: true }, { id: 'u-typ', name: '송유형', is_active: true }, { id: 'u-mgmt', name: '관리팀', is_active: true }], app_settings: [{ key: 'settle_pending_code', value: '01' }] };
 export const store = tables;
 class Q { private t: string; private rows: any[]; private filters: ((r: any) => boolean)[] = []; private op: string = 'select'; private payload: any; private conflict?: string; private lim?: number; private single = false;
   constructor(t: string) { this.t = t; this.rows = tables[t] ??= []; }

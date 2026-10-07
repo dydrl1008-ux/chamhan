@@ -14,11 +14,22 @@ async function adminSession() { if (sess && Date.now() - sess.at < 10 * 60_000) 
 const arr = (j: any): SettleRow[] => Array.isArray(j) ? j : (j?.data ?? j?.list ?? []);
 async function log(actorId: string, action: string, payload: unknown, result: string, ok: boolean) { await admin().from('settlement_requests').insert({ user_id: actorId, settlement_seq: null, action, payload: { _type: 'emp_customer', ...(payload as object) }, result: result.slice(0, 200), ok }); }
 
-export type Emp = { empId: string; empName: string; deptName?: string; useInd?: string };
-/** 직원 목록 (admin 계정 제외) — 사이트 직원별 고객관리 화면의 왼쪽 그리드와 동일 */
+export type Emp = { empId: string; empName: string; deptName?: string; useInd?: string; workhubName?: string };
+/** 직원 목록 — 사이트 직원 전체가 아니라, 워크허브에 등록된(활성) 사용자와 연결된 정산 계정만 (정산 계정 연결 or 담당자 매핑). 사이트 퇴사일 지난 계정 제외 */
 export async function empList(): Promise<Emp[]> {
   const cookie = await adminSession(); const j = await getJ(cookie, '/api/pages/emp_customer/emp/list?isAdmin=Y&searchEmpId=&searchEmpNm=');
-  return arr(j).map(r => ({ empId: String(r.empId ?? ''), empName: String(r.empName ?? ''), deptName: r.deptName ? String(r.deptName) : undefined, useInd: r.useInd ? String(r.useInd) : undefined })).filter(e => e.empId);
+  const sb = admin();
+  const [{ data: creds }, { data: maps }, { data: profs }] = await Promise.all([
+    sb.from('settlement_credentials').select('user_id, settle_user_id'), sb.from('settlement_empl_map').select('empl_id, user_id'), sb.from('profiles').select('id, name, is_active'),
+  ]);
+  const active = new Map((profs ?? []).filter((p: any) => p.is_active).map((p: any) => [p.id, String(p.name ?? '')]));
+  const allowed = new Map<string, string>();
+  for (const m of maps ?? []) if (m.user_id && active.has(m.user_id)) allowed.set(String(m.empl_id).toLowerCase(), active.get(m.user_id)!);
+  for (const c of creds ?? []) if (active.has(c.user_id)) allowed.set(String(c.settle_user_id).toLowerCase(), active.get(c.user_id)!);
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  return arr(j).map(r => ({ empId: String(r.empId ?? ''), empName: String(r.empName ?? ''), deptName: r.deptName ? String(r.deptName) : undefined, useInd: r.useInd ? String(r.useInd) : undefined, retireDate: r.retireDate ? String(r.retireDate).slice(0, 10) : '' }))
+    .filter(e => e.empId && allowed.has(e.empId.toLowerCase()) && !(e.retireDate && e.retireDate <= today))
+    .map(({ retireDate: _r, ...e }) => ({ ...e, workhubName: allowed.get(e.empId.toLowerCase()) }));
 }
 /** 특정 직원에게 배정된 고객 */
 export async function empCustomers(empId: string): Promise<{ bizNo: string; custName: string; ownerName: string }[]> {

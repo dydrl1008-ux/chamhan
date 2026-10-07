@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { notify } from '@/components/Toast';
 import { loadAssignments, loadEmpCustomers, findCustomers, assignCustomer, unassignCustomer, createCustomerAssigned } from './actions';
-type Emp = { empId: string; empName: string; deptName?: string; useInd?: string };
+type Emp = { empId: string; empName: string; deptName?: string; useInd?: string; workhubName?: string };
 type Cust = { bizNo: string; custName: string; ownerName: string };
 const fmtBiz = (b: string) => b.length === 10 ? `${b.slice(0, 3)}-${b.slice(3, 5)}-${b.slice(5)}` : b;
 
@@ -19,12 +19,12 @@ export default function CustomersClient() {
   const openEmp = async (id: string) => { setEmpId(id); setEmpCusts(null); if (!id) return; const r = await loadEmpCustomers(id); if (!r.ok) return notify(r.msg, 'bad'); setEmpCusts(r.list ?? []); };
   const toggle = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => { const n = new Set(set); n.has(id) ? n.delete(id) : n.add(id); setter(n); };
   const EmpPicker = ({ value, onChange, exclude = [] }: { value: Set<string>; onChange: (s: Set<string>) => void; exclude?: string[] }) => <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-    {emps.filter(e => e.useInd !== 'N').map(e => { const on = value.has(e.empId), dis = exclude.includes(e.empId); return <button type="button" key={e.empId} disabled={dis} className="btn ghost" style={{ padding: '4px 10px', fontSize: 12.5, background: on ? 'var(--accent-soft)' : dis ? 'var(--bg)' : undefined, borderColor: on ? 'var(--accent)' : undefined, opacity: dis ? .5 : 1 }} onClick={() => toggle(value, onChange, e.empId)}>{e.empName} <span style={{ color: 'var(--muted)', fontSize: 11 }}>{e.empId}</span>{dis ? ' ✓' : ''}</button>; })}
-    {emps.length === 0 && <span style={{ fontSize: 12, color: 'var(--muted)' }}>직원 목록 없음</span>}</div>;
+    {emps.filter(e => e.useInd !== 'N').map(e => { const on = value.has(e.empId), dis = exclude.includes(e.empId); return <button type="button" key={e.empId} disabled={dis} className="btn ghost" style={{ padding: '4px 10px', fontSize: 12.5, background: on ? 'var(--accent-soft)' : dis ? 'var(--bg)' : undefined, borderColor: on ? 'var(--accent)' : undefined, opacity: dis ? .5 : 1 }} onClick={() => toggle(value, onChange, e.empId)}>{e.workhubName || e.empName} <span style={{ color: 'var(--muted)', fontSize: 11 }}>{e.empId}</span>{dis ? ' ✓' : ''}</button>; })}
+    {emps.length === 0 && <span style={{ fontSize: 12, color: 'var(--muted)' }}>표시할 직원 없음 — 워크허브에 등록되고 정산 계정이 연결(내 정보)되거나 담당자 매핑(정산 연동)된 직원만 보입니다</span>}</div>;
   const tabBtn = (k: typeof tab, label: string) => <button type="button" className="btn ghost" style={{ padding: '6px 14px', fontSize: 13, background: tab === k ? 'var(--accent-soft)' : undefined, borderColor: tab === k ? 'var(--accent)' : undefined }} onClick={() => setTab(k)}>{label}</button>;
   if (err) return <div className="card" style={{ color: 'var(--bad)' }}>{err} <button className="btn ghost" style={{ marginLeft: 8, padding: '4px 10px', fontSize: 12 }} onClick={reload}>다시 시도</button></div>;
   return <>
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>{tabBtn('new', '새 고객 등록 + 배정')}{tabBtn('assign', '기존 고객 배정')}{tabBtn('emp', '직원별 고객 보기')}<span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 'auto' }}>{loading ? '사이트에서 불러오는 중…' : `직원 ${emps.length}명 · 배정된 고객 ${Object.keys(byBiz).length}개`}</span><button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={reload} disabled={loading}>새로고침</button></div>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>{tabBtn('new', '새 고객 등록 + 배정')}{tabBtn('assign', '기존 고객 배정')}{tabBtn('emp', '직원별 고객 보기')}<span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 'auto' }}>{loading ? '사이트에서 불러오는 중…' : `워크허브 등록 직원 ${emps.length}명 · 배정된 고객 ${Object.keys(byBiz).length}개`}</span><button className="btn ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={reload} disabled={loading}>새로고침</button></div>
 
     {tab === 'new' && <div className="card">
       <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>새 고객 등록 + 담당 직원 배정</h3>
@@ -54,7 +54,7 @@ export default function CustomersClient() {
 
     {tab === 'emp' && <div className="card">
       <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>직원별 배정 고객</h3>
-      <select value={empId} onChange={e => openEmp(e.target.value)} style={{ width: 260, marginBottom: 10 }}><option value="">직원 선택</option>{emps.map(e => <option key={e.empId} value={e.empId}>{e.empName} ({e.empId}){e.useInd === 'N' ? ' · 퇴사' : ''} — {Object.values(byBiz).filter(l => l.includes(e.empId)).length}개</option>)}</select>
+      <select value={empId} onChange={e => openEmp(e.target.value)} style={{ width: 260, marginBottom: 10 }}><option value="">직원 선택</option>{emps.map(e => <option key={e.empId} value={e.empId}>{e.workhubName || e.empName} ({e.empId}){e.useInd === 'N' ? ' · 퇴사' : ''} — {Object.values(byBiz).filter(l => l.includes(e.empId)).length}개</option>)}</select>
       {empId && (empCusts === null ? <div style={{ fontSize: 12, color: 'var(--muted)' }}>불러오는 중…</div> : <div style={{ overflowX: 'auto' }}><table><thead><tr><th>고객</th><th>사업자번호</th><th>대표자</th><th>같이 배정된 직원</th><th></th></tr></thead><tbody>
         {empCusts.length === 0 && <tr><td colSpan={5} style={{ color: 'var(--muted)', textAlign: 'center' }}>배정된 고객 없음</td></tr>}
         {empCusts.map(c => <tr key={c.bizNo}><td><b>{c.custName}</b></td><td style={{ fontFamily: 'monospace', fontSize: 12 }}>{fmtBiz(c.bizNo)}</td><td>{c.ownerName}</td><td style={{ fontSize: 12, color: 'var(--muted)' }}>{(byBiz[c.bizNo] ?? []).filter(id => id !== empId).map(nameOf).join(', ') || '-'}</td><td><button className="btn ghost" style={{ padding: '3px 10px', fontSize: 12, color: 'var(--bad)' }} onClick={async () => { if (!confirm(`${c.custName} 을(를) ${nameOf(empId)} 에게서 해제할까요?`)) return; const r = await unassignCustomer(c.bizNo, empId); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) { openEmp(empId); reload(); } }}>해제</button></td></tr>)}
