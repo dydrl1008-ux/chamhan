@@ -1,4 +1,5 @@
 import NavLink from '@/components/NavLink';
+import NavGroup from '@/components/NavGroup';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 const g = globalThis as any; async function cachedPendingCount(): Promise<number> { const c = g.__pendingCnt as { at: number; v: number } | undefined; if (c && Date.now() - c.at < 30_000) return c.v; const { count } = await supabaseServer().from('settlement_pending').select('item_key', { count: 'exact', head: true }).is('resolved_at', null).is('dismissed_at', null); const v = count ?? 0; g.__pendingCnt = { at: Date.now(), v }; return v; }
@@ -20,35 +21,39 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="brand">워크허브<small>참한기획</small></div>
         <NavLink href="/">홈</NavLink>
 
-        <div className="group">정산</div>
-        {mgmt && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
-        <NavLink href="/settle-request">정산요청</NavLink>
-        <NavLink href="/settle-refund">환불요청</NavLink>
-        {mgmt && <NavLink href="/settle-customers">고객 등록 · 배정</NavLink>}
-        {mgmt && <NavLink href="/settle-data">정산 데이터</NavLink>}
-        {mgmt && <NavLink href="/settlement">정산 연동</NavLink>}
+        {mgmt && pendingCount > 0 && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
+        <NavGroup title="정산" hrefs={['/pending', '/settle-request', '/settle-refund', '/settle-customers', '/settle-data', '/settlement']}>
+          {mgmt && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
+          <NavLink href="/settle-request">정산요청</NavLink>
+          <NavLink href="/settle-refund">환불요청</NavLink>
+          {mgmt && <NavLink href="/settle-customers">고객 등록 · 배정</NavLink>}
+          {mgmt && <NavLink href="/settle-data">정산 데이터</NavLink>}
+          {mgmt && <NavLink href="/settlement">정산 연동</NavLink>}
+        </NavGroup>
 
-        <div className="group">직원 · 마진</div>
-        {p.role !== 'staff' && <NavLink href="/overview">직원 현황</NavLink>}
-        <NavLink href="/margin">영업 마진</NavLink>
-        <NavLink href="/kpi">{p.role === 'head' ? '일간 KPI 현황' : '일간 KPI 보고'}</NavLink>
-        {lead && <NavLink href="/users">사용자 · 팀</NavLink>}
-        <NavLink href="/criteria">진급 · 인센티브 기준</NavLink>
+        <NavGroup title="직원 · 마진" hrefs={['/overview', '/margin', '/kpi', '/users', '/criteria']}>
+          {p.role !== 'staff' && <NavLink href="/overview">직원 현황</NavLink>}
+          <NavLink href="/margin">영업 마진</NavLink>
+          <NavLink href="/kpi">{p.role === 'head' ? '일간 KPI 현황' : '일간 KPI 보고'}</NavLink>
+          {lead && <NavLink href="/users">사용자 · 팀</NavLink>}
+          <NavLink href="/criteria">진급 · 인센티브 기준</NavLink>
+        </NavGroup>
 
-        <div className="group">근태 · 계획</div>
-        <NavLink href="/attendance">출퇴근</NavLink>
-        <NavLink href="/leave">근태 신청 · 승인</NavLink>
-        <NavLink href="/plans">계획 캘린더</NavLink>
+        <NavGroup title="근태 · 계획" hrefs={['/attendance', '/leave', '/plans']}>
+          <NavLink href="/attendance">출퇴근</NavLink>
+          <NavLink href="/leave">근태 신청 · 승인</NavLink>
+          <NavLink href="/plans">계획 캘린더</NavLink>
+        </NavGroup>
 
-        <div className="group">보고 · 이슈</div>
-        {(mgr || lead) && <NavLink href="/weekly">팀장 주간보고</NavLink>}
-        <NavLink href="/reports">보고서</NavLink>
-        <NavLink href="/issues">금일 이슈</NavLink>
-        <NavLink href="/products">상품 안내 · 접수</NavLink>
+        <NavGroup title="보고 · 이슈" hrefs={['/weekly', '/reports', '/issues', '/products']}>
+          {(mgr || lead) && <NavLink href="/weekly">팀장 주간보고</NavLink>}
+          <NavLink href="/reports">보고서</NavLink>
+          <NavLink href="/issues">금일 이슈</NavLink>
+          <NavLink href="/products">상품 안내 · 접수</NavLink>
+        </NavGroup>
 
         {p.role === 'admin' && (
-          <details style={{ marginTop: 6 }}>
-            <summary className="group" style={{ cursor: 'pointer', listStyle: 'none' }}>설정 ▾</summary>
+          <NavGroup title="설정" hrefs={['/admin']}>
             <NavLink href="/admin/targets">월 목표 마진</NavLink>
             <NavLink href="/admin/criteria">기준 관리</NavLink>
             <NavLink href="/admin/promotion">진급 도달 현황</NavLink>
@@ -59,7 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <NavLink href="/admin/duties">관리팀 담당업무</NavLink>
             <NavLink href="/admin/assets">자산 · 계정</NavLink>
             <NavLink href="/admin/ips">허용 IP</NavLink>
-          </details>
+          </NavGroup>
         )}
 
         <div className="foot">

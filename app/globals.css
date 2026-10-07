@@ -100,7 +100,12 @@ details.help-box .body{font-size:13.5px;color:var(--muted);background:#F8F9FC;bo
 .side{width:232px;background:#0E1736;color:#C7CEE6;padding:20px 14px;min-height:100vh;display:flex;flex-direction:column;gap:2px}
 .side .brand{font-size:18px;font-weight:800;color:#fff;padding:6px 12px 18px}
 .side .brand small{font-size:12px;font-weight:500;color:#8A95BC;margin-left:6px}
-.side .group{font-size:11.5px;font-weight:700;color:#7E89B3;padding:14px 12px 4px;letter-spacing:.4px}
+.side .group{font-size:12.5px;font-weight:700;color:#A9B3D1;padding:11px 12px;letter-spacing:.2px;cursor:pointer;list-style:none;border-radius:var(--r);display:flex;justify-content:space-between;align-items:center}
+.side .group::after{content:"›";color:#5C6890;font-size:14px;transition:transform .15s}
+.side details[open]>.group::after{transform:rotate(90deg)}
+.side .group:hover{background:rgba(255,255,255,.05);color:#fff}
+.side details a{padding:8px 12px 8px 20px;font-size:14px}
+.side summary::-webkit-details-marker{display:none}
 .side a{display:flex;justify-content:space-between;align-items:center;color:inherit;text-decoration:none;padding:10px 12px;border-radius:var(--r);font-size:14.5px;transition:background .12s}
 .side a:hover{background:rgba(255,255,255,.06);color:#fff}
 .side a.active{background:var(--accent);color:#fff;font-weight:600}

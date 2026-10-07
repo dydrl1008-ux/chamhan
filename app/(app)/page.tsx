@@ -13,11 +13,8 @@ const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const dayLabel = (d: string) => `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일 (${DOW[new Date(d + 'T00:00:00Z').getUTCDay()]})`;
 const Bar = ({ p }: { p: number }) => <div className="bar"><i style={{ width: `${Math.min(100, Math.max(0, p))}%`, background: p >= 100 ? 'var(--ok)' : p >= 70 ? 'var(--wait)' : p > 0 && p < 40 ? 'var(--bad)' : undefined }} /></div>;
 const Row = ({ children }: { children: React.ReactNode }) => <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', borderTop: '1px solid var(--line-soft)', fontSize: 14, flexWrap: 'wrap' }}>{children}</div>;
-/** 처리할 것 카드: 건수 0 이면 회색, 있으면 빨강/주황 */
-const Todo = ({ label, n, unit = '건', desc, href, tone = 'bad' }: { label: string; n: number | string; unit?: string; desc?: React.ReactNode; href: string; tone?: 'bad' | 'wait' }) => {
-  const zero = n === 0 || n === '0'; const c = zero ? '#A1A8BD' : tone === 'bad' ? 'var(--bad)' : 'var(--wait)'; const ink = zero ? 'var(--muted)' : tone === 'bad' ? 'var(--bad-ink)' : 'var(--wait-ink)';
-  return <Link href={href} className="card" style={{ textDecoration: 'none', color: 'inherit', padding: '14px 16px', borderLeft: `4px solid ${c}`, borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 2 }}><span style={{ fontSize: 13, fontWeight: 600, color: ink }}>{label}</span><span style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.2 }}>{n}{typeof n === 'number' ? <span style={{ fontSize: 15 }}>{unit}</span> : null}</span>{desc && <span className="cell-sub" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{desc}</span>}</Link>;
-};
+const Chip = ({ n, label, href, hot }: { n: number; label: string; href: string; hot?: boolean }) => <Link href={href} style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 10, background: n ? (hot ? 'var(--bad-soft)' : 'var(--wait-soft)') : '#fff', border: '1px solid ' + (n ? (hot ? '#F1C4C4' : '#F5D89A') : 'var(--line)'), fontSize: 14, fontWeight: 600, minHeight: 44 }}><span style={{ fontSize: 20, fontWeight: 800, color: n ? (hot ? 'var(--bad-ink)' : 'var(--wait-ink)') : 'var(--muted)' }} className="num">{n}</span><span style={{ color: n ? 'var(--ink)' : 'var(--muted)' }}>{label}</span></Link>;
+const Big = ({ l, v, d, c }: { l: string; v: React.ReactNode; d?: React.ReactNode; c?: string }) => <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 24px', borderLeft: '1px solid var(--line)' }}><span className="cell-sub" style={{ fontWeight: 600 }}>{l}</span><span className="num" style={{ fontSize: 30, fontWeight: 800, letterSpacing: -.5, lineHeight: 1.15, color: c }}>{v}</span>{d && <span className="cell-sub">{d}</span>}</div>;
 
 export default async function Home() {
   const p = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const bm = bizMonthOf(today); const [ms] = bizMonthRange(bm); const ws = weekStartOf(today);
@@ -84,11 +81,12 @@ export default async function Home() {
       return (
         <div className="page">
           <PageHeader title={`처리할 일 — ${dayLabel(today)}`} desc={`${p.name}님 · 관리팀 · ${bizLabel(bm)} 기준 · 정산 승인 → 고객 배정 → 정리 순서`} actions={<><Link href="/settle-customers" className="btn ghost">고객 등록 · 배정</Link><Link href="/pending" className="btn">승인 대기 {rows.length}건 처리 →</Link></>} />
-          <div className="grid4">
-            <Todo label="정산 승인 대기" n={rows.length} desc={rows.length ? `${won(sum)} · 가장 오래된 건 ${oldest ? fmtKST(oldest) : ''}` : '모두 처리됨'} href="/pending" />
-            <Todo label="정산 담당자 미매핑" n={unmapped.length} unit="개" desc={unmapped.length ? unmapped.slice(0, 3).map(e => e.empl_id).join(' · ') : '전부 매핑됨'} href="/settlement" tone="wait" />
-            <Todo label="내 담당업무" n={myDuties.length} desc={myDuties.length ? myDuties.slice(0, 3).map(x => x.title).join(' · ') : '배정된 담당업무 없음'} href="/admin/duties" tone="wait" />
-            <Stat label="정산 동기화" value={run ? (run.ok ? '정상' : '실패') : '기록 없음'} tone={run ? (run.ok ? 'ok' : 'bad') : undefined} desc={run ? `${run.finished_at ? fmtKST(run.finished_at) : ''} · ${run.rows_fetched ?? 0}건` : '아직 동기화 전'} href="/settlement" />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <span className="cell-sub" style={{ fontWeight: 700, marginRight: 4 }}>처리할 것</span>
+            <Chip n={rows.length} label="정산 승인 대기" href="/pending" hot />
+            <Chip n={unmapped.length} label="담당자 미매핑" href="/settlement" />
+            <Chip n={myDuties.length} label="내 담당업무" href="/admin/duties" />
+            <span className="cell-sub" style={{ marginLeft: 'auto' }}>{rows.length ? `${won(sum)} · 가장 오래된 건 ${oldest ? fmtKST(oldest) : ''} · ` : ''}동기화 {run ? (run.ok ? '정상' : '실패') : '-'} {run?.finished_at ? fmtKST(run.finished_at) : ''}</span>
           </div>
           <Section title="정산 승인 대기" sub="금액 큰 순 · 상위 8건" flush right={<Link href="/pending" className="help">전체 {rows.length}건 · 승인/반려 →</Link>}>
             {rows.length === 0 ? <Empty>승인 대기 건이 없습니다</Empty> : <div className="tbl-wrap"><table>
@@ -140,7 +138,8 @@ export default async function Home() {
   const noAtt = rows.filter(x => !att?.some(a => a.user_id === x.id) && !lvToday?.some(l => l.user_id === x.id)); const noKpi = staff.filter(x => !kpiT?.some(k => k.user_id === x.id));
   const tn = (id: number | null) => teams.find(t => t.id === id)?.name ?? '-';
   const teamsShown = teams.filter(t => rows.some(x => x.team_id === t.id));
-  const wrMissing = teamsShown.filter(t => wr?.find(x => x.team_id === t.id)?.status !== 'submitted');
+  const wrTeams = teamsShown.filter(t => rows.some(x => x.team_id === t.id && x.role === 'manager'));   // 팀장 있는 팀만 주간보고 대상
+  const wrMissing = wrTeams.filter(t => wr?.find(x => x.team_id === t.id)?.status !== 'submitted');
   const tgOf = (id: string) => Number(targets?.find(t => t.user_id === id)?.margin ?? 0);
   const todayM = (id: string) => Number(kpiT?.find(k => k.user_id === id)?.margin ?? 0);
   const attOf = (x: PersonEval) => { const l = lvToday?.find(y => y.user_id === x.id); const a = att?.find(y => y.user_id === x.id); return l ? <Status kind="off">{leaveName[l.type] ?? '휴가'}</Status> : a ? <Status kind={a.is_late ? 'wait' : 'ok'}>{a.check_in?.slice(0, 5)}{a.is_late ? ' 지각' : ''}</Status> : <Status kind="bad">미출근</Status>; };
@@ -148,7 +147,6 @@ export default async function Home() {
   const risk = staff.map(x => { const t = tgOf(x.id); const r = t ? pct(x.monthMargin, t) : null; const items: { kind: 'ok' | 'wait' | 'bad'; text: string }[] = [];
     if (x.promo?.ok) items.push({ kind: 'ok', text: `진급 기준 도달 (${x.promo.c.from_position} → ${x.promo.c.to_position})` });
     if (r != null && dayIdx >= 10 && r < 40) items.push({ kind: 'bad', text: `목표 ${r}% — 이달 ${dayIdx + 1}일째` });
-    if (!x.consecutiveOk && x.promo) items.push({ kind: 'wait', text: '직전 개월 마진 기준 미달 (연속 조건)' });
     if (x.absent >= 1) items.push({ kind: 'bad', text: `무단결근 ${x.absent}회` }); else if (x.late >= 3) items.push({ kind: 'wait', text: `지각 ${x.late}회` });
     return items.map(i => ({ ...i, name: x.name, team: tn(x.team_id) })); }).flat().sort((a, b) => (a.kind === 'bad' ? 0 : a.kind === 'wait' ? 1 : 2) - (b.kind === 'bad' ? 0 : b.kind === 'wait' ? 1 : 2)).slice(0, 8);
   const openRows = open ?? []; const openSum = openRows.reduce((a, x) => a + Number(x.amount), 0);
@@ -161,18 +159,24 @@ export default async function Home() {
     return (
       <div className="page">
         <PageHeader title={`${tn(p.team_id)} — ${dayLabel(today)}`} desc={`팀원 ${staff.length}명 · ${bizLabel(bm)} 기준 · 주간보고 ${w?.status === 'submitted' ? '제출 완료' : w ? '작성 중' : '미작성'}`} actions={<><Link href="/kpi" className="btn ghost">내 KPI 제출</Link><Link href="/weekly" className="btn">주간보고 {w?.status === 'submitted' ? '보기' : '작성'} →</Link></>} />
-        <div className="grid4">
-          <Stat label="팀 누계 마진" value={won(mm)} tone={mm < 0 ? 'bad' : undefined} pending={mp ? won(mp) : undefined} pct={tg ? pct(mm, tg) : undefined} desc={tg ? `목표 ${man(tg)} · ${pct(mm, tg)}% · 전월 같은 시점 대비 ${diff >= 0 ? '+' : '−'}${man(Math.abs(diff))}` : '목표 미배정'} href="/margin" />
-          <Todo label="근태 승인 대기 (팀장)" n={pendMine.length} desc={pendMine.length ? pendMine.slice(0, 3).map(x => `${nm(x.user_id)} ${leaveName[x.type]} ${fmtMD(x.start_date)}`).join(' · ') : '없음'} href="/leave" tone="wait" />
-          <Todo label="오늘 미출근" n={noAtt.length} unit="명" desc={noAtt.length ? noAtt.map(x => x.name).join(' · ') : '전원 출근'} href="/attendance" />
-          <Todo label="오늘 KPI 미제출" n={noKpi.length} unit="명" desc={noKpi.length ? noKpi.map(x => x.name).join(' · ') : '전원 제출'} href="/kpi" />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <span className="cell-sub" style={{ fontWeight: 700, marginRight: 4 }}>처리할 것</span>
+          <Chip n={pendMine.length} label="근태 승인 (팀장)" href="/leave" />
+          <Chip n={noAtt.length} label="미출근" href="/attendance" hot />
+          <Chip n={noKpi.length} label="KPI 미제출" href="/kpi" />
+          {!w && <Chip n={1} label="주간보고 미작성" href="/weekly" />}
+        </div>
+        <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', padding: '22px 0' }}>
+          <Big l={`${bizLabel(bm)} 팀 마진 (확정)`} v={won(mm)} d={mp ? <>승인 대기 <b style={{ color: 'var(--wait-ink)' }}>+{won(mp)}</b> 별도</> : '승인 대기분 없음'} />
+          <Big l={`전월 같은 시점 (${fmtMD(pSame)}) 대비`} v={<>{diff >= 0 ? '+' : '−'}{man(Math.abs(diff))}{diffPct != null ? <span style={{ fontSize: 16, marginLeft: 6 }}>({diffPct >= 0 ? '+' : ''}{diffPct}%)</span> : null}</>} c={diff >= 0 ? 'var(--ok-ink)' : 'var(--bad-ink)'} d={`전월 ${won(prvSame)}`} />
+          {tg ? <Big l="팀 목표 달성" v={`${pct(mm, tg)}%`} d={<><span>목표 {man(tg)}</span><Bar p={pct(mm, tg)} /></>} /> : <Big l="오늘 팀 마진" v={won(staff.reduce((a, x) => a + todayM(x.id), 0))} d={`KPI 제출 ${staff.length - noKpi.length}/${staff.length}`} />}
         </div>
         <Section title="팀원별 오늘 · 이달" sub="출근 · KPI · 오늘 마진 · 누계 · 목표를 한 줄에" flush right={<Link href="/overview" className="help">직원 현황 →</Link>}>
           <div className="tbl-wrap"><table>
-            <thead><tr><th>팀원</th><th>출근</th><th>오늘 KPI</th><th className="num">오늘 마진</th><th className="num">이달 누계</th><th style={{ width: '26%' }}>목표 달성</th><th className="num">예상 인센</th></tr></thead>
+            <thead><tr><th>팀원</th><th>출근</th><th>오늘 KPI</th><th className="num">오늘 마진</th><th className="num">이달 누계</th>{tg > 0 && <th style={{ width: '26%' }}>목표 달성</th>}<th className="num">예상 인센</th></tr></thead>
             <tbody>
-              {staff.map(x => { const t = tgOf(x.id); return <tr key={x.id}><td><Cell main={x.name} sub={x.position ?? ''} /></td><td>{attOf(x)}</td><td>{kpiOf(x)}</td><td><Money v={todayM(x.id)} dash /></td><td><Money v={x.monthMargin} big sub={x.monthPending ? <span style={{ color: 'var(--wait-ink)' }}>대기 {won(x.monthPending)}</span> : undefined} /></td><td>{t ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ flex: 1 }}><Bar p={pct(x.monthMargin, t)} /></div><span style={{ fontSize: 13, fontWeight: 600, minWidth: 36, textAlign: 'right' }}>{pct(x.monthMargin, t)}%</span></div> : <span className="cell-sub">목표 없음</span>}</td><td><Money v={x.inc.total} /></td></tr>; })}
-              <tr className="total"><td colSpan={3}>팀 합계 <span className="cell-sub" style={{ display: 'inline', fontWeight: 500 }}>출근 {rows.length - noAtt.length}/{rows.length} · KPI {staff.length - noKpi.length}/{staff.length}</span></td><td><Money v={staff.reduce((a, x) => a + todayM(x.id), 0)} /></td><td><Money v={mm} big /></td><td>{tg ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ flex: 1 }}><Bar p={pct(mm, tg)} /></div><span style={{ fontSize: 13, minWidth: 36, textAlign: 'right' }}>{pct(mm, tg)}%</span></div> : null}</td><td><Money v={staff.reduce((a, x) => a + x.inc.total, 0)} /></td></tr>
+              {staff.map(x => { const t = tgOf(x.id); return <tr key={x.id}><td><Cell main={x.name} sub={x.position ?? ''} /></td><td>{attOf(x)}</td><td>{kpiOf(x)}</td><td><Money v={todayM(x.id)} dash /></td><td><Money v={x.monthMargin} big sub={x.monthPending ? <span style={{ color: 'var(--wait-ink)' }}>대기 {won(x.monthPending)}</span> : undefined} /></td>{tg > 0 && <td>{t ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ flex: 1 }}><Bar p={pct(x.monthMargin, t)} /></div><span style={{ fontSize: 13, fontWeight: 600, minWidth: 36, textAlign: 'right' }}>{pct(x.monthMargin, t)}%</span></div> : <span className="cell-sub">-</span>}</td>}<td><Money v={x.inc.total} /></td></tr>; })}
+              <tr className="total"><td colSpan={3}>팀 합계 <span className="cell-sub" style={{ display: 'inline', fontWeight: 500 }}>출근 {rows.length - noAtt.length}/{rows.length} · KPI {staff.length - noKpi.length}/{staff.length}</span></td><td><Money v={staff.reduce((a, x) => a + todayM(x.id), 0)} /></td><td><Money v={mm} big /></td>{tg > 0 && <td>{pct(mm, tg)}%</td>}<td><Money v={staff.reduce((a, x) => a + x.inc.total, 0)} /></td></tr>
             </tbody>
           </table></div>
         </Section>
@@ -181,49 +185,62 @@ export default async function Home() {
   }
 
   // ---------- 대표 · 총괄 홈 ----------
+  // 구성: ① 처리할 것 한 줄(건수만) ② 큰 숫자 3개 ③ 팀 표(데이터 있는 열만) + 오늘 사람 ④ 공지. 색 테두리·설명글 최소화
   const oldest = openRows.length ? openRows.reduce((a, x) => x.first_seen < a ? x.first_seen : a, openRows[0].first_seen) : null;
+  const hasTargets = tg > 0; const lateList = (att ?? []).filter(a => a.is_late && rows.some(x => x.id === a.user_id)); const lvList = (lvToday ?? []).filter(l => rows.some(x => x.id === l.user_id));
+  const top = [...staff].sort((a, b) => b.monthMargin - a.monthMargin).slice(0, 5); const mxTop = Math.max(1, ...top.map(x => Math.abs(x.monthMargin)));
   return (
     <div className="page">
-      <PageHeader title={`오늘 — ${dayLabel(today)}`} desc={`${p.name}님 · 전사 ${rows.length}명 · ${bizLabel(bm)} 기준 · 처리할 것 → 숫자 → 팀 → 사람 순`} actions={<><Link href="/overview" className="btn ghost">직원 현황</Link><Link href="/pending" className="btn">정산 승인 대기 {openRows.length}건 →</Link></>} />
-      <div className="grid4">
-        <Todo label="정산 승인 대기" n={openRows.length} desc={openRows.length ? `${won(openSum)} · 가장 오래된 건 ${oldest ? fmtKST(oldest) : ''}` : '모두 처리됨'} href="/pending" />
-        <Todo label="근태 최종 승인 대기" n={pendMine.length} desc={pendMine.length ? pendMine.slice(0, 3).map(x => `${nm(x.user_id)} ${leaveName[x.type]}`).join(' · ') : '없음'} href="/leave" tone="wait" />
-        <Todo label="오늘 KPI 미제출" n={noKpi.length} unit="명" desc={noKpi.length ? noKpi.map(x => x.name).join(' · ') : '전원 제출'} href="/kpi" tone="wait" />
-        <Todo label="주간보고 미제출 (이번 주)" n={wrMissing.length} unit="팀" desc={wrMissing.length ? wrMissing.map(t => t.name).join(' · ') : '전 팀 제출'} href="/weekly" tone="wait" />
+      <PageHeader title={dayLabel(today)} desc={`${p.name}님 · ${bizLabel(bm)} (${fmtMD(ms)} ~) · 이달 ${dayIdx + 1}일째`} actions={<Link href="/overview" className="btn ghost">직원 현황</Link>} />
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        <span className="cell-sub" style={{ fontWeight: 700, marginRight: 4 }}>처리할 것</span>
+        <Chip n={openRows.length} label="정산 승인 대기" href="/pending" hot />
+        <Chip n={pendMine.length} label="근태 최종 승인" href="/leave" />
+        <Chip n={noKpi.length} label="KPI 미제출" href="/kpi" />
+        <Chip n={wrMissing.length} label="주간보고 미제출 팀" href="/weekly" />
+        {openRows.length > 0 && <span className="cell-sub" style={{ marginLeft: 'auto' }}>승인 대기 {won(openSum)} · 가장 오래된 건 {oldest ? fmtKST(oldest) : ''}</span>}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: 16 }}>
-        <Section title={`${bizLabel(bm)} 마진`} sub="확정 기준 · 대기분은 주황" right={<Link href="/margin" className="help">영업 마진 →</Link>}>
-          <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 12 }}>
-            <div><div className="cell-sub" style={{ fontWeight: 600 }}>전사 누계</div><div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -.5, lineHeight: 1.15 }} className="num">{won(mm)}</div><div className="cell-sub">{mp ? <span style={{ color: 'var(--wait-ink)', fontWeight: 600 }}>대기 +{won(mp)}</span> : null}{mp ? ' · ' : ''}전월 같은 시점({fmtMD(pSame)}) 대비 <b style={{ color: diff >= 0 ? 'var(--ok-ink)' : 'var(--bad-ink)' }}>{diff >= 0 ? '+' : '−'}{man(Math.abs(diff))}{diffPct != null ? ` (${diffPct >= 0 ? '+' : ''}${diffPct}%)` : ''}</b></div></div>
-            <div style={{ flex: 1, minWidth: 200 }}>{tg ? <><div style={{ display: 'flex', justifyContent: 'space-between' }} className="cell-sub"><span>목표 {man(tg)}</span><span><b style={{ color: 'var(--ink)' }}>{pct(mm, tg)}%</b> · 이달 {dayIdx + 1}일째</span></div><Bar p={pct(mm, tg)} /></> : <span className="cell-sub">월 목표 미배정 — 설정 › 월 목표 마진</span>}</div>
-          </div>
+      <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', padding: '22px 0', marginLeft: 0 }}>
+        <Big l={`${bizLabel(bm)} 전사 마진 (확정)`} v={won(mm)} d={mp ? <>승인 대기 <b style={{ color: 'var(--wait-ink)' }}>+{won(mp)}</b> 별도</> : '승인 대기분 없음'} />
+        <Big l={`전월 같은 시점 (${fmtMD(pSame)}) 대비`} v={<>{diff >= 0 ? '+' : '−'}{man(Math.abs(diff))}{diffPct != null ? <span style={{ fontSize: 16, marginLeft: 6 }}>({diffPct >= 0 ? '+' : ''}{diffPct}%)</span> : null}</>} c={diff >= 0 ? 'var(--ok-ink)' : 'var(--bad-ink)'} d={`전월 ${won(prvSame)}`} />
+        {hasTargets ? <Big l="월 목표 달성" v={`${pct(mm, tg)}%`} d={<><span>목표 {man(tg)}</span><Bar p={pct(mm, tg)} /></>} /> : <Big l="오늘 출근" v={`${rows.length - noAtt.length} / ${rows.length}`} d={noAtt.length ? `미출근 ${noAtt.map(x => x.name).join(' · ')}` : lateList.length ? `지각 ${lateList.map(a => nm(a.user_id)).join(' · ')}` : '전원 정상'} c={noAtt.length ? 'var(--bad-ink)' : undefined} />}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 16 }}>
+        <Section title="팀별" sub="확정 마진 · 이달" flush right={<Link href="/margin" className="help">영업 마진 →</Link>}>
           <div className="tbl-wrap"><table>
-            <thead><tr><th>팀</th><th className="num">누계</th><th style={{ width: '34%' }}>목표 달성</th><th className="num">대기</th><th>주간보고</th></tr></thead>
-            <tbody>{teamsShown.map(t => { const tm = staff.filter(x => x.team_id === t.id); const m = tm.reduce((a, x) => a + x.monthMargin, 0); const pd = tm.reduce((a, x) => a + x.monthPending, 0); const tt = tm.reduce((a, x) => a + tgOf(x.id), 0); const w = wr?.find(x => x.team_id === t.id); const lead = rows.find(x => x.team_id === t.id && x.role === 'manager');
-              return <tr key={t.id}><td><Cell main={t.name} sub={`${lead?.name ?? '팀장 없음'} · ${tm.length}명`} /></td><td><Money v={m} big /></td><td>{tt ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ flex: 1 }}><Bar p={pct(m, tt)} /></div><span style={{ fontSize: 13, fontWeight: 600, minWidth: 36, textAlign: 'right' }}>{pct(m, tt)}%</span></div> : <span className="cell-sub">목표 없음</span>}</td><td>{pd ? <div style={{ textAlign: 'right', color: 'var(--wait-ink)' }} className="num">{won(pd)}</div> : <div style={{ textAlign: 'right', color: 'var(--line)' }}>·</div>}</td><td>{w?.status === 'submitted' ? <Status kind="ok">제출</Status> : w ? <Status kind="wait">작성 중</Status> : <Status kind="bad">미작성</Status>}</td></tr>; })}</tbody>
+            <thead><tr><th>팀</th><th className="num">누계</th>{hasTargets && <th style={{ width: '30%' }}>목표</th>}<th className="num">승인 대기</th><th className="num">오늘</th>{wrTeams.length > 0 && <th>주간보고</th>}</tr></thead>
+            <tbody>{teamsShown.map(t => { const tm = staff.filter(x => x.team_id === t.id); const m = tm.reduce((a, x) => a + x.monthMargin, 0); const pd = tm.reduce((a, x) => a + x.monthPending, 0); const tt = tm.reduce((a, x) => a + tgOf(x.id), 0); const w = wr?.find(x => x.team_id === t.id); const lead = rows.find(x => x.team_id === t.id && x.role === 'manager'); const td = tm.reduce((a, x) => a + todayM(x.id), 0);
+              return <tr key={t.id}><td><Cell main={t.name} sub={`${lead ? lead.name + ' · ' : ''}${tm.length}명`} /></td><td><Money v={m} big /></td>{hasTargets && <td>{tt ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ flex: 1 }}><Bar p={pct(m, tt)} /></div><span style={{ fontSize: 13, fontWeight: 600, minWidth: 36, textAlign: 'right' }}>{pct(m, tt)}%</span></div> : <span className="cell-sub">-</span>}</td>}<td><Money v={pd} dash /></td><td><Money v={td} dash /></td>{wrTeams.length > 0 && <td>{!lead ? <span style={{ color: 'var(--line)' }}>·</span> : w?.status === 'submitted' ? <Status kind="ok">제출</Status> : w ? <Status kind="wait">작성 중</Status> : <Status kind="bad">미작성</Status>}</td>}</tr>; })}
+              <tr className="total"><td>전사</td><td><Money v={mm} big /></td>{hasTargets && <td>{pct(mm, tg)}%</td>}<td><Money v={mp} dash /></td><td><Money v={staff.reduce((a, x) => a + todayM(x.id), 0)} dash /></td>{wrTeams.length > 0 && <td className="cell-sub" style={{ marginTop: 0 }}>{wrTeams.length - wrMissing.length}/{wrTeams.length}</td>}</tr>
+            </tbody>
           </table></div>
         </Section>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Section title="오늘 출근" sub={`${rows.length - noAtt.length} / ${rows.length}`} right={<Link href="/attendance" className="help">출퇴근 →</Link>}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {noAtt.length > 0 && <span className="status bad" style={{ background: 'var(--bad-soft)', borderRadius: 8, padding: '5px 10px' }}>미출근 {noAtt.length} · {noAtt.map(x => x.name).join(' · ')}</span>}
-              {(att ?? []).filter(a => a.is_late && rows.some(x => x.id === a.user_id)).map(a => <span key={a.user_id} className="status wait" style={{ background: 'var(--wait-soft)', borderRadius: 8, padding: '5px 10px' }}>지각 · {nm(a.user_id)} {a.check_in?.slice(0, 5)}</span>)}
-              {(lvToday ?? []).filter(l => rows.some(x => x.id === l.user_id)).map(l => <span key={l.user_id} className="status off" style={{ background: '#EEF1F7', borderRadius: 8, padding: '5px 10px' }}>{leaveName[l.type] ?? '휴가'} · {nm(l.user_id)}</span>)}
-              {noAtt.length === 0 && !(att ?? []).some(a => a.is_late) && <span className="status ok">전원 정상 출근</span>}
+          <Section title="이달 상위 5명" sub="확정 마진">
+            {top.map((x, i) => <div key={x.id} style={{ display: 'grid', gridTemplateColumns: '22px 90px 1fr 110px', gap: 10, alignItems: 'center', padding: '7px 0', borderTop: i ? '1px solid var(--line-soft)' : undefined, fontSize: 14 }}><span className="cell-sub" style={{ marginTop: 0, fontWeight: 700 }}>{i + 1}</span><span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.name} <span className="cell-sub" style={{ display: 'inline' }}>{tn(x.team_id)}</span></span><div className="bar" style={{ marginTop: 0 }}><i style={{ width: `${Math.abs(x.monthMargin) / mxTop * 100}%` }} /></div><Money v={x.monthMargin} /></div>)}
+          </Section>
+          <Section title="오늘 사람" sub={`출근 ${rows.length - noAtt.length}/${rows.length}`} right={<Link href="/attendance" className="help">출퇴근 →</Link>}>
+            <div style={{ display: 'grid', gap: 6, fontSize: 14 }}>
+              <div><Status kind={noAtt.length ? 'bad' : 'ok'}>미출근 {noAtt.length}</Status>{noAtt.length > 0 && <span className="cell-sub" style={{ display: 'inline', marginLeft: 8 }}>{noAtt.map(x => x.name).join(' · ')}</span>}</div>
+              <div><Status kind={lateList.length ? 'wait' : 'ok'}>지각 {lateList.length}</Status>{lateList.length > 0 && <span className="cell-sub" style={{ display: 'inline', marginLeft: 8 }}>{lateList.map(a => `${nm(a.user_id)} ${a.check_in?.slice(0, 5)}`).join(' · ')}</span>}</div>
+              <div><Status kind="off">휴가 {lvList.length}</Status>{lvList.length > 0 && <span className="cell-sub" style={{ display: 'inline', marginLeft: 8 }}>{lvList.map(l => `${nm(l.user_id)} ${leaveName[l.type] ?? ''}`).join(' · ')}</span>}</div>
+              <div><Status kind={noKpi.length ? 'wait' : 'ok'}>KPI 미제출 {noKpi.length}</Status>{noKpi.length > 0 && <span className="cell-sub" style={{ display: 'inline', marginLeft: 8 }}>{noKpi.map(x => x.name).join(' · ')}</span>}</div>
+              {risk.length > 0 && <div style={{ borderTop: '1px solid var(--line-soft)', paddingTop: 8, marginTop: 2, display: 'grid', gap: 4 }}>{risk.slice(0, 4).map((r, i) => <div key={i}><Status kind={r.kind}>{r.name}</Status> <span className="cell-sub" style={{ display: 'inline' }}>{r.text}</span></div>)}</div>}
             </div>
-          </Section>
-          <Section title="이번 달 눈여겨볼 사람" sub="목표 · 진급 · 근태 기준" right={<Link href="/overview" className="help">직원 현황 →</Link>}>
-            {risk.length ? risk.map((r, i) => <Row key={i}><Status kind={r.kind}>{r.name}</Status><span className="cell-sub" style={{ marginTop: 0 }}>{r.team}</span><span>{r.text}</span></Row>) : <Empty>특이사항 없음</Empty>}
-          </Section>
-          <Section title="시스템" right={<Link href="/settlement" className="help">정산 연동 →</Link>}>
-            <Row><Status kind={run ? (run.ok ? 'ok' : 'bad') : 'off'}>정산 동기화</Status><span className="cell-sub" style={{ marginTop: 0 }}>{run ? `${run.finished_at ? fmtKST(run.finished_at) : ''} · ${run.rows_fetched ?? 0}건${run.ok ? '' : ' · 실패'}` : '기록 없음'}</span></Row>
-            <Row><Status kind={unmapped.length ? 'wait' : 'ok'}>정산 담당자 매핑</Status><span className="cell-sub" style={{ marginTop: 0 }}>{unmapped.length ? `미매핑 ${unmapped.length}개 · ${unmapped.slice(0, 3).map((e: any) => e.empl_id).join(' · ')}` : '전부 매핑됨'}</span></Row>
-            <Row><Status kind={openRows.length ? 'wait' : 'ok'}>승인 대기 감시</Status><span className="cell-sub" style={{ marginTop: 0 }}>{openRows.length ? `대기 ${openRows.length}건` : '대기 없음'} · 2분마다 자동 확인</span></Row>
           </Section>
         </div>
       </div>
+
       {notices}
+      <div className="cell-sub" style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <span><Status kind={run ? (run.ok ? 'ok' : 'bad') : 'off'}>정산 동기화</Status> {run ? `${run.finished_at ? fmtKST(run.finished_at) : ''} · ${run.rows_fetched ?? 0}건` : '기록 없음'}</span>
+        <span><Status kind={unmapped.length ? 'wait' : 'ok'}>담당자 매핑</Status> {unmapped.length ? `미매핑 ${unmapped.length}개` : '완료'}</span>
+        <span><Status kind="ok">승인 대기 감시</Status> 2분마다</span>
+        <Link href="/settlement" className="help" style={{ marginLeft: 'auto' }}>정산 연동 →</Link>
+      </div>
     </div>);
 }
