@@ -29,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {p.role !== 'staff' && <NavLink href="/weekly">팀장 주간보고</NavLink>}
         {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/settlement">정산 연동</NavLink>}
         {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/settle-data">정산 데이터</NavLink>}
+        {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/settle-customers">고객 등록 · 배정</NavLink>}
         {(p.role === 'admin' || p.role === 'head' || p.is_mgmt) && <NavLink href="/pending">정산 승인 대기{pendingCount ? <span style={{ marginLeft: 'auto', background: '#FF5A5F', color: '#fff', borderRadius: 10, fontSize: 10.5, fontWeight: 700, padding: '1px 7px', float: 'right' }}>{pendingCount}</span> : null}</NavLink>}
         {(p.role === 'admin' || p.role === 'head') && <NavLink href="/users">사용자 · 팀</NavLink>}
         <NavLink href="/plans">계획 캘린더</NavLink>

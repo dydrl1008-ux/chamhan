@@ -33,6 +33,18 @@ const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   // 새 고객 등록
   await createCustomer('u-yong', { bizNo: '333-33-33333', custName: '새고객', custTel: '010' }); const st2 = await state(); T('새 고객 등록 (사업자번호 숫자화, 담당자 본인)', st2.customers.some((c: any) => c.bizNo === '3333333333' && c.empId === 'yongyong'));
   try { await createCustomer('u-yong', { bizNo: '3333333333', custName: '중복' }); T('중복 고객 → 거부', false); } catch (e: any) { T('중복 고객 → 사이트 거부 메시지 전달', /동일한/.test(e.message), e.message); }
+  // ---- 고객 등록 + 직원 배정 (관리팀, 어드민 세션) ----
+  { const cu = await import('@/lib/settlement/customers');
+    const emps = await cu.empList(); T('직원 목록 (admin 제외)', emps.length === 2 && !emps.some(e => e.empId === 'admin'), JSON.stringify(emps));
+    const r = await cu.createAndAssign('u-mgmt', { bizNo: '444-44-44444', custName: '배정테스트', incentiveRate: 0.3 }, ['typ2uh']); const st = await state();
+    T('고객 등록 + typ2uh 배정, 어드민 자동배정 제거', r.added.length === 1 && st.empCustomer.some((m: any) => m.empId === 'typ2uh' && m.bizNo === '4444444444') && !st.empCustomer.some((m: any) => m.empId === 'admin' && m.bizNo === '4444444444'), JSON.stringify(st.empCustomer));
+    await saveCredential('u-typ', 'typ2uh', 'tt'); const fdT = await formData((await userSession('u-typ')).cookie, 'typ2uh'); T('배정된 직원 정산요청 고객목록에 보임', fdT.customers.some((c: any) => c.bizNo === '4444444444'));
+    const fdY = await formData(cookie, 'yongyong'); T('미배정 직원에게는 안 보임', !fdY.customers.some((c: any) => c.bizNo === '4444444444'));
+    const a2 = await cu.assign('u-mgmt', '4444444444', ['yongyong', 'typ2uh']); T('추가 배정: 신규 1 · 중복 1 건너뜀', a2.added.length === 1 && a2.skipped.length === 1, JSON.stringify(a2));
+    const asg = await cu.customerAssignments(); T('고객별 배정 현황', (asg.byBiz['4444444444'] ?? []).length === 2, JSON.stringify(asg.byBiz));
+    await cu.unassign('u-mgmt', '4444444444', 'yongyong'); const st3 = await state(); T('배정 해제', !st3.empCustomer.some((m: any) => m.empId === 'yongyong' && m.bizNo === '4444444444'));
+    try { await cu.createAndAssign('u-mgmt', { bizNo: '4444444444', custName: '중복' }, ['typ2uh']); T('중복 고객 등록 → 거부', false); } catch (e: any) { T('중복 고객 등록 → 사이트 거부', /동일한/.test(e.message), e.message); }
+  }
   // ---- 감시: 승인요청 1건 감지 ----
   const pp = await pollPending(); T('승인 대기 감시: 신규 1건, 코드 01', pp.open === 1 && pp.fresh.length === 1 && pp.code === '01' && pp.healthy, JSON.stringify(pp.dist));
   // ---- 승인 (어드민): 입금 100000 그대로 → 사이트 기록 대조 ----
