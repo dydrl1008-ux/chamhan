@@ -13,6 +13,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const roleName = { admin: '어드민', head: '총책임자', manager: '팀장', staff: p.is_mgmt ? '관리팀' : '직원' }[p.role];
   const lead = p.role === 'admin' || p.role === 'head'; const mgmt = lead || p.is_mgmt; const mgr = p.role === 'manager';
   let pendingCount = 0; if (mgmt) { pendingCount = await cachedPendingCount(); }
+  // 금일 이슈 미확인 건수 (활성 이슈 중 내가 안 읽은 것)
+  const sb = supabaseServer(); const [{ data: issues }, { data: reads }] = await Promise.all([sb.from('issues').select('id').eq('is_active', true).order('issue_date', { ascending: false }).limit(50), sb.from('issue_reads').select('issue_id').eq('user_id', p.id)]);
+  const readSet = new Set((reads ?? []).map(x => x.issue_id)); const unreadIssues = (issues ?? []).filter(x => !readSet.has(x.id)).length;
+  const issueBadge = unreadIssues ? <span className="badge" title="미확인 이슈">{unreadIssues}</span> : null;
   const badge = pendingCount ? <span className="badge">{pendingCount}</span> : null;
   // 메뉴 6묶음: 홈 · 정산 · 직원/마진 · 근태/계획 · 보고/이슈 · 설정. 역할별로 보이는 항목만
   return (
@@ -45,10 +49,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/plans">계획 캘린더</NavLink>
         </NavGroup>
 
+        {unreadIssues > 0 && <NavLink href="/issues">금일 이슈 미확인{issueBadge}</NavLink>}
         <NavGroup title="보고 · 이슈" hrefs={['/weekly', '/reports', '/issues', '/products']}>
           {(mgr || lead) && <NavLink href="/weekly">팀장 주간보고</NavLink>}
           <NavLink href="/reports">보고서</NavLink>
-          <NavLink href="/issues">금일 이슈</NavLink>
+          <NavLink href="/issues">금일 이슈{issueBadge}</NavLink>
           <NavLink href="/products">상품 안내 · 접수</NavLink>
         </NavGroup>
 
