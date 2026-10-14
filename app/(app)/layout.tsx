@@ -35,7 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {mgmt && <NavLink href="/settlement">정산 연동</NavLink>}
         </NavGroup>
 
-        <NavGroup title="직원 · 마진" hrefs={['/overview', '/margin', '/kpi', '/users', '/criteria']}>
+        <NavGroup title="직원 · 마진" hrefs={['/overview', '/employees', '/margin', '/kpi', '/users', '/criteria']}>
           {p.role !== 'staff' && <NavLink href="/overview">직원 현황</NavLink>}
           <NavLink href="/margin">영업 마진</NavLink>
           <NavLink href="/kpi">{p.role === 'head' ? '일간 KPI 현황' : '일간 KPI 보고'}</NavLink>

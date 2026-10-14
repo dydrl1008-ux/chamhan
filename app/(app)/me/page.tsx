@@ -5,6 +5,7 @@ import { evaluatePeople } from '@/lib/eval';
 import { bizMonthOf, bizLabel } from '@/lib/date/period';
 import PasswordChange from '@/components/PasswordChange';
 import SettleLink from '@/components/SettleLink';
+import { PageHeader, Stat, Section, Empty } from '@/components/ui';
 export const dynamic = 'force-dynamic';
 export default async function MePage() {
   const me = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const year = Number(today.slice(0, 4)); const ms = bizMonthOf(today) + '-01';
@@ -24,13 +25,13 @@ export default async function MePage() {
   const rate = (t: string) => { const x = (pr ?? []).find(a => a.type === t); return x && Number(x.total) ? Math.round(Number(x.done) / Number(x.total) * 100) : null; };
   const isMgr = p ? p.inc.items[0]?.name.startsWith('팀') : me.role === 'manager'; const myScope = p?.inc.scope ?? '';
   return (
-    <div style={{ display: 'grid', gap: 18 }}>
-      <h1 style={{ fontSize: 20, margin: 0 }}>마이페이지 <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 400 }}>{me.name} · {me.position ?? '-'}{me.team_id ? ' · ' + teams?.find(t => t.id === me.team_id)?.name : ''} · 입사 {p?.hired_at ?? '-'}</span></h1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
-        <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{bizLabel(bizMonthOf(today))} {isMgr ? '팀' : '내'} 마진</div><div style={{ fontSize: 22, fontWeight: 800, color: (p?.monthMargin ?? 0) < 0 ? 'var(--bad)' : 'inherit' }}>{won(p?.monthMargin)}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{tg ? `목표 ${won(tg)} · ${Math.round((p?.monthMargin ?? 0) / tg * 100)}%` : '목표 미배정'}</div></div>
-        <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>잔여 연차</div><div style={{ fontSize: 22, fontWeight: 800 }}>{granted - used}일</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>부여 {granted} · 사용 {used}</div></div>
-        <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>올해 근태</div><div style={{ fontSize: 22, fontWeight: 800 }}>{Number(yl?.late_cnt ?? 0)}<span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}> 지각</span> {Number(yl?.absent_cnt ?? 0)}<span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}> 결근</span></div><div style={{ fontSize: 12, color: 'var(--muted)' }}>병가 {Number(yl?.sick_cnt ?? 0)} · 반차 {Number(yl?.half_cnt ?? 0)}</div></div>
-        <div className="card" style={{ padding: '14px 18px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>이달 계획 달성</div><div style={{ fontSize: 22, fontWeight: 800 }}>{['daily', 'weekly', 'monthly'].map(t => rate(t)).filter(x => x !== null).length ? ['daily', 'weekly', 'monthly'].map(t => { const v = rate(t); return v === null ? '-' : v + '%'; }).join(' · ') : '-'}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>일일 · 주간 · 월</div></div>
+    <div style={{ display: 'grid', gap: 22 }}>
+      <PageHeader title="내 정보" desc={`${me.name} · ${me.position ?? '-'}${me.team_id ? ' · ' + teams?.find(t => t.id === me.team_id)?.name : ''} · 입사 ${p?.hired_at ?? '-'} · ${bizLabel(bizMonthOf(today))} 기준`} actions={<><a href="/kpi" className="btn ghost">KPI 제출</a><a href="/leave" className="btn ghost">근태 · 휴가</a></>} />
+      <div className="grid4">
+        <Stat label={`업무월 ${isMgr ? '팀' : '내'} 마진`} value={won(p?.monthMargin)} pending={p?.monthPending ? won(p.monthPending) : undefined} pct={tg ? Math.round((p?.monthMargin ?? 0) / tg * 100) : undefined} desc={tg ? `목표 ${man(tg)} · ${Math.round((p?.monthMargin ?? 0) / tg * 100)}%` : '목표 미배정'} />
+        <Stat label="잔여 연차" value={`${granted - used}일`} desc={`부여 ${granted} · 사용 ${used} · 올해 지각 ${Number(yl?.late_cnt ?? 0)} · 결근 ${Number(yl?.absent_cnt ?? 0)}`} href="/leave" />
+        <Stat label="예상 인센티브" value={won(p?.inc.total ?? 0)} desc={p?.inc.tier ? `${myScope} · ${p.inc.tier.label}${p.inc.next ? ` · 다음 구간까지 ${man(Number(p.inc.next.min_margin) - p.monthMargin)}` : ''}` : '기준 없음'} />
+        <Stat label="계획 달성" value={(() => { const vs = ['daily', 'weekly', 'monthly'].map(t => rate(t)).filter((x): x is number => x !== null); return vs.length ? `${Math.round(vs.reduce((a, b) => a + b, 0) / vs.length)}%` : '-'; })()} desc={`일일 ${rate('daily') ?? '-'}${rate('daily') !== null ? '%' : ''} · 주간 ${rate('weekly') ?? '-'}${rate('weekly') !== null ? '%' : ''} · 월 ${rate('monthly') ?? '-'}${rate('monthly') !== null ? '%' : ''}`} href="/plans" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
         <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>진급 기준 도달 {p?.promo ? <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{p.promo.c.from_position} → {p.promo.c.to_position}</span> : <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>해당 기준 없음</span>}</h3>
@@ -52,9 +53,9 @@ export default async function MePage() {
           </>}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}><PasswordChange /><SettleLink linked={!!cred} settleId={cred?.settle_user_id ?? ''} verifiedAt={cred?.verified_at ?? null} lastError={cred?.last_error ?? null} /></div>
-      {me.role === 'staff' && <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>팀장 지시사항 · 피드백 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>제출된 주간보고 기준 · 최근 4주</span></h3>
-        {(dir ?? []).map((d: any, i: number) => <div key={i} style={{ padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 10, marginBottom: 8 }}><div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{fmtMD(d.week_start)} 주</div>{d.common_directive && <div style={{ fontSize: 13, marginBottom: 4 }}><b>공통</b> {d.common_directive}</div>}{d.directive && <div style={{ fontSize: 13, marginBottom: 4 }}><b>지시</b> {d.directive}</div>}{d.feedback && <div style={{ fontSize: 13, color: 'var(--muted)' }}><b>피드백</b> {d.feedback}</div>}</div>)}
-        {(dir ?? []).length === 0 && <div style={{ fontSize: 13, color: 'var(--muted)' }}>아직 제출된 주간보고가 없습니다.</div>}</div>}
+      {me.role === 'staff' && <Section title="팀장 지시사항 · 피드백" sub="제출된 주간보고 기준 · 최근 4주" flush>
+        {(dir ?? []).length ? <table><thead><tr><th>주</th><th>공통 지시</th><th>개인 지시</th><th>피드백</th></tr></thead><tbody>{(dir ?? []).map((d: any, i: number) => <tr key={i}><td style={{ whiteSpace: 'nowrap' }}>{fmtMD(d.week_start)} 주</td><td>{d.common_directive || <span className="cell-sub">-</span>}</td><td>{d.directive || <span className="cell-sub">-</span>}</td><td style={{ color: 'var(--muted)' }}>{d.feedback || '-'}</td></tr>)}</tbody></table> : <div style={{ padding: 22 }}><Empty>아직 제출된 주간보고가 없습니다.</Empty></div>}
+      </Section>}
     </div>
   );
 }
