@@ -14,7 +14,6 @@ export default async function Page() {
             <tr><td style={{ color: 'var(--muted)' }}>단가</td><td>{p.unit_price ?? '-'}</td></tr>
             <tr><td style={{ color: 'var(--muted)', verticalAlign: 'top' }}>접수 절차</td><td style={{ whiteSpace: 'pre-wrap' }}>{p.intake_process ?? '-'}</td></tr>
             <tr><td style={{ color: 'var(--muted)', verticalAlign: 'top' }}>필요 자료</td><td style={{ whiteSpace: 'pre-wrap' }}>{p.required_materials ?? '-'}</td></tr>
-            <tr><td style={{ color: 'var(--muted)' }}>담당</td><td>{nm(p.owner_id)}</td></tr>
             {p.caution && <tr><td style={{ color: 'var(--muted)' }}>주의</td><td style={{ color: '#D97706' }}>{p.caution}</td></tr>}</tbody></table></div>)}
         {(rows ?? []).length === 0 && <div className="card" style={{ color: 'var(--muted)' }}>등록된 상품이 없습니다.</div>}
       </div>
