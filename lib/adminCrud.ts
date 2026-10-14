@@ -20,3 +20,10 @@ export async function deactivateRow(table: T, id: number, paths: string[]): Prom
   const { error } = await supabaseServer().from(table).update({ is_active: false }).eq('id', id);
   if (error) return { ok: false, msg: error.message }; paths.forEach(p => revalidatePath(p)); return { ok: true, msg: '삭제됨 (비활성)' };
 }
+/** 드래그 정렬 저장: ids 순서대로 sort_order 1..n */
+export async function reorderRows(table: T, ids: number[], paths: string[]): Promise<{ ok: boolean; msg: string }> {
+  await requireRole(['admin']); if (!ALLOWED.includes(table)) return { ok: false, msg: 'bad table' };
+  const sb = supabaseServer();
+  for (let i = 0; i < ids.length; i++) { const { error } = await sb.from(table).update({ sort_order: i + 1 }).eq('id', ids[i]); if (error) return { ok: false, msg: error.message }; }
+  paths.forEach(p => revalidatePath(p)); return { ok: true, msg: '순서 저장됨' };
+}

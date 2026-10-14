@@ -5,6 +5,7 @@ import { todayKST, won, man, weekStartOf, addDays, fmtMD, fmtKST } from '@/lib/d
 import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth } from '@/lib/date/period';
 import { evaluatePeople, type PersonEval } from '@/lib/eval';
 import { PageHeader, Stat, Section, Cell, Money, Status, Empty } from '@/components/ui';
+import { endingSoon, dLabel, type SlotEx } from '@/lib/slots';
 export const dynamic = 'force-dynamic';
 
 const pct = (a: number, b: number) => b ? Math.round(a / b * 100) : 0;
@@ -16,6 +17,17 @@ const Row = ({ children }: { children: React.ReactNode }) => <div style={{ displ
 const Chip = ({ n, label, href, hot }: { n: number; label: string; href: string; hot?: boolean }) => <Link href={href} style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 10, background: n ? (hot ? 'var(--bad-soft)' : 'var(--wait-soft)') : '#fff', border: '1px solid ' + (n ? (hot ? '#F1C4C4' : '#F5D89A') : 'var(--line)'), fontSize: 14, fontWeight: 600, minHeight: 44 }}><span style={{ fontSize: 20, fontWeight: 800, color: n ? (hot ? 'var(--bad-ink)' : 'var(--wait-ink)') : 'var(--muted)' }} className="num">{n}</span><span style={{ color: n ? 'var(--ink)' : 'var(--muted)' }}>{label}</span></Link>;
 const Big = ({ l, v, d, c }: { l: string; v: React.ReactNode; d?: React.ReactNode; c?: string }) => <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 24px', borderLeft: '1px solid var(--line)' }}><span className="cell-sub" style={{ fontWeight: 600 }}>{l}</span><span className="num" style={{ fontSize: 30, fontWeight: 800, letterSpacing: -.5, lineHeight: 1.15, color: c }}>{v}</span>{d && <span className="cell-sub">{d}</span>}</div>;
 
+function SlotSection({ es, today }: { es: { days: number; soon: SlotEx[]; ended: SlotEx[] }; today: string }) {
+  const all = [...es.soon, ...es.ended]; if (!all.length) return null;
+  const todo = es.soon.filter(x => !x.renewed).length;
+  return (
+    <Section title="재계약 연락할 고객" sub={`작업 종료 D-${es.days} 이내 ${es.soon.length}건 중 연장 미접수 ${todo}건${es.ended.length ? ` · 최근 7일 내 종료 후 연장 없음 ${es.ended.length}건` : ''}`} right={<Link href="/plans" className="help">캘린더에서 보기 →</Link>} flush>
+      <div style={{ overflowX: 'auto' }}><table><thead><tr><th>종료</th><th>고객</th><th>상품</th><th>작업기간</th><th style={{ textAlign: 'right' }}>유입</th><th style={{ textAlign: 'right' }}>판매총액</th><th>연장</th></tr></thead><tbody>
+        {all.map(r => <tr key={r.settle_no} style={{ opacity: r.renewed ? .55 : 1 }}><td><Status kind={r.renewed ? 'off' : r.date_to === today ? 'bad' : r.date_to > today ? 'wait' : 'bad'}>{dLabel(today, r.date_to)}</Status></td><td><Cell main={r.cust_name} sub={r.settle_no} mono /></td><td>{r.prod_name}</td><td style={{ whiteSpace: 'nowrap' }}>{fmtMD(r.date_from)} ~ {fmtMD(r.date_to)}{r.work_day ? ` (${r.work_day}일)` : ''}</td><td style={{ textAlign: 'right' }}>{r.inflow_cnt ?? '-'}</td><td><Money v={r.sale_total} /></td><td>{r.renewed ? <Cell main={<Status kind="ok">연장 접수됨</Status>} sub={`${fmtMD(r.renewed.date_from)}부터 · ${r.renewed.status}`} /> : <Status kind="wait">연장 없음 → 연락</Status>}</td></tr>)}
+      </tbody></table></div>
+      <div className="cell-sub" style={{ padding: '10px 22px' }}>연장 판단: 같은 고객·같은 상품으로 종료일 이후 시작하는 정산 요청(승인요청 포함)이 있으면 "연장 접수됨". 상품명이 다르거나 정산 요청 전이면 "연장 없음"으로 보임</div>
+    </Section>);
+}
 export default async function Home() {
   const p = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const bm = bizMonthOf(today); const [ms] = bizMonthRange(bm); const ws = weekStartOf(today);
   const [{ data: issue }, { data: reads }, { data: promos }] = await Promise.all([
@@ -43,6 +55,7 @@ export default async function Home() {
       sb.from('plans').select('id,title,is_done').eq('user_id', p.id).eq('is_active', true).eq('type', 'daily').lte('start_date', today).gte('end_date', today),
       sb.rpc('my_directives', { p_limit: 1 }),
     ]);
+    const es = await endingSoon(p.id);
     const me = people[0]; const tg = Number(tgt?.margin ?? 0); const mm = me?.monthMargin ?? 0; const d = (dir as any[])?.[0];
     const todo = [!att?.check_in && ['출근 기록', '/attendance'], !kpi && ['오늘 KPI 보고', '/kpi'], unread && ['금일 이슈 확인', '/issues']].filter(Boolean) as [string, string][];
     const myCards = (
@@ -52,6 +65,7 @@ export default async function Home() {
         <Stat label={`${bizLabel(bm)} 누계 마진`} value={won(mm)} tone={mm < 0 ? 'bad' : undefined} pending={me?.monthPending ? won(me.monthPending) : undefined} pct={tg ? pct(mm, tg) : undefined} desc={tg ? `목표 ${man(tg)} · ${pct(mm, tg)}%` : '목표 미배정'} href="/margin" />
         <Stat label="예상 인센티브" value={won(me?.inc.total ?? 0)} desc={me?.inc.tier ? `${me.inc.scope} · ${me.inc.tier.label}${me.inc.next ? ` · 다음 구간까지 ${man(Number(me.inc.next.min_margin) - mm)}` : ''}` : '기준 없음'} href="/me" />
       </div>);
+    const slotSec = <SlotSection es={es} today={today} />;
     const myLists = (
       <div className="grid3">
         <Section title="오늘 계획" right={<Link href="/plans" className="help">캘린더 →</Link>}>
@@ -97,6 +111,7 @@ export default async function Home() {
           {notices}
           <h2 style={{ marginTop: 4 }}>내 영역</h2>
           {myCards}
+          {slotSec}
           {myLists}
         </div>);
     }
@@ -106,6 +121,7 @@ export default async function Home() {
       <div className="page">
         <PageHeader title={`${p.name}님, ${dayLabel(today)}`} desc={`${bizLabel(bm)} 기준`} actions={todo.length ? todo.map(([t, h]) => <Link key={h} href={h} className="btn ghost"><Status kind="bad">{t}</Status></Link>) : <span className="status ok">오늘 할 일 완료</span>} />
         {myCards}
+        {slotSec}
         {myLists}
         {notices}
       </div>);
@@ -155,6 +171,7 @@ export default async function Home() {
 
   // ---------- 팀장 홈 ----------
   if (isMgr) {
+    const tes = await endingSoon(p.id);
     const w = wr?.find(x => x.team_id === p.team_id);
     return (
       <div className="page">
@@ -180,6 +197,7 @@ export default async function Home() {
             </tbody>
           </table></div>
         </Section>
+        <SlotSection es={tes} today={today} />
         {notices}
       </div>);
   }
