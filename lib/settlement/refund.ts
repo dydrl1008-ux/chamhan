@@ -19,9 +19,49 @@ export const refundItemDefs = (cookie: string): Promise<{ refundItemId: string; 
 export const origProdItems = (cookie: string, settlementSeq: string, prodId: string) => getJ(cookie, `/api/pages/refund/prodItem/list/${encodeURIComponent(settlementSeq)}/${encodeURIComponent(prodId)}`).then(j => (Array.isArray(j) ? j : []) as { seq: number; name: string; inputValue: string }[]);
 export const myRefunds = (cookie: string, from: string, to: string): Promise<SettleRow[]> => getJ(cookie, `/api/pages/refund?searchStartDate=${from}&searchEndDate=${to}&custName=&prodName=`).then(j => Array.isArray(j) ? j : (j?.data ?? []));
 
+/** 원 정산별 기존 환불 집계 (승인취소 03 제외) */
+export type PriorRefunds = { count: number; usedCnt: number; list: { seq: string; date: string; cnt: number; status: string; statusName: string }[] };
+export function priorRefundsOf(refunds: SettleRow[]): Map<string, PriorRefunds> {
+  const m = new Map<string, PriorRefunds>();
+  for (const r of refunds) {
+    if (String(r.applyStatus) === '03') continue;
+    const k = String(r.settlementSeq); const p = m.get(k) ?? { count: 0, usedCnt: 0, list: [] };
+    p.count++; p.usedCnt += n(r.refundInflowCnt); p.list.push({ seq: String(r.refundSettlementSeq), date: String(r.refundDate ?? '').slice(0, 10), cnt: n(r.refundInflowCnt), status: String(r.applyStatus ?? ''), statusName: String(r.applyStatusName ?? '') });
+    m.set(k, p);
+  }
+  return m;
+}
+/**
+ * 추가 환불 대상 — 이미 환불요청이 1건 이상 있어 사이트 환불 화면(findSettlement NOT EXISTS)에는 안 나오지만 유입수가 남은 승인완료 원 정산.
+ * 사이트 저장(saveRefund)은 원건당 1회 제한이 없고(화면 목록만 제외), 승인·급여·킵 적립은 환불 행 단위로 독립 계산되므로 환불킵(04)으로 나눠 등록해도 정확함.
+ * 원 정산 정보는 정산요청 목록(applypayment)에서, 상품수수료 여부는 워크허브 동기화 데이터에서 보충.
+ */
+export async function extraRefundables(cookie: string, from: string, to: string): Promise<(SettleRow & { _extra: PriorRefunds & { remainCnt: number } })[]> {
+  const { myRequests } = await import('./request');
+  const [reqs, refunds] = await Promise.all([myRequests(cookie, addDays(from, -120), to), myRefunds(cookie, addDays(from, -120), addDays(to, 60))]);
+  const prior = priorRefundsOf(refunds);
+  const cands = reqs.filter(r => String(r.applyStatus) === '02' && prior.has(String(r.settlementSeq)) && String(r.dateWorkTo ?? '').slice(0, 10) >= from && String(r.dateWorkFrom ?? '').slice(0, 10) <= to);
+  if (!cands.length) return [];
+  const seqs = cands.map(r => String(r.settlementSeq)); const indMap = new Map<string, string>();
+  try { const { data } = await admin().from('settlement_items').select('raw').in('raw->>settlementSeq', seqs); for (const x of data ?? []) { const raw: any = (x as any).raw ?? {}; if (raw.settlementSeq) indMap.set(String(raw.settlementSeq), String(raw.prodIncentiveInd ?? 'N')); } } catch {}
+  const out: (SettleRow & { _extra: PriorRefunds & { remainCnt: number } })[] = [];
+  for (const r of cands) {
+    const p = prior.get(String(r.settlementSeq))!; const remain = n(r.inflowCnt) - p.usedCnt; if (remain <= 0) continue;
+    const workDay = n(r.workDay), inflow = n(r.inflowCnt);
+    // findSettlement(환불 화면 원건 조회) 필드명으로 맞춤 — 사이트 refund.html 모달 바인딩과 동일한 키
+    out.push({ ...r, empName: String(r.userName ?? r.empName ?? ''), existMileage: n(r.curExistMileage ?? r.existMileage), reqGubun: 'AQ', prodIncentiveInd: indMap.get(String(r.settlementSeq)) ?? 'N', prodIncentive: workDay && inflow ? n(r.expectRateAmt) / workDay / inflow : 0, statusName: String(r.applyStatusName ?? ''), _extra: { ...p, remainCnt: remain } });
+  }
+  return out;
+}
+
 export async function createRefund(userId: string, orig: SettleRow, inp: { refundDate: string; refundInflowCnt: number; gubun: string; memo?: string; items: { refundItemId: string; refundItemName: string; inputValue: string }[] }) {
   const { cookie } = await userSession(userId);
-  const gubun = ['05', '06'].includes(String(orig.gubun)) ? '07' : inp.gubun;   // 선입금 원건은 환불구분 07 고정 (사이트와 동일)
+  let gubun = ['05', '06'].includes(String(orig.gubun)) ? '07' : inp.gubun;   // 선입금 원건은 환불구분 07 고정 (사이트와 동일)
+  // 추가 환불(같은 원건에 이미 환불요청 있음): 잔여 유입수 초과 금지 + 환불킵(04)만 허용 (사이트 승인/급여가 04는 행 단위로 독립 계산, 그 외 구분은 원건 금액을 다시 빼서 중복됨)
+  { const all = await myRefunds(cookie, addDays(todayKST(), -365), addDays(todayKST(), 60)).catch(() => [] as SettleRow[]); const p = priorRefundsOf(all).get(String(orig.settlementSeq));
+    const total = n(orig.inflowCnt); const used = p?.usedCnt ?? 0; const remain = total - used;
+    if (inp.refundInflowCnt > remain) throw new Error(p ? `잔여 유입수 ${remain} (전체 ${total} − 기존 환불 ${used})를 초과합니다` : `유입수는 원 정산 유입수(${total}) 이하`);
+    if (p && p.count > 0) { if (gubun !== '04') throw new Error('추가 환불(같은 원 정산 2회째부터)은 환불킵(04)으로만 접수할 수 있습니다'); } }
   if (!gubun) throw new Error('환불구분을 선택하세요');
   { const { gubunCodes } = await import('./request'); const codes = await gubunCodes(cookie, 'B').catch(() => [] as { code: string; name: string }[]); if (codes.length && !codes.some(c => c.code === gubun)) throw new Error(`환불 구분이 아닙니다 (선택: ${gubun}). 환불 구분: ${codes.map(c => c.name).join(', ')}`); }
   if (!Number.isFinite(inp.refundInflowCnt) || inp.refundInflowCnt < 0) throw new Error('유입수는 0 이상');

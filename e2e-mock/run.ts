@@ -6,7 +6,7 @@ import { calc } from '@/lib/settlement/calc';
 import { addDays } from '@/lib/date/kst';
 import { approve, cancelApproval, findRow, computeDefaults } from '@/lib/settlement/approve';
 import { pollPending } from '@/lib/settlement/pending';
-import { refundablePayments, refundItemDefs, createRefund, myRefunds, deleteRefund, refundCalc } from '@/lib/settlement/refund';
+import { refundablePayments, refundItemDefs, createRefund, myRefunds, deleteRefund, refundCalc, extraRefundables } from '@/lib/settlement/refund';
 const R: { n: string; ok: boolean; note?: string }[] = []; const T = (n: string, ok: boolean, note = '') => R.push({ n, ok, note });
 const state = async () => (await fetch('http://127.0.0.1:18080/__state')).json();
 const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -93,9 +93,24 @@ const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   T('환불 승인: 입금=refundProdTotalAmt(0), 수수료=120000, 킵 적립=환불금액', rm?.confirmRateAmt === '120000' && rm?.confirmAmt === '0' && apr.site?.confirmRateAmt === 120000, JSON.stringify(rm));
   await cancelApproval(rf.seq!, 'u-admin');
   // 환불요청 삭제 (승인요청 상태만)
-  const rf2 = await createRefund('u-yong', orig, { refundDate: addDays(today, 7), refundInflowCnt: 1200, gubun: '04', items: [] }).catch(e => ({ seq: null, err: e.message } as any));
-  T('이미 환불요청(승인취소됨)된 원건 재요청 → 사이트 규칙상 가능/불가 중 하나로 일관', true, rf2.seq ? '가능' : rf2.err);
-  if (rf2.seq) { await deleteRefund('u-yong', rf2.seq); const st10 = await state(); T('환불요청 삭제', !st10.settlement.some((x: any) => x.settlementSeq === rf2.seq)); }
+  const rf2 = await createRefund('u-yong', orig, { refundDate: addDays(today, 7), refundInflowCnt: 1200, gubun: '04', items: [] });   // 기존 환불이 승인취소(03)면 유입수로 안 셈 → 전체 재요청 가능
+  T('승인취소된 환불은 사용 유입수에서 제외 → 재요청 가능', !!rf2.seq, rf2.seq ?? '');
+  await deleteRefund('u-yong', rf2.seq!); const st10 = await state(); T('환불요청 삭제', !st10.settlement.some((x: any) => x.settlementSeq === rf2.seq));
+  // ---- 분할 환불 (슬롯 10개 접수 → 3일 뒤 3개 환불 → 5일 뒤 나머지 7개 환불) ----
+  const r6 = await createRequest('u-yong', { ...i1, inflowCnt: 10, mileageUseInd: false, useMileage: 0, saleTotalAmt: 100000, dateWorkFrom: today, dateWorkTo: addDays(today, 9) });
+  await approve(r6.seq!, 100000, '', 'u-admin');
+  const o6 = (await refundablePayments(cookie, today, today)).find(p => String(p.settlementSeq) === r6.seq)!;
+  const s1 = await createRefund('u-yong', o6, { refundDate: addDays(today, 3), refundInflowCnt: 3, gubun: '04', items: [] }); T('분할 환불 1차: 3개', !!s1.seq);
+  T('1차 후 사이트 환불 목록에서 제외 (사이트 규칙)', !(await refundablePayments(cookie, today, today)).some(p => String(p.settlementSeq) === r6.seq));
+  const ex = await extraRefundables(cookie, today, today); const e6 = ex.find(p => String(p.settlementSeq) === r6.seq);
+  T('추가환불 대상: 잔여 7 · 기존 1건 · 원건 필드 보강(empName/reqGubun/existMileage)', !!e6 && e6._extra.remainCnt === 7 && e6._extra.count === 1 && e6.reqGubun === 'AQ' && typeof e6.empName === 'string', JSON.stringify(e6?._extra));
+  try { await createRefund('u-yong', e6!, { refundDate: addDays(today, 5), refundInflowCnt: 8, gubun: '04', items: [] }); T('잔여 초과(8>7) → 차단', false); } catch (e: any) { T('잔여 초과(8>7) → 차단', /잔여 유입수 7/.test(e.message), e.message); }
+  try { await createRefund('u-yong', e6!, { refundDate: addDays(today, 5), refundInflowCnt: 7, gubun: '01', items: [] }); T('추가환불 환불킵 외 구분 → 차단', false); } catch (e: any) { T('추가환불 환불킵 외 구분 → 차단', /환불킵/.test(e.message), e.message); }
+  const s2 = await createRefund('u-yong', e6!, { refundDate: addDays(today, 5), refundInflowCnt: 7, gubun: '04', items: [] }); const st11 = await state(); const row2 = st11.settlement.find((x: any) => x.settlementSeq === s2.seq);
+  T('분할 환불 2차: 7개 · 원건 연결 · 환불일수 4 · 금액 = 상품가×7×4', !!s2.seq && row2?.refundSettlementSeq === r6.seq && row2?.refundWorkDay === '4' && Number(row2?.refundSaleTotalAmt) === Math.floor(27.5 * 7 * 4), JSON.stringify({ seq: s2.seq, row2 }));
+  T('2차 후 잔여 0 → 추가환불 대상에서 제외', !(await extraRefundables(cookie, today, today)).some(p => String(p.settlementSeq) === r6.seq));
+  { await approve(s1.seq!, undefined, '', 'u-admin'); await approve(s2.seq!, undefined, '', 'u-admin'); const st12 = await state(); const m1 = st12.settlementmst.find((m: any) => m.settlementSeq === s1.seq), m2 = st12.settlementmst.find((m: any) => m.settlementSeq === s2.seq); const c = st12.customers.find((c: any) => c.bizNo === o6.custId);
+    T('두 환불 각각 승인: 킵 적립 = 각 환불금액 합 (행 단위 독립)', !!m1 && !!m2 && Number(m1.confirmMileage) === Number(row2 ? st12.settlement.find((x: any) => x.settlementSeq === s1.seq).refundProdTotalAmt : 0) && Number(m2.confirmMileage) === Number(row2.refundProdTotalAmt), JSON.stringify({ m1, m2, mileage: c?.mileage })); }
   // ---- 세션 만료 재로그인 ----
   const bad = await fetchApprovals('JSESSIONID=NOPE', today, today, '').catch(e => e.message); T('만료 세션 → 오류 메시지', typeof bad === 'string' && /세션|권한/.test(bad), String(bad));
   // ---- 결과 ----

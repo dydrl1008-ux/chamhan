@@ -2,12 +2,12 @@
 import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
 import { userSession, gubunCodes } from '@/lib/settlement/request';
-import { refundablePayments, refundItemDefs, origProdItems, myRefunds, createRefund, deleteRefund } from '@/lib/settlement/refund';
+import { refundablePayments, refundItemDefs, origProdItems, myRefunds, createRefund, deleteRefund, extraRefundables } from '@/lib/settlement/refund';
 import { todayKST, addDays } from '@/lib/date/kst';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 export async function loadRefundForm(from: string, to: string): Promise<R<{ payments: any[]; itemDefs: { refundItemId: string; refundItemName: string }[]; gubuns: { code: string; name: string }[] }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
-  try { const { cookie } = await userSession(me.id); const [payments, itemDefs, gubuns] = await Promise.all([refundablePayments(cookie, from, to), refundItemDefs(cookie), gubunCodes(cookie, 'B')]); return { ok: true, msg: '', payments, itemDefs, gubuns }; }
+  try { const { cookie } = await userSession(me.id); const [payments, extras, itemDefs, gubuns] = await Promise.all([refundablePayments(cookie, from, to), extraRefundables(cookie, from, to).catch(() => []), refundItemDefs(cookie), gubunCodes(cookie, 'B')]); const seen = new Set(payments.map((p: any) => String(p.settlementSeq))); return { ok: true, msg: '', payments: [...payments, ...extras.filter((e: any) => !seen.has(String(e.settlementSeq)))], itemDefs, gubuns }; }
   catch (e: any) { return { ok: false, msg: e.message }; }
 }
 export async function loadOrigItems(settlementSeq: string, prodId: string): Promise<R<{ items: { seq: number; name: string; inputValue: string }[] }>> {
