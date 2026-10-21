@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, addDays, fmtMD, won, man, weekStartOf } from '@/lib/date/kst';
 import { bizMonthOf, bizMonthRange, prevBizMonth, nextBizMonth, bizLabel } from '@/lib/date/period';
 import MarginFilter from './MarginFilter';
+import ProductSales from './ProductSales';
 export const dynamic = 'force-dynamic';
 type Row = { user_id: string; team_id: number | null; work_date: string; calls: number; new_cnt: number; margin: number; margin_auto: number; margin_pending?: number; margin_manual: number; new_margin: number; kakao_db: number; work_report: string | null };
 export default async function MarginPage({ searchParams }: { searchParams: { t?: string; team?: string; m?: string; u?: string } }) {
@@ -69,6 +70,7 @@ export default async function MarginPage({ searchParams }: { searchParams: { t?:
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 160 }}>{daily.map(x => <div key={x.d} title={`${x.d} ${won(x.m)}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--muted)' }}><div style={{ display: 'flex', alignItems: 'flex-end', width: '100%', height: 130 }}><div style={{ width: '100%', height: `${Math.abs(x.m) / mx * 100}%`, background: x.m < 0 ? 'var(--bad)' : 'var(--accent)', borderRadius: '4px 4px 0 0' }} /></div>{Number(x.d.slice(8))}</div>)}{daily.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 13 }}>데이터 없음</div>}</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>빨강 = 마이너스 마진</div></div>
       </div>
+      {(() => { const target = (me.role === 'staff' ? me.id : fUser) || me.id; return <ProductSales userId={target} who={target === me.id ? '내' : (pplAll.find(p => p.id === target)?.name ?? '')} monthKey={key} />; })()}
     </div>
   );
 }
