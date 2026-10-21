@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
+import { todayKST } from '@/lib/date/kst';
 
 const PAGES = ['/ai/orders', '/ai/checks', '/ai/agents'];
 const back = (fd: FormData | null, msg: string, bad = false): never => {
@@ -10,12 +11,23 @@ const back = (fd: FormData | null, msg: string, bad = false): never => {
   redirect(path + '?' + new URLSearchParams(bad ? { err: msg } : { msg }).toString());
 };
 const lead = async () => { const me = await getProfile(); return me && ['admin', 'head'].includes(me.role) ? me : null; };
-const leadOrMgr = async () => { const me = await getProfile(); return me && ['admin', 'head', 'manager'].includes(me.role) ? me : null; };
+const leadOrMgr = async () => { const me = await getProfile(); return me && me.is_active && ['admin', 'head', 'manager'].includes(me.role) ? me : null; };
+/** 팀장은 하루 지시 수 제한 (사용량 보호). 어드민·총괄은 제한 없음. 설정: app_settings ai_mgr_daily (기본 20) */
+async function overLimit(me: { id: string; role: string }): Promise<string | null> {
+  if (me.role !== 'manager') return null;
+  const sb = supabaseServer();
+  const { data: st } = await sb.from('app_settings').select('value').eq('key', 'ai_mgr_daily').maybeSingle();
+  const max = Number(st?.value) || 20;
+  const start = new Date(`${todayKST()}T00:00:00+09:00`).toISOString();
+  const { count } = await sb.from('ai_tasks').select('id', { count: 'exact', head: true }).eq('requested_by_id', me.id).gte('created_at', start);
+  return (count ?? 0) >= max ? `오늘 지시 한도(${max}건)를 다 썼습니다. 내일 다시 해 주세요.` : null;
+}
 
 /** 워크허브에서 비서실장에게 지시 (결과는 텔레그램 기본 보고 대상 + AI팀 화면) */
 export async function sendOrder(fd: FormData): Promise<void> {
   const me = await leadOrMgr(); if (!me) back(fd, '권한 없음', true);
-  const text = String(fd.get('instruction') || '').trim(); if (!text) back(fd, '지시 내용을 입력하세요.', true);
+  const text = String(fd.get('instruction') || '').trim().slice(0, 2000); if (!text) back(fd, '지시 내용을 입력하세요.', true);
+  const lim = await overLimit(me!); if (lim) back(fd, lim, true);
   const { data, error } = await supabaseServer().from('ai_tasks')
     .insert({ kind: 'order', agent: 'chief', title: text.slice(0, 80), instruction: text, source: 'workhub', requested_by: me!.name, requested_by_id: me!.id, status: 'queued' })
     .select('id').single();
@@ -26,8 +38,9 @@ export async function sendOrder(fd: FormData): Promise<void> {
 /** 결과에 대해 고쳐 달라고 하기 — 텔레그램 답장과 같음. 회사 사실은 공통 자료로, 형식·순서 같은 취향은 내 기준으로 학습 */
 export async function reviseOrder(fd: FormData): Promise<void> {
   const me = await leadOrMgr(); if (!me) back(fd, '권한 없음', true);
-  const id = Number(fd.get('task')); const text = String(fd.get('feedback') || '').trim();
+  const id = Number(fd.get('task')); const text = String(fd.get('feedback') || '').trim().slice(0, 2000);
   if (!id || !text) back(fd, '고칠 내용을 입력하세요.', true);
+  const lim = await overLimit(me!); if (lim) back(fd, lim, true);
   const sb = supabaseServer();
   const { data: base } = await sb.from('ai_tasks').select('id,title,status,kind').eq('id', id).maybeSingle();
   if (!base || !['order', 'briefing'].includes(base.kind) || !['done', 'rejected'].includes(base.status)) back(fd, '끝난 지시에만 고쳐 달라고 할 수 있습니다.', true);
