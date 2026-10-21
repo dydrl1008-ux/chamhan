@@ -18,7 +18,7 @@ export default async function NotificationsPage() {
         {data?.length ? <div className="tbl-wrap"><table><tbody>
           {data.map(n => <tr key={n.id} style={{ background: n.read_at ? undefined : 'var(--accent-soft)' }}>
             <td style={{ width: 8 }}>{!n.read_at && <span className="badge" style={{ padding: '1px 5px' }}> </span>}</td>
-            <td><Cell main={n.title} sub={n.body} /></td>
+            <td><Cell main={n.title} sub={<span style={{ whiteSpace: 'pre-line' }}>{n.body}</span>} /></td>
             <td style={{ width: 110 }} className="muted">{kst(n.created_at)}</td>
             <td style={{ width: 90 }}>{(n.link || !n.read_at) && <form action={openNotification}><input type="hidden" name="id" value={n.id} /><input type="hidden" name="link" value={n.link ?? ''} />
               <button className="btn ghost xs" type="submit">{n.link ? '열기' : '읽음'}</button></form>}</td>
