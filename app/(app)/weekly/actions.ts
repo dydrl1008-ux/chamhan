@@ -7,19 +7,21 @@ import { addDays } from '@/lib/date/kst';
 type R = { ok: boolean; msg: string };
 const canEdit = (me: { role: string; team_id: number | null }, team: number) => me.role === 'admin' || (me.role === 'manager' && me.team_id === team);
 
-export async function ensureReport(team: number, weekStart: string): Promise<{ id: number } | null> {
+export async function ensureReport(team: number, weekStart: string, weekEnd?: string): Promise<{ id: number } | null> {
   const me = await getProfile(); if (!me || !canEdit(me, team)) return null;
   const sb = supabaseServer();
   const { data } = await sb.from('weekly_reports').select('id').eq('team_id', team).eq('week_start', weekStart).maybeSingle();
-  if (data) return { id: data.id };
-  const { data: c, error } = await sb.from('weekly_reports').insert({ team_id: team, week_start: weekStart, created_by: me.id }).select('id').single();
+  if (data) { if (weekEnd) await sb.from('weekly_reports').update({ week_end: weekEnd }).eq('id', data.id); return { id: data.id }; }
+  const { data: c, error } = await sb.from('weekly_reports').insert({ team_id: team, week_start: weekStart, week_end: weekEnd ?? addDays(weekStart, 6), created_by: me.id }).select('id').single();
   if (error) return null; return { id: c.id };
 }
 export async function saveReport(fd: FormData): Promise<R> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
-  const team = Number(fd.get('team_id')); const weekStart = String(fd.get('week_start'));
+  const team = Number(fd.get('team_id')); const weekStart = String(fd.get('week_start')); const weekEnd = String(fd.get('week_end') || '');
   if (!canEdit(me, team)) return { ok: false, msg: '해당 팀 팀장만 작성할 수 있습니다.' };
-  const rep = await ensureReport(team, weekStart); if (!rep) return { ok: false, msg: '보고서 생성 실패' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || !/^\d{4}-\d{2}-\d{2}$/.test(weekEnd) || weekEnd < weekStart) return { ok: false, msg: '보고 기간(시작일~종료일)을 확인하세요' };
+  { const sb0 = supabaseServer(); const { data: ov } = await sb0.from('weekly_reports').select('week_start,week_end').eq('team_id', team).neq('week_start', weekStart).lte('week_start', weekEnd).gte('week_end', weekStart); if (ov?.length) return { ok: false, msg: `기간이 겹치는 보고서가 있습니다 (${ov.map(x => `${x.week_start}~${x.week_end}`).join(', ')}). 기간을 조정하세요` }; }
+  const rep = await ensureReport(team, weekStart, weekEnd); if (!rep) return { ok: false, msg: '보고서 생성 실패' };
   const checkpoints = fd.getAll('checkpoint').map(x => String(x).trim()).filter(Boolean);
   const submit = fd.get('submit') === '1';
   const patch: Record<string, unknown> = { goal_margin: Number(String(fd.get('goal_margin') || '0').replace(/,/g, '')) || 0, issues: String(fd.get('issues') || ''), checkpoints, common_directive: String(fd.get('common_directive') || '') };
@@ -32,7 +34,7 @@ export async function saveReport(fd: FormData): Promise<R> {
   const notes = ids.map((uid, i) => ({ report_id: rep.id, user_id: uid, directive: String(fd.getAll('directive')[i] ?? ''), feedback: String(fd.getAll('feedback')[i] ?? '') }));
   if (notes.length) { const { error: e2 } = await sb.from('weekly_member_notes').upsert(notes, { onConflict: 'report_id,user_id' }); if (e2) return { ok: false, msg: `인원별 저장 실패: ${e2.message}` }; }
   // 팀원 이달 개인 목표 (팀장 권한, RLS: 본인 팀만)
-  const month = bizMonthOf(addDays(weekStart, 6)) + '-01';   // 주 종료일이 속한 회사월
+  const month = bizMonthOf(weekEnd) + '-01';   // 보고 종료일이 속한 회사월
   const tRows = ids.map((uid, i) => ({ month, user_id: uid, team_id: null, margin: Number(String(fd.getAll('member_target')[i] ?? '0').replace(/,/g, '')) || 0 })).filter(x => x.margin > 0);
   if (tRows.length) { const { error: e3 } = await sb.from('monthly_targets').upsert(tRows, { onConflict: 'month,user_id' }); if (e3) return { ok: false, msg: `개인 목표 저장 실패: ${e3.message}` }; }
   revalidatePath('/weekly'); revalidatePath('/margin'); revalidatePath('/');

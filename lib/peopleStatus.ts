@@ -1,7 +1,8 @@
 // 직원 현황 한 줄 통합 데이터 — overview 화면, CSV 내보내기, 직원 상세가 같이 씀 (RLS 범위 내)
 import { supabaseServer } from '@/lib/supabase/server';
-import { todayKST } from '@/lib/date/kst';
-import { bizMonthOf, bizMonthRange, reportPeriodOf, prevReportPeriod } from '@/lib/date/period';
+import { todayKST, addDays } from '@/lib/date/kst';
+import { bizMonthOf, bizMonthRange } from '@/lib/date/period';
+import { teamReportStatus } from '@/lib/reports';
 import { evaluatePeople, type PersonEval } from '@/lib/eval';
 
 export const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '결근', late: '지각' };
@@ -19,7 +20,6 @@ export type PersonStatus = PersonEval & {
 export async function peopleStatus(opts: { teamId?: number; onlyUser?: string; month?: string } = {}) {
   const sb = supabaseServer(); const today = todayKST(); const curBm = bizMonthOf(today); const bm = opts.month && /^\d{4}-\d{2}$/.test(opts.month) ? opts.month : curBm; const ms = bm + '-01';
   const isCurrent = bm === curBm; const [, bmEnd] = bizMonthRange(bm); const asOf = isCurrent ? today : (bmEnd < today ? bmEnd : today);   // 지난달이면 그 달 마감일 기준으로 평가
-  const cp = reportPeriodOf(asOf), pp = prevReportPeriod(cp); const ws = cp.start, lastWs = pp.start;
   const [{ people, teams }, { data: att }, { data: kpiToday }, { data: leavesPending }, { data: leavesToday }, { data: targets }, { data: wr }, { data: pipe }, { data: plans }, { data: kpiMonth }] = await Promise.all([
     evaluatePeople(asOf, opts.onlyUser),
     sb.from('attendance').select('user_id,check_in,check_out,is_late').eq('work_date', today),
@@ -27,7 +27,7 @@ export async function peopleStatus(opts: { teamId?: number; onlyUser?: string; m
     sb.from('leave_requests').select('user_id,type').eq('status', 'pending'),
     sb.from('leave_requests').select('user_id,type').eq('status', 'approved').lte('start_date', today).gte('end_date', today),
     sb.from('monthly_targets').select('user_id,margin').eq('month', ms),
-    sb.from('weekly_reports').select('team_id,week_start,status').in('week_start', [ws, lastWs]),
+    sb.from('weekly_reports').select('team_id,week_start,week_end,status').gte('week_start', addDays(asOf, -45)).lte('week_start', asOf),
     sb.from('pipeline').select('owner_id,stage').eq('is_active', true),
     sb.from('v_plan_rate').select('user_id,type,total,done').eq('month', ms),
     sb.from('v_margin_monthly').select('user_id,days,calls,new_cnt').eq('month', ms),
@@ -36,7 +36,7 @@ export async function peopleStatus(opts: { teamId?: number; onlyUser?: string; m
     const a = att?.find(x => x.user_id === p.id); const lv = leavesToday?.find(x => x.user_id === p.id); const k = kpiToday?.find(x => x.user_id === p.id);
     const km = kpiMonth?.find(x => x.user_id === p.id); const pl = plans?.filter(x => x.user_id === p.id) ?? [];
     const target = Number(targets?.find(t => t.user_id === p.id)?.margin ?? 0); const pc = pipe?.filter(x => x.owner_id === p.id) ?? [];
-    const w = p.role === 'manager' ? { cur: wr?.find(x => x.team_id === p.team_id && x.week_start === ws)?.status, last: wr?.find(x => x.team_id === p.team_id && x.week_start === lastWs)?.status } : null;
+    const w = p.role === 'manager' ? (() => { const st = teamReportStatus(wr ?? [], p.team_id, asOf); return { cur: st.cur?.status ?? undefined, last: st.last?.status ?? undefined }; })() : null;
     return {
       ...p, teamName: teams.find(t => t.id === p.team_id)?.name ?? '-',
       att: lv ? { kind: 'leave', text: leaveName[lv.type] ?? lv.type, late: false } : a ? { kind: 'in', text: String(a.check_in ?? '').slice(0, 5), late: !!a.is_late, out: a.check_out ? String(a.check_out).slice(0, 5) : undefined } : { kind: 'none', text: '미체크', late: false },

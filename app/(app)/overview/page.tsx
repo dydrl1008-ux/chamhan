@@ -2,14 +2,14 @@ import { redirect } from 'next/navigation';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, weekStartOf, addDays, won, man } from '@/lib/date/kst';
-import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth, nextBizMonth, reportPeriodOf, prevReportPeriod } from '@/lib/date/period';
+import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth, nextBizMonth } from '@/lib/date/period';
 import { evaluatePeople } from '@/lib/eval';
 import { peopleStatus } from '@/lib/peopleStatus';
 import { PageHeader, Stat, Section, Cell, Money, Status, Empty } from '@/components/ui';
 export const dynamic = 'force-dynamic';
 export default async function OverviewPage({ searchParams }: { searchParams: { team?: string; m?: string } }) {
   const me = await getProfile(); if (!me || !(me.role === 'admin' || me.role === 'head' || me.role === 'manager')) redirect('/');
-  const sb = supabaseServer(); const today = todayKST(); const curBm = bizMonthOf(today); const bm = /^\d{4}-\d{2}$/.test(searchParams.m ?? '') && searchParams.m! <= curBm ? searchParams.m! : curBm; const isCur = bm === curBm; const [ms, meD] = bizMonthRange(bm); const asOf = isCur ? today : meD; const cp = reportPeriodOf(asOf); const ws = cp.start, we = cp.end, lastWs = prevReportPeriod(cp).start;
+  const sb = supabaseServer(); const today = todayKST(); const curBm = bizMonthOf(today); const bm = /^\d{4}-\d{2}$/.test(searchParams.m ?? '') && searchParams.m! <= curBm ? searchParams.m! : curBm; const isCur = bm === curBm; const [ms, meD] = bizMonthRange(bm); const asOf = isCur ? today : meD;
   const teamFilter = me.role === 'manager' ? (me.team_id ?? 0) : Number(searchParams.team) || 0;
   const [{ people, teams }, { data: att }, { data: kpiToday }, { data: leavesPending }, { data: leavesToday }, { data: targets }, { data: wr }, { data: pipe }, { data: plans }, { data: kpiMonth }] = await Promise.all([
     evaluatePeople(asOf),
@@ -18,7 +18,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: { t
     sb.from('leave_requests').select('user_id,type,team_approved_at').eq('status', 'pending'),
     sb.from('leave_requests').select('user_id,type').eq('status', 'approved').lte('start_date', today).gte('end_date', today),
     sb.from('monthly_targets').select('user_id,margin').eq('month', bm + '-01'),
-    sb.from('weekly_reports').select('team_id,week_start,status').in('week_start', [ws, lastWs]),
+    Promise.resolve({ data: [] as { team_id: number | null; week_start: string; status: string }[] }),
     sb.from('pipeline').select('owner_id,stage').eq('is_active', true),
     sb.from('v_plan_rate').select('user_id,type,total,done').eq('month', bm + '-01'),
     sb.from('v_margin_monthly').select('user_id,days,calls,new_cnt').eq('month', bm + '-01'),

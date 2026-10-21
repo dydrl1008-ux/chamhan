@@ -11,7 +11,7 @@ type Rep = { id: number; goal_margin: number; issues: string | null; checkpoints
 const STAGES = ['콜', '연결', '카톡', '협상', '결제'];
 const stageStyle: Record<string, React.CSSProperties> = { 콜: { background: 'var(--bg)', color: 'var(--muted)' }, 연결: { background: 'var(--bg)', color: 'var(--muted)' }, 카톡: {}, 협상: { background: '#FDF1DD', color: '#D97706' }, 결제: { background: 'var(--ok-soft)', color: 'var(--ok)' } };
 
-export default function WeeklyClient(p: { me: Profile; teams: { id: number; name: string; leader_id: string | null }[]; teamId: number; ws: string; we: string; ps: string; pe: string; weeks: { start: string; end: string }[]; members: { id: string; name: string; position: string | null }[]; kpi: K[]; report: Rep; notes: { user_id: string; directive: string | null; feedback: string | null }[]; pipeline: P[]; targets: Record<string, number>; monthStart: string; monthEnd: string; monthKey: string; customers: string[] }) {
+export default function WeeklyClient(p: { me: Profile; teams: { id: number; name: string; leader_id: string | null }[]; teamId: number; ws: string; we: string; ps: string; pe: string; weeks: { start: string; end: string; status: string; saved: boolean }[]; members: { id: string; name: string; position: string | null }[]; kpi: K[]; report: Rep; notes: { user_id: string; directive: string | null; feedback: string | null }[]; pipeline: P[]; targets: Record<string, number>; monthStart: string; monthEnd: string; monthKey: string; customers: string[] }) {
   const { me, teams, teamId, ws, we, ps, pe, weeks, members, kpi, report, notes, pipeline, targets, monthStart, monthEnd, monthKey, customers } = p;
   const r = useRouter(); const [msg, setMsg] = useState(''); const [cps, setCps] = useState<string[]>(report?.checkpoints?.length ? report.checkpoints : ['']);
   const canEdit = me.role === 'admin' || (me.role === 'manager' && me.team_id === teamId);
@@ -30,12 +30,13 @@ export default function WeeklyClient(p: { me: Profile; teams: { id: number; name
 
   return (
     <form action={async fd => { const x = await saveReport(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 18 }}>
-      <input type="hidden" name="team_id" value={teamId} /><input type="hidden" name="week_start" value={ws} />
+      <input type="hidden" name="team_id" value={teamId} /><input type="hidden" name="week_start" value={ws} /><input type="hidden" name="week_end" value={we} />
       <div style={{ background: 'linear-gradient(120deg,#101A4A,#26308F)', color: '#fff', borderRadius: 16, padding: '22px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
         <div><h1 style={{ margin: '0 0 4px', fontSize: 20 }}>영업팀 팀장 주간보고</h1><div style={{ fontSize: 12.5, opacity: .85, display: 'flex', gap: 14 }}><span>{teams.find(t => t.id === teamId)?.name}</span><span>{fmtMD(ws)} ~ {fmtMD(we)}</span><span>{report?.status === 'submitted' ? `제출 완료 ${fmtKST(report.submitted_at)}` : '작성 중'}</span></div></div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {me.role !== 'manager' && <select value={teamId} onChange={e => r.push(`/weekly?team=${e.target.value}&w=${ws}`)} style={{ width: 110, padding: '7px 10px', background: 'rgba(255,255,255,.14)', color: '#fff', borderColor: 'rgba(255,255,255,.3)' }}>{teams.map(t => <option key={t.id} value={t.id} style={{ color: '#111' }}>{t.name}</option>)}</select>}
-          <select value={ws} onChange={e => r.push(`/weekly?team=${teamId}&w=${e.target.value}`)} style={{ width: 170, padding: '7px 10px', background: 'rgba(255,255,255,.14)', color: '#fff', borderColor: 'rgba(255,255,255,.3)' }}>{[...(weeks.some(w => w.start === ws) ? [] : [{ start: ws, end: we }]), ...weeks].map(w => <option key={w.start} value={w.start} style={{ color: '#111' }}>{fmtMD(w.start)} ~ {fmtMD(w.end)}{w.end.slice(8) === '20' ? ' (월 마감)' : ''}</option>)}</select>
+          <select value={ws} onChange={e => r.push(`/weekly?team=${teamId}&w=${e.target.value}`)} style={{ width: 190, padding: '7px 10px', background: 'rgba(255,255,255,.14)', color: '#fff', borderColor: 'rgba(255,255,255,.3)' }}>{[...(weeks.some(w => w.start === ws) ? [] : [{ start: ws, end: we, status: '', saved: false }]), ...weeks].map(w => <option key={w.start} value={w.start} style={{ color: '#111' }}>{fmtMD(w.start)} ~ {fmtMD(w.end)}{w.saved ? (w.status === 'submitted' ? ' · 제출' : ' · 작성중') : ' · 새 보고'}</option>)}</select>
+          {canEdit && <PeriodPicker teamId={teamId} ws={ws} we={we} locked={report?.status === 'submitted'} />}
           {canEdit && <><button name="submit" value="0" className="btn ghost" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', borderColor: 'rgba(255,255,255,.3)' }}>임시저장</button><button name="submit" value="1" className="btn" style={{ background: '#fff', color: '#1B2A8A' }}>제출</button></>}
         </div>
       </div>
@@ -93,5 +94,22 @@ function PipelineAdd({ teamId, members, onDone }: { teamId: number; members: { i
     <select value={v.owner_id} onChange={e => set('owner_id', e.target.value)} style={{ padding: '6px 8px', fontSize: 12.5 }}>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
     {inp('client', '업체명')}<select value={v.stage} onChange={e => set('stage', e.target.value)} style={{ padding: '6px 8px', fontSize: 12.5 }}>{STAGES.map(s => <option key={s}>{s}</option>)}</select>{inp('expected_margin', '10슬롯')}{inp('next_action', '다음 액션')}{inp('risk', '-')}{inp('support', '-')}{inp('memo', '비고')}
     <button type="button" className="btn" style={{ padding: '6px 12px', fontSize: 12.5 }} onClick={async () => { const fd = new FormData(); fd.set('team_id', String(teamId)); Object.entries(v).forEach(([k, x]) => fd.set(k, x)); const res = await addPipeline(fd); onDone(res.msg); if (res.ok) setV({ ...v, client: '', expected_margin: '', next_action: '', risk: '', support: '', memo: '' }); }}>추가</button>
+  </div>;
+}
+
+/** 보고 기간 직접 지정 — 시작·종료일. 제출된 보고서는 기간 고정 */
+function PeriodPicker({ teamId, ws, we, locked }: { teamId: number; ws: string; we: string; locked: boolean }) {
+  const r = useRouter(); const [open, setOpen] = useState(false); const [s, setS] = useState(ws); const [e, setE] = useState(we);
+  if (locked) return null;
+  const cut = (() => { const c = `${we.slice(0, 7)}-20`; return c > ws && c < we ? c : null; })();   // 기간 안에 20일이 끼면 20일에서 끊는 제안
+  return <div style={{ position: 'relative' }}>
+    <button type="button" className="btn ghost" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', borderColor: 'rgba(255,255,255,.3)' }} onClick={() => setOpen(o => !o)}>기간 지정</button>
+    {open && <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 20, background: 'var(--panel)', color: 'var(--ink)', border: '1px solid var(--line)', borderRadius: 12, padding: 14, width: 320, boxShadow: '0 8px 24px rgba(17,26,51,.15)', display: 'grid', gap: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>보고 기간</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}><label style={{ fontSize: 12, color: 'var(--muted)' }}>시작일<input type="date" value={s} max={e} onChange={x => setS(x.target.value)} /></label><label style={{ fontSize: 12, color: 'var(--muted)' }}>종료일<input type="date" value={e} min={s} onChange={x => setE(x.target.value)} /></label></div>
+      {cut && <button type="button" className="btn ghost" style={{ fontSize: 12.5 }} onClick={() => setE(cut)}>월 마감(~{fmtMD(cut)})에서 끊기</button>}
+      <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>기본은 월~일 주 단위. 월 마감(20일)이 끼면 20일에서 끊은 기간을 제안하지만, 팀 사정에 맞게 바꿔도 됩니다. 저장하면 이 기간이 홈·직원 현황의 "주간보고" 판단 기준이 됩니다.</div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}><button type="button" className="btn ghost" onClick={() => setOpen(false)}>취소</button><button type="button" className="btn" disabled={!s || !e || e < s} onClick={() => { setOpen(false); r.push(`/weekly?team=${teamId}&w=${s}&e=${e}`); }}>적용</button></div>
+    </div>}
   </div>;
 }

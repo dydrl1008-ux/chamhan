@@ -1,7 +1,7 @@
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
-import { todayKST, addDays, fmtMD, won, man } from '@/lib/date/kst';
-import { bizMonthOf, bizMonthRange, prevBizMonth, nextBizMonth, bizLabel, reportPeriodOf } from '@/lib/date/period';
+import { todayKST, addDays, fmtMD, won, man, weekStartOf } from '@/lib/date/kst';
+import { bizMonthOf, bizMonthRange, prevBizMonth, nextBizMonth, bizLabel } from '@/lib/date/period';
 import MarginFilter from './MarginFilter';
 export const dynamic = 'force-dynamic';
 type Row = { user_id: string; team_id: number | null; work_date: string; calls: number; new_cnt: number; margin: number; margin_auto: number; margin_pending?: number; margin_manual: number; new_margin: number; kakao_db: number; work_report: string | null };
@@ -10,7 +10,7 @@ export default async function MarginPage({ searchParams }: { searchParams: { t?:
   const tab = ['day', 'week', 'month'].includes(searchParams.t ?? '') ? searchParams.t! : 'month';
   const curKey = bizMonthOf(today); const key = /^\d{4}-\d{2}$/.test(searchParams.m ?? '') ? searchParams.m! : curKey;
   const [ms, me_] = bizMonthRange(key); const isCur = key === curKey;
-  const { start: ws, end: we } = reportPeriodOf(today);   // 주 = 월~일, 단 월 마감(20일)에서 끊음 (주간보고와 동일)
+  const ws = weekStartOf(today), we = addDays(ws, 6);   // 주 = 월~일
   const range: [string, string] = tab === 'day' ? [today, today] : tab === 'week' ? [ws, we] : [ms, isCur ? today : me_];
   const label = tab === 'day' ? `금일 (${fmtMD(today)})` : tab === 'week' ? `이번 주 (${fmtMD(ws)}~${fmtMD(we)})` : bizLabel(key);
   const [{ data: rowsAll }, { data: people }, { data: teams }, { data: targets }] = await Promise.all([

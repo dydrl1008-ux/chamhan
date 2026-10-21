@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, won, man, weekStartOf, addDays, fmtMD, fmtKST } from '@/lib/date/kst';
-import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth, reportPeriodOf } from '@/lib/date/period';
+import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth } from '@/lib/date/period';
+import { teamReportStatus } from '@/lib/reports';
 import { evaluatePeople, type PersonEval } from '@/lib/eval';
 import { PageHeader, Stat, Section, Cell, Money, Status, Empty } from '@/components/ui';
 import { endingSoon, dLabel, type SlotEx } from '@/lib/slots';
@@ -29,7 +30,7 @@ function SlotSection({ es, today }: { es: { days: number; soon: SlotEx[]; ended:
     </Section>);
 }
 export default async function Home() {
-  const p = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const bm = bizMonthOf(today); const [ms] = bizMonthRange(bm); const ws = reportPeriodOf(today).start;
+  const p = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const bm = bizMonthOf(today); const [ms] = bizMonthRange(bm); const wsFrom = addDays(today, -40);
   const [{ data: issue }, { data: reads }, { data: promos }] = await Promise.all([
     sb.from('issues').select('id,title,body,issue_date').eq('is_active', true).order('issue_date', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle(),
     sb.from('issue_reads').select('issue_id').eq('user_id', p.id),
@@ -136,7 +137,7 @@ export default async function Home() {
     sb.from('leave_requests').select('user_id,type').eq('status', 'approved').lte('start_date', today).gte('end_date', today),
     sb.from('leave_requests').select('user_id,type,team_approved_at,start_date').eq('status', 'pending'),
     sb.from('monthly_targets').select('user_id,margin').eq('month', bm + '-01'),
-    sb.from('weekly_reports').select('team_id,status').eq('week_start', ws),
+    sb.from('weekly_reports').select('team_id,week_start,week_end,status').gte('week_start', wsFrom),
     (() => { const [pms, pme] = bizMonthRange(prevBizMonth(bm)); return sb.from('kpi_daily').select('user_id,work_date,margin').gte('work_date', pms).lte('work_date', pme).limit(5000); })(),
     isMgr ? Promise.resolve({ data: [] as any[] }) : sb.from('settlement_pending').select('item_key,amount,first_seen').is('resolved_at', null).is('dismissed_at', null),
     isMgr ? Promise.resolve({ data: null as any }) : sb.from('settlement_sync_runs').select('finished_at,ok,rows_fetched').order('id', { ascending: false }).limit(1).maybeSingle(),
@@ -155,7 +156,8 @@ export default async function Home() {
   const tn = (id: number | null) => teams.find(t => t.id === id)?.name ?? '-';
   const teamsShown = teams.filter(t => rows.some(x => x.team_id === t.id));
   const wrTeams = teamsShown.filter(t => rows.some(x => x.team_id === t.id && x.role === 'manager'));   // 팀장 있는 팀만 주간보고 대상
-  const wrMissing = wrTeams.filter(t => wr?.find(x => x.team_id === t.id)?.status !== 'submitted');
+  const wrCur = (teamId: number | null) => teamReportStatus(wr ?? [], teamId, today).cur;   // 오늘을 포함하는 보고 기간의 보고서 (팀장이 지정한 기간 기준)
+  const wrMissing = wrTeams.filter(t => wrCur(t.id)?.status !== 'submitted');
   const tgOf = (id: string) => Number(targets?.find(t => t.user_id === id)?.margin ?? 0);
   const todayM = (id: string) => Number(kpiT?.find(k => k.user_id === id)?.margin ?? 0);
   const attOf = (x: PersonEval) => { const l = lvToday?.find(y => y.user_id === x.id); const a = att?.find(y => y.user_id === x.id); return l ? <Status kind="off">{leaveName[l.type] ?? '휴가'}</Status> : a ? <Status kind={a.is_late ? 'wait' : 'ok'}>{a.check_in?.slice(0, 5)}{a.is_late ? ' 지각' : ''}</Status> : <Status kind="bad">미출근</Status>; };
@@ -172,7 +174,7 @@ export default async function Home() {
   // ---------- 팀장 홈 ----------
   if (isMgr) {
     const tes = await endingSoon(p.id);
-    const w = wr?.find(x => x.team_id === p.team_id);
+    const w = wrCur(p.team_id);
     return (
       <div className="page">
         <PageHeader title={`${tn(p.team_id)} — ${dayLabel(today)}`} desc={`팀원 ${staff.length}명 · ${bizLabel(bm)} 기준 · 주간보고 ${w?.status === 'submitted' ? '제출 완료' : w ? '작성 중' : '미작성'}`} actions={<><Link href="/kpi" className="btn ghost">내 KPI 제출</Link><Link href="/weekly" className="btn">주간보고 {w?.status === 'submitted' ? '보기' : '작성'} →</Link></>} />
@@ -230,7 +232,7 @@ export default async function Home() {
         <Section title="팀별" sub="확정 마진 · 이달" flush right={<Link href="/margin" className="help">영업 마진 →</Link>}>
           <div className="tbl-wrap"><table>
             <thead><tr><th>팀</th><th className="num">누계</th>{hasTargets && <th style={{ width: '30%' }}>목표</th>}<th className="num">승인 대기</th><th className="num">오늘</th>{wrTeams.length > 0 && <th>주간보고</th>}</tr></thead>
-            <tbody>{teamsShown.map(t => { const tm = staff.filter(x => x.team_id === t.id); const m = tm.reduce((a, x) => a + x.monthMargin, 0); const pd = tm.reduce((a, x) => a + x.monthPending, 0); const tt = tm.reduce((a, x) => a + tgOf(x.id), 0); const w = wr?.find(x => x.team_id === t.id); const lead = rows.find(x => x.team_id === t.id && x.role === 'manager'); const td = tm.reduce((a, x) => a + todayM(x.id), 0);
+            <tbody>{teamsShown.map(t => { const tm = staff.filter(x => x.team_id === t.id); const m = tm.reduce((a, x) => a + x.monthMargin, 0); const pd = tm.reduce((a, x) => a + x.monthPending, 0); const tt = tm.reduce((a, x) => a + tgOf(x.id), 0); const w = wrCur(t.id); const lead = rows.find(x => x.team_id === t.id && x.role === 'manager'); const td = tm.reduce((a, x) => a + todayM(x.id), 0);
               return <tr key={t.id}><td><Cell main={t.name} sub={`${lead ? lead.name + ' · ' : ''}${tm.length}명`} /></td><td><Money v={m} big /></td>{hasTargets && <td>{tt ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ flex: 1 }}><Bar p={pct(m, tt)} /></div><span style={{ fontSize: 13, fontWeight: 600, minWidth: 36, textAlign: 'right' }}>{pct(m, tt)}%</span></div> : <span className="cell-sub">-</span>}</td>}<td><Money v={pd} dash /></td><td><Money v={td} dash /></td>{wrTeams.length > 0 && <td>{!lead ? <span style={{ color: 'var(--line)' }}>·</span> : w?.status === 'submitted' ? <Status kind="ok">제출</Status> : w ? <Status kind="wait">작성 중</Status> : <Status kind="bad">미작성</Status>}</td>}</tr>; })}
               <tr className="total"><td>전사</td><td><Money v={mm} big /></td>{hasTargets && <td>{pct(mm, tg)}%</td>}<td><Money v={mp} dash /></td><td><Money v={staff.reduce((a, x) => a + todayM(x.id), 0)} dash /></td>{wrTeams.length > 0 && <td className="cell-sub" style={{ marginTop: 0 }}>{wrTeams.length - wrMissing.length}/{wrTeams.length}</td>}</tr>
             </tbody>
