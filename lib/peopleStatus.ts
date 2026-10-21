@@ -1,7 +1,7 @@
 // 직원 현황 한 줄 통합 데이터 — overview 화면, CSV 내보내기, 직원 상세가 같이 씀 (RLS 범위 내)
 import { supabaseServer } from '@/lib/supabase/server';
-import { todayKST, weekStartOf, addDays } from '@/lib/date/kst';
-import { bizMonthOf } from '@/lib/date/period';
+import { todayKST } from '@/lib/date/kst';
+import { bizMonthOf, bizMonthRange, reportPeriodOf, prevReportPeriod } from '@/lib/date/period';
 import { evaluatePeople, type PersonEval } from '@/lib/eval';
 
 export const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '결근', late: '지각' };
@@ -16,10 +16,12 @@ export type PersonStatus = PersonEval & {
   pendingLeaves: number;
 };
 
-export async function peopleStatus(opts: { teamId?: number; onlyUser?: string } = {}) {
-  const sb = supabaseServer(); const today = todayKST(); const bm = bizMonthOf(today); const ms = bm + '-01'; const ws = weekStartOf(today), lastWs = addDays(ws, -7);
+export async function peopleStatus(opts: { teamId?: number; onlyUser?: string; month?: string } = {}) {
+  const sb = supabaseServer(); const today = todayKST(); const curBm = bizMonthOf(today); const bm = opts.month && /^\d{4}-\d{2}$/.test(opts.month) ? opts.month : curBm; const ms = bm + '-01';
+  const isCurrent = bm === curBm; const [, bmEnd] = bizMonthRange(bm); const asOf = isCurrent ? today : (bmEnd < today ? bmEnd : today);   // 지난달이면 그 달 마감일 기준으로 평가
+  const cp = reportPeriodOf(asOf), pp = prevReportPeriod(cp); const ws = cp.start, lastWs = pp.start;
   const [{ people, teams }, { data: att }, { data: kpiToday }, { data: leavesPending }, { data: leavesToday }, { data: targets }, { data: wr }, { data: pipe }, { data: plans }, { data: kpiMonth }] = await Promise.all([
-    evaluatePeople(today, opts.onlyUser),
+    evaluatePeople(asOf, opts.onlyUser),
     sb.from('attendance').select('user_id,check_in,check_out,is_late').eq('work_date', today),
     sb.from('kpi_daily').select('user_id,margin').eq('work_date', today),
     sb.from('leave_requests').select('user_id,type').eq('status', 'pending'),
@@ -50,7 +52,7 @@ export async function peopleStatus(opts: { teamId?: number; onlyUser?: string } 
     att: rows.filter(p => p.att.kind !== 'none').length, kpi: staff.filter(p => p.kpi.submitted).length, staff: staff.length, all: rows.length,
     margin: staff.reduce((a, p) => a + p.monthMargin, 0), pending: staff.reduce((a, p) => a + p.monthPending, 0), target: staff.reduce((a, p) => a + p.target, 0), inc: rows.reduce((a, p) => a + p.inc.total, 0), promo: rows.filter(p => p.promo?.ok).length,
   };
-  return { rows, teams, sums, today, bm };
+  return { rows, teams, sums, today, bm, isCurrent, asOf };
 }
 
 /** 현황 표 → CSV (엑셀용 BOM 포함) */

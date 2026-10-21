@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, won, man, weekStartOf, addDays, fmtMD, fmtKST } from '@/lib/date/kst';
-import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth } from '@/lib/date/period';
+import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth, reportPeriodOf } from '@/lib/date/period';
 import { evaluatePeople, type PersonEval } from '@/lib/eval';
 import { PageHeader, Stat, Section, Cell, Money, Status, Empty } from '@/components/ui';
 import { endingSoon, dLabel, type SlotEx } from '@/lib/slots';
@@ -29,7 +29,7 @@ function SlotSection({ es, today }: { es: { days: number; soon: SlotEx[]; ended:
     </Section>);
 }
 export default async function Home() {
-  const p = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const bm = bizMonthOf(today); const [ms] = bizMonthRange(bm); const ws = weekStartOf(today);
+  const p = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const bm = bizMonthOf(today); const [ms] = bizMonthRange(bm); const ws = reportPeriodOf(today).start;
   const [{ data: issue }, { data: reads }, { data: promos }] = await Promise.all([
     sb.from('issues').select('id,title,body,issue_date').eq('is_active', true).order('issue_date', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle(),
     sb.from('issue_reads').select('issue_id').eq('user_id', p.id),

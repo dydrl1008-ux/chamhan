@@ -2,17 +2,17 @@ import { redirect } from 'next/navigation';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, weekStartOf, addDays, won, man } from '@/lib/date/kst';
-import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth } from '@/lib/date/period';
+import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth, nextBizMonth, reportPeriodOf, prevReportPeriod } from '@/lib/date/period';
 import { evaluatePeople } from '@/lib/eval';
 import { peopleStatus } from '@/lib/peopleStatus';
 import { PageHeader, Stat, Section, Cell, Money, Status, Empty } from '@/components/ui';
 export const dynamic = 'force-dynamic';
-export default async function OverviewPage({ searchParams }: { searchParams: { team?: string } }) {
+export default async function OverviewPage({ searchParams }: { searchParams: { team?: string; m?: string } }) {
   const me = await getProfile(); if (!me || !(me.role === 'admin' || me.role === 'head' || me.role === 'manager')) redirect('/');
-  const sb = supabaseServer(); const today = todayKST(); const bm = bizMonthOf(today); const [ms, meD] = bizMonthRange(bm); const ws = weekStartOf(today), we = addDays(ws, 6), lastWs = addDays(ws, -7);
+  const sb = supabaseServer(); const today = todayKST(); const curBm = bizMonthOf(today); const bm = /^\d{4}-\d{2}$/.test(searchParams.m ?? '') && searchParams.m! <= curBm ? searchParams.m! : curBm; const isCur = bm === curBm; const [ms, meD] = bizMonthRange(bm); const asOf = isCur ? today : meD; const cp = reportPeriodOf(asOf); const ws = cp.start, we = cp.end, lastWs = prevReportPeriod(cp).start;
   const teamFilter = me.role === 'manager' ? (me.team_id ?? 0) : Number(searchParams.team) || 0;
   const [{ people, teams }, { data: att }, { data: kpiToday }, { data: leavesPending }, { data: leavesToday }, { data: targets }, { data: wr }, { data: pipe }, { data: plans }, { data: kpiMonth }] = await Promise.all([
-    evaluatePeople(today),
+    evaluatePeople(asOf),
     sb.from('attendance').select('user_id,check_in,check_out,is_late').eq('work_date', today),
     sb.from('kpi_daily').select('user_id,margin').eq('work_date', today),
     sb.from('leave_requests').select('user_id,type,team_approved_at').eq('status', 'pending'),
@@ -25,7 +25,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: { t
   ]);
   const sixStart = (() => { const y = Number(bm.slice(0, 4)), m = Number(bm.slice(5, 7)); const d = new Date(Date.UTC(y, m - 6, 1)); return d.toISOString().slice(0, 10); })();
   const pbm = prevBizMonth(bm); const [pms, pme] = bizMonthRange(pbm);
-  const dayIdx = Math.round((new Date(today + 'T00:00:00Z').getTime() - new Date(ms + 'T00:00:00Z').getTime()) / 864e5);   // 이달 경과 일수(0부터)
+  const dayIdx = Math.round((new Date(asOf + 'T00:00:00Z').getTime() - new Date(ms + 'T00:00:00Z').getTime()) / 864e5);   // 이달 경과 일수(0부터) — 지난달은 마감일 기준
   const pSame = addDays(pms, dayIdx) > pme ? pme : addDays(pms, dayIdx);                                                   // 지난달 같은 시점
   const totalDays = Math.round((new Date(meD + 'T00:00:00Z').getTime() - new Date(ms + 'T00:00:00Z').getTime()) / 864e5) + 1;
   const [{ data: daily }, { data: sixM }, { data: prevDaily }] = await Promise.all([
@@ -34,29 +34,31 @@ export default async function OverviewPage({ searchParams }: { searchParams: { t
     sb.from('kpi_daily').select('user_id,team_id,work_date,margin').gte('work_date', pms).lte('work_date', pme).limit(5000),
   ]);
   const leaveName: Record<string, string> = { annual: '연차', half_am: '반차', half_pm: '반차', monthly: '월차', sick: '병가', absent: '결근', late: '지각' };
-  const st = await peopleStatus({ teamId: teamFilter || undefined });
+  const st = await peopleStatus({ teamId: teamFilter || undefined, month: bm });
   const rows = people.filter(p => !teamFilter || p.team_id === teamFilter);
   const tn = (id: number | null) => teams.find(t => t.id === id)?.name ?? '-';
   const pct = (a: number, b: number) => b ? Math.round(a / b * 100) : 0;
-  const csvHref = `/overview/export${teamFilter ? `?team=${teamFilter}` : ''}`;
+  const csvHref = `/overview/export?${[teamFilter ? `team=${teamFilter}` : '', isCur ? '' : `m=${bm}`].filter(Boolean).join('&')}`;
   return (
     <div style={{ display: 'grid', gap: 22 }}>
-      <PageHeader title="직원 현황" desc={`${today} · ${bizLabel(bm)} · ${me.role === 'manager' ? '우리 팀' : teamFilter ? tn(teamFilter) : '전사'} ${st.rows.length}명 — 근태·KPI·목표·계획·보고·진급을 한 줄로`}
-        actions={<>{me.role !== 'manager' && <div style={{ display: 'flex', gap: 4 }}><a href="/overview" className={'btn ghost' + (!teamFilter ? ' on' : '')} style={{ background: !teamFilter ? 'var(--accent-soft)' : undefined }}>전체</a>{teams.filter(t => people.some(p => p.team_id === t.id)).map(t => <a key={t.id} href={`/overview?team=${t.id}`} className="btn ghost" style={{ background: teamFilter === t.id ? 'var(--accent-soft)' : undefined }}>{t.name}</a>)}</div>}<a href={csvHref} className="btn ghost">현황 내보내기 (CSV)</a></>} />
+      <PageHeader title="직원 현황" desc={`${isCur ? today : `${bizLabel(bm)} 마감 기준`} · ${bizLabel(bm)} · ${me.role === 'manager' ? '우리 팀' : teamFilter ? tn(teamFilter) : '전사'} ${st.rows.length}명 — ${isCur ? '근태·KPI·목표·계획·보고·진급을 한 줄로' : '지난 달 실적 · 근태·KPI 오늘 열은 표시 안 함'}`}
+        actions={<><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><a href={`/overview?m=${prevBizMonth(bm)}${teamFilter ? `&team=${teamFilter}` : ''}`} className="btn ghost">‹</a><b style={{ minWidth: 150, textAlign: 'center' }}>{bizLabel(bm)}</b>{!isCur && <a href={`/overview?m=${nextBizMonth(bm)}${teamFilter ? `&team=${teamFilter}` : ''}`} className="btn ghost">›</a>}{!isCur && <a href={`/overview${teamFilter ? `?team=${teamFilter}` : ''}`} className="btn ghost">이번 달</a>}</div>{me.role !== 'manager' && <div style={{ display: 'flex', gap: 4 }}><a href={`/overview${isCur ? '' : `?m=${bm}`}`} className={'btn ghost' + (!teamFilter ? ' on' : '')} style={{ background: !teamFilter ? 'var(--accent-soft)' : undefined }}>전체</a>{teams.filter(t => people.some(p => p.team_id === t.id)).map(t => <a key={t.id} href={`/overview?team=${t.id}${isCur ? '' : `&m=${bm}`}`} className="btn ghost" style={{ background: teamFilter === t.id ? 'var(--accent-soft)' : undefined }}>{t.name}</a>)}</div>}<a href={csvHref} className="btn ghost">현황 내보내기 (CSV)</a></>} />
       <div className="grid4">
-        <Stat label="오늘 출근" value={`${st.sums.att}/${st.sums.all}명`} desc={st.sums.all - st.sums.att ? `미체크 ${st.rows.filter(p => p.att.kind === 'none').map(p => p.name).join(', ')}` : '전원 체크'} tone={st.sums.att < st.sums.all ? 'wait' : 'ok'} />
-        <Stat label="오늘 KPI 제출" value={`${st.sums.kpi}/${st.sums.staff}명`} desc={st.sums.staff - st.sums.kpi ? `미제출 ${st.rows.filter(p => p.role === 'staff' && !p.kpi.submitted).map(p => p.name).join(', ')}` : '전원 제출'} tone={st.sums.kpi < st.sums.staff ? 'wait' : 'ok'} />
+        {isCur ? <><Stat label="오늘 출근" value={`${st.sums.att}/${st.sums.all}명`} desc={st.sums.all - st.sums.att ? `미체크 ${st.rows.filter(p => p.att.kind === 'none').map(p => p.name).join(', ')}` : '전원 체크'} tone={st.sums.att < st.sums.all ? 'wait' : 'ok'} />
+        <Stat label="오늘 KPI 제출" value={`${st.sums.kpi}/${st.sums.staff}명`} desc={st.sums.staff - st.sums.kpi ? `미제출 ${st.rows.filter(p => p.role === 'staff' && !p.kpi.submitted).map(p => p.name).join(', ')}` : '전원 제출'} tone={st.sums.kpi < st.sums.staff ? 'wait' : 'ok'} /></>
+        : <><Stat label="KPI 입력일 합" value={`${st.rows.reduce((a, p) => a + p.kpi.days, 0)}일`} desc={`직원 ${st.sums.staff}명 · 1인 평균 ${st.sums.staff ? Math.round(st.rows.reduce((a, p) => a + p.kpi.days, 0) / st.sums.staff) : 0}일`} />
+        <Stat label="콜 · 신규 합" value={st.rows.reduce((a, p) => a + p.kpi.calls, 0).toLocaleString()} desc={`신규 ${st.rows.reduce((a, p) => a + p.kpi.newCnt, 0)}건`} /></>}
         <Stat label={`${Number(bm.slice(5))}월 마진`} value={won(st.sums.margin)} pending={st.sums.pending ? won(st.sums.pending) : undefined} desc={`예상 인센티브 합 ${won(st.sums.inc)}`} />
         <Stat label="목표 달성" value={st.sums.target ? pct(st.sums.margin, st.sums.target) + '%' : '목표 없음'} pct={st.sums.target ? pct(st.sums.margin, st.sums.target) : undefined} desc={st.sums.target ? `목표 ${man(st.sums.target)} · 진급 기준 도달 ${st.sums.promo}명` : `진급 기준 도달 ${st.sums.promo}명`} />
       </div>
       <Section title="인원별 업무 현황" sub={me.role === 'manager' ? '우리 팀' : undefined} flush right={<span className="cell-sub">이름을 누르면 직원 상세</span>}>
         <div style={{ overflowX: 'auto' }}><table>
-          <thead><tr><th>직원</th><th>근태</th><th>KPI</th><th style={{ textAlign: 'right' }}>{Number(bm.slice(5))}월 마진</th><th>목표</th><th>계획</th><th>보고 · 가망</th><th>진급</th><th style={{ textAlign: 'right' }}>예상 인센</th></tr></thead>
+          <thead><tr><th>직원</th>{isCur ? <><th>근태</th><th>KPI</th></> : <th>KPI 입력 · 콜 · 신규</th>}<th style={{ textAlign: 'right' }}>{Number(bm.slice(5))}월 마진</th><th>목표</th><th>계획</th><th>보고 · 가망</th><th>진급</th><th style={{ textAlign: 'right' }}>예상 인센</th></tr></thead>
           <tbody>{st.rows.map(p => <tr key={p.id}>
             <td><a href={`/employees/${p.id}`} style={{ textDecoration: 'none', color: 'inherit' }}><Cell main={p.name} sub={`${p.teamName} · ${p.position ?? '-'}`} /></a></td>
-            <td>{p.att.kind === 'leave' ? <Status kind="off">{p.att.text}</Status> : p.att.kind === 'in' ? <Status kind={p.att.late ? 'wait' : 'ok'}>{p.att.late ? '지각 ' : '근무중 '}{p.att.text}{p.att.out ? ' → ' + p.att.out : ''}</Status> : <Status kind="bad">미체크</Status>}
+            {isCur ? <><td>{p.att.kind === 'leave' ? <Status kind="off">{p.att.text}</Status> : p.att.kind === 'in' ? <Status kind={p.att.late ? 'wait' : 'ok'}>{p.att.late ? '지각 ' : '근무중 '}{p.att.text}{p.att.out ? ' → ' + p.att.out : ''}</Status> : <Status kind="bad">미체크</Status>}
               {(p.pendingLeaves > 0 || p.late > 0 || p.absent > 0) && <div className="cell-sub">{p.pendingLeaves ? `근태 승인 대기 ${p.pendingLeaves} · ` : ''}<span style={{ color: p.late > 0 || p.absent > 0 ? 'var(--bad-ink)' : undefined }}>지각 {p.late} · 결근 {p.absent}</span></div>}</td>
-            <td>{p.role === 'manager' ? <span className="cell-sub">-</span> : p.kpi.submitted ? <Cell main={<Status kind="ok">제출 · {won(p.kpi.margin)}</Status>} sub={p.kpi.days ? `콜 ${p.kpi.calls.toLocaleString()} · 신규 ${p.kpi.newCnt} · ${p.kpi.days}일 입력` : ''} /> : <Cell main={<Status kind="bad">미제출</Status>} sub={p.kpi.days ? `콜 ${p.kpi.calls.toLocaleString()} · 신규 ${p.kpi.newCnt} · ${p.kpi.days}일 입력` : ''} />}</td>
+            <td>{p.role === 'manager' ? <span className="cell-sub">-</span> : p.kpi.submitted ? <Cell main={<Status kind="ok">제출 · {won(p.kpi.margin)}</Status>} sub={p.kpi.days ? `콜 ${p.kpi.calls.toLocaleString()} · 신규 ${p.kpi.newCnt} · ${p.kpi.days}일 입력` : ''} /> : <Cell main={<Status kind="bad">미제출</Status>} sub={p.kpi.days ? `콜 ${p.kpi.calls.toLocaleString()} · 신규 ${p.kpi.newCnt} · ${p.kpi.days}일 입력` : ''} />}</td></> : <td>{p.kpi.days ? <Cell main={`${p.kpi.days}일 입력`} sub={`콜 ${p.kpi.calls.toLocaleString()} · 신규 ${p.kpi.newCnt}`} /> : <span className="cell-sub">입력 없음</span>}</td>}
             <td><Money v={p.monthMargin} big sub={p.monthPending ? <span style={{ color: 'var(--wait-ink)' }}>대기 {won(p.monthPending)}</span> : p.role === 'manager' ? '팀 합계' : undefined} /></td>
             <td style={{ minWidth: 120 }}>{p.target ? <div><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><b>{p.targetPct}%</b><span className="cell-sub" style={{ marginTop: 0 }}>{man(p.target)}</span></div><div className="bar"><i style={{ width: `${Math.min(100, Math.max(0, p.targetPct ?? 0))}%`, background: (p.targetPct ?? 0) >= 100 ? 'var(--ok)' : (p.targetPct ?? 0) >= 70 ? 'var(--wait)' : undefined }} /></div></div> : <span className="cell-sub">미설정</span>}</td>
             <td>{p.plan ? <Cell main={`${p.plan.done}/${p.plan.total}`} sub={`${pct(p.plan.done, p.plan.total)}%`} /> : <span className="cell-sub">-</span>}</td>

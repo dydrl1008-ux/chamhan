@@ -18,3 +18,22 @@ export function bizMonthRange(key: string): [string, string] {
 export function prevBizMonth(key: string) { const [s] = bizMonthRange(key); return bizMonthOf(addDays(s, -1)); }
 export function nextBizMonth(key: string) { const [, e] = bizMonthRange(key); return bizMonthOf(addDays(e, 1)); }
 export const bizLabel = (key: string) => { const [s, e] = bizMonthRange(key); return `${Number(key.slice(5))}월 (${s.slice(5).replace('-', '/')}~${e.slice(5).replace('-', '/')})`; };
+
+// ---------- 주간보고 기간: 월~일 주 단위이되, 회사 월 마감(20일/21일)에서 끊는다 ----------
+// 예) 10/19(월)~10/25(일) 주에 20일이 끼면 → 10/19~10/20 과 10/21~10/25 두 기간
+export type ReportPeriod = { start: string; end: string };
+function weekStart(d: string) { const x = new Date(d + 'T00:00:00Z'); const dow = (x.getUTCDay() + 6) % 7; return addDays(d, -dow); }
+/** 날짜가 속한 보고 기간 */
+export function reportPeriodOf(d: string): ReportPeriod {
+  const ws = weekStart(d), we = addDays(ws, 6);
+  const cut = `${d.slice(0, 7)}-${String(MONTH_START_DAY - 1).padStart(2, '0')}`;                 // 그 달 20일
+  const cutIn = (c: string) => c >= ws && c < we;                                                     // 20일이 주 안에 있고 일요일이 아니면 분할
+  // 주가 달을 넘길 수 있으므로 ws 달의 20일과 we 달의 20일 둘 다 확인
+  const cuts = [...new Set([cut, `${ws.slice(0, 7)}-${String(MONTH_START_DAY - 1).padStart(2, '0')}`, `${we.slice(0, 7)}-${String(MONTH_START_DAY - 1).padStart(2, '0')}`])].filter(cutIn);
+  for (const c of cuts) { if (d <= c) return { start: ws, end: c }; return { start: addDays(c, 1), end: we }; }
+  return { start: ws, end: we };
+}
+export function prevReportPeriod(p: ReportPeriod): ReportPeriod { return reportPeriodOf(addDays(p.start, -1)); }
+export function nextReportPeriod(p: ReportPeriod): ReportPeriod { return reportPeriodOf(addDays(p.end, 1)); }
+/** 오늘 기준 최근 n개 보고 기간 (최신 먼저) */
+export function recentReportPeriods(today: string, n = 8): ReportPeriod[] { const out: ReportPeriod[] = []; let p = reportPeriodOf(today); for (let i = 0; i < n; i++) { out.push(p); p = prevReportPeriod(p); } return out; }
