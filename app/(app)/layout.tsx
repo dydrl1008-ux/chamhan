@@ -65,14 +65,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/products">상품 안내 · 접수</NavLink>
         </NavGroup>
 
-        {lead && (
+        {(lead || mgr) && (
           <NavGroup title="AI팀 (테스트)" hrefs={['/ai']}>
             <NavLink href="/ai/orders">지시 · 작업 현황</NavLink>
-            <NavLink href="/ai/checks">점검 결과</NavLink>
-            <NavLink href="/ai/agencies">대행사 컨택</NavLink>
-            <NavLink href="/ai/leads">콜 리스트 관리</NavLink>
-            <NavLink href="/calls">콜 리스트 (영업사원 화면)</NavLink>
-            <NavLink href="/ai/agents">에이전트 · 자동 일정</NavLink>
+            {lead && <>
+              <NavLink href="/ai/checks">점검 결과</NavLink>
+              <NavLink href="/ai/agencies">대행사 컨택</NavLink>
+              <NavLink href="/ai/leads">콜 리스트 관리</NavLink>
+              <NavLink href="/calls">콜 리스트 (영업사원 화면)</NavLink>
+              <NavLink href="/ai/agents">에이전트 · 자동 일정</NavLink>
+            </>}
           </NavGroup>
         )}
 
