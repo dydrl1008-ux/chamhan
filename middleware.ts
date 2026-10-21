@@ -70,4 +70,5 @@ export async function middleware(req: NextRequest) {
   return res;
 }
 
-export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico|api/cron|.*\\.(?:png|jpg|svg|ico)$).*)'] };
+// p/ = 고객에게 보내는 제안서 추적 링크 (로그인·IP 제한 없이 열려야 함)
+export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico|api/cron|p/|.*\\.(?:png|jpg|svg|ico)$).*)'] };

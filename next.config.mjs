@@ -8,5 +8,7 @@ const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'off' },
 ];
 const nextConfig = {
-  async headers() { return [{ source: '/(.*)', headers: securityHeaders }]; }, reactStrictMode: true };
+  async headers() { return [{ source: '/(.*)', headers: securityHeaders }]; }, reactStrictMode: true,
+  // 대행사 홍보방 업로드·콜 리스트 CSV (Vercel 요청 한도 4.5MB 안쪽)
+  experimental: { serverActions: { bodySizeLimit: '4mb' } } };
 export default nextConfig;
