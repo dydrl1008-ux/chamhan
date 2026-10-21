@@ -43,7 +43,6 @@ export default function RenewalsClient({ mode, rows, people = [], names = {}, to
       </select>
       <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 13 }}><input type="checkbox" checked={settle} onChange={e => setSettle(e.target.checked)} />정산 사이트 고객 배정도 같이</label>
       <button className="btn sm" disabled={!sel.size || busy} onClick={() => run(reassign([...sel], to || null, settle))}>선택 {sel.size}곳 분배</button>
-      <button className="btn ghost sm" disabled={busy} onClick={() => run(syncNow())}>지금 갱신</button>
     </div>
     <div className="tbl-wrap"><table>
       <thead><tr><th style={{ width: 32 }}><input type="checkbox" checked={all} onChange={() => setSel(all ? new Set() : new Set(rows.map(x => x.id)))} /></th><th>업체 · 상품</th><th>원래 담당</th><th>종료</th><th>포기 이유</th><th></th></tr></thead>
@@ -84,4 +83,13 @@ export default function RenewalsClient({ mode, rows, people = [], names = {}, to
       </tr>)}</tbody>
     </table></div>
   );
+}
+
+/** 어드민·총괄: 지금 정산 데이터로 이탈 고객 갱신 (미결제 1주·2주 알림도 이때 나감) */
+export function SyncButton() {
+  const r = useRouter(); const [busy, start] = useTransition();
+  return <button className="btn ghost sm" disabled={busy} onClick={() => {
+    if (!confirm('지금 정산 데이터로 이탈 고객을 갱신합니다.\n종료 후 7일·14일 지난 건은 담당자에게 알림이 갑니다. 진행할까요?')) return;
+    start(async () => { const x = await syncNow(); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); });
+  }}>{busy ? '갱신 중…' : '지금 갱신'}</button>;
 }

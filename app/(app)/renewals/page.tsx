@@ -2,7 +2,7 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST } from '@/lib/date/kst';
 import { PageHeader, Section, Empty, Stat } from '@/components/ui';
-import RenewalsClient, { type Churn, type Person } from './RenewalsClient';
+import RenewalsClient, { SyncButton, type Churn, type Person } from './RenewalsClient';
 export const dynamic = 'force-dynamic';
 
 const COLS = 'id,owner_id,cust_name,prod_name,biz_no,slots,date_to,status,alert_level,give_up_reason,given_up_at,assignee_id,assigned_at,closed_reason,renewed_at';
@@ -28,7 +28,7 @@ export default async function RenewalsPage() {
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
-      <PageHeader title="이탈 고객" badge={<span className="pill">테스트</span>}
+      <PageHeader title="이탈 고객" badge={<span className="pill">테스트</span>} actions={lead ? <SyncButton /> : undefined}
         desc="작업이 끝났는데 연장 정산이 없는 업체"
         help={<>종료 후 <b>7일·14일</b>이 지나도 연장이 없으면 알림이 옵니다. 연장이 어렵다고 판단되면 「포기」를 누르세요 → 어드민·총괄이 다른 영업사원에게 분배합니다. 누가 팔든 같은 업체·상품 정산이 새로 올라오면 자동으로 「연장됨」 처리됩니다. 매일 평일 09:05 연장 체크 때 갱신.</>} />
 
@@ -45,7 +45,7 @@ export default async function RenewalsPage() {
       </Section>}
 
       {!lead || m.length ? <Section title="내 미결제" sub={m.length ? `${m.length}곳` : ''} flush>
-        {m.length ? <RenewalsClient mode="mine" rows={m} today={today} /> : <div style={{ padding: 20 }}><Empty>연장 안 된 업체가 없습니다.</Empty></div>}
+        {m.length ? <RenewalsClient mode="mine" rows={m} today={today} /> : <div style={{ padding: 20 }}><Empty>연장 안 된 업체가 없습니다. (평일 09:05 연장 체크 때 갱신)</Empty></div>}
       </Section> : null}
 
       {t.length ? <Section title="나에게 넘어온 업체" sub={`${t.length}곳 · 다른 담당자가 포기한 고객`} flush>
