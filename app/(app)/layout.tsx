@@ -28,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavLink href="/">홈</NavLink>
         <NavLink href="/notifications">알림{notiBadge}</NavLink>
         {!p.is_mgmt && p.role !== 'admin' && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
+        {(!p.is_mgmt || lead) && <NavLink href="/renewals">이탈 고객</NavLink>}
 
         {mgmt && pendingCount > 0 && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
         <NavGroup title="정산" hrefs={['/pending', '/settle-request', '/settle-refund', '/settle-customers', '/settle-data', '/settlement']}>
