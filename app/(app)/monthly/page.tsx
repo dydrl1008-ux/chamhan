@@ -20,5 +20,5 @@ export default async function MonthlyPage({ searchParams }: { searchParams: { te
   const data = teamId ? await loadPlan(teamId, bm) : null;
   const { data: leaders } = await sb.from('profiles').select('id,name').in('id', (teams ?? []).map(t => t.leader_id).filter(Boolean) as string[]);
   const canEdit = me.role === 'admin' || (me.role === 'manager' && me.team_id === teamId);
-  return <MonthlyClient me={me} teams={(teams ?? []).map(t => ({ ...t, leader: leaders?.find(l => l.id === t.leader_id)?.name ?? '' }))} teamId={teamId} bm={bm} curBm={curBm} nextBm={nextBizMonth(curBm)} data={data} summaries={summaries} canEdit={canEdit} tab={searchParams.tab ?? ''} />;
+  return <MonthlyClient key={`${teamId}:${bm}:${searchParams.tab ?? ''}`} me={me} teams={(teams ?? []).map(t => ({ ...t, leader: leaders?.find(l => l.id === t.leader_id)?.name ?? '' }))} teamId={teamId} bm={bm} curBm={curBm} nextBm={nextBizMonth(curBm)} data={data} summaries={summaries} canEdit={canEdit} tab={searchParams.tab ?? ''} />;
 }

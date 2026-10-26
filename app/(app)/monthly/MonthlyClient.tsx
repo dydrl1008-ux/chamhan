@@ -23,7 +23,7 @@ export default function MonthlyClient({ me, teams, teamId, bm, curBm, nextBm, da
   const [busy, setBusy] = useState(false);
   const go = (q: Record<string, string | number>) => r.push('/monthly?' + Object.entries({ team: teamId, m: bm, ...q }).filter(([, v]) => v !== '' && v !== 0).map(([k, v]) => `${k}=${v}`).join('&'));
   const [st, setSt] = useState<PlanState>(() => init(data));
-  const [person, setPerson] = useState<string>(data?.auto[0]?.user_id ?? '');
+  let [person, setPerson] = useState<string>(data?.auto[0]?.user_id ?? '');
   const d = data; const weeks = d?.weeks ?? []; const cur = d?.curWeek ?? null; const today = d?.today ?? '';
   const wT = d?.cfg.wT ?? 0.5; const w = (m: 'o' | 't' | 'x') => m === 'o' ? 1 : m === 't' ? wT : 0;
 
@@ -53,7 +53,8 @@ export default function MonthlyClient({ me, teams, teamId, bm, curBm, nextBm, da
   }, [d, st, weeks, cur, today, wT]);
 
   const upd = (f: (s: PlanState) => void) => setSt(s => { const c = structuredClone(s); f(c); return c; });
-  const mem = (uid: string) => st.members[uid];
+  const EMPTY_M: MemberState = { renew: {}, pipes: {}, upsells: [], activities: [], weeks: {}, verdict: '', strategy: '', target_note: '' };
+  const mem = (uid: string) => st.members[uid] ?? EMPTY_M;
   const save = async (mode: 'save' | 'submit' | 'review') => {
     if (!d || !calc) return; if (mode === 'submit' && !confirm('제출하면 개인 목표가 홈·현황 달성률 기준으로 반영됩니다. 제출할까요?')) return;
     setBusy(true);
@@ -122,7 +123,7 @@ export default function MonthlyClient({ me, teams, teamId, bm, curBm, nextBm, da
   </>);
 
   // ---------- 인원 탭 ----------
-  const pm = d.auto.find(m => m.user_id === person); const ms = person ? mem(person) : null; const pc = person ? calc.per[person] : null;
+  const pm = d.auto.find(m => m.user_id === person) ?? d.auto[0]; if (pm && pm.user_id !== person) { person = pm.user_id; } const ms = person ? mem(person) : null; const pc = person ? calc.per[person] : null;
   const typeOf = (uid: string) => (mem(uid)?.verdict ?? '').split(/[.。—\n]/)[0].trim().slice(0, 14);
   const peopleTab = pm && ms && pc ? (<>
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{d.auto.map(m => <button key={m.user_id} onClick={() => setPerson(m.user_id)} className="btn ghost" style={{ borderRadius: 999, background: person === m.user_id ? 'var(--accent)' : undefined, color: person === m.user_id ? '#fff' : undefined, borderColor: person === m.user_id ? 'var(--accent)' : undefined }}>{m.name}{typeOf(m.user_id) ? <span style={{ fontSize: 11.5, fontWeight: 500, opacity: .85, marginLeft: 6 }}>{typeOf(m.user_id)}</span> : null}</button>)}</div>
@@ -171,7 +172,7 @@ export default function MonthlyClient({ me, teams, teamId, bm, curBm, nextBm, da
     <Section title="③ 신규 개척 — 주차별 활동" sub="계획은 팀장 · 실제는 콜·신규 자동, 나머지는 리뷰 때 입력 · 활동 종류 자유 추가" flush>
       <div style={{ overflowX: 'auto' }}><table style={{ fontSize: 13 }}><thead><tr><th style={{ minWidth: 150 }}>활동</th>{weeks.map(wk => <th key={wk.no} style={{ textAlign: 'right', background: wk.no === cur ? 'var(--accent-soft)' : wk.end < today ? 'var(--ok-soft)' : undefined }}>{wk.no}주 <span className="cell-sub" style={{ display: 'inline' }}>{wk.end < today ? '계획/실제' : wk.no === cur ? '진행' : ''}</span></th>)}<th style={{ textAlign: 'right' }}>월</th>{canEdit && <th></th>}</tr></thead><tbody>
         {ms.activities.map((a, i) => { const isCall = a.activity === '콜 (DB)'; const tot = weeks.reduce((s, wk) => s + nz(a.plan[String(wk.no)]), 0); return <tr key={i}><td><b>{a.activity}</b>{isCall && <div className="cell-sub">실제 = KPI 콜 자동</div>}</td>{weeks.map(wk => { const k = String(wk.no); const done = wk.end < today; const actual = isCall ? (pm.weeks[wk.no]?.calls ?? 0) : nz(a.actual[k]); const plan = nz(a.plan[k]); return <td key={k} style={{ textAlign: 'right' }}><input style={{ ...inp, width: 64, display: 'inline-block' }} disabled={!canEdit} value={plan || ''} placeholder="·" onChange={e => upd(s => { s.members[person].activities[i].plan[k] = nz(e.target.value); })} />{(done || wk.no === cur) && <div className="num" style={{ fontSize: 12, marginTop: 2, color: done && plan && actual < plan ? 'var(--bad-ink)' : 'var(--ok-ink)' }}>실제 {isCall ? actual : <input style={{ ...inp, width: 56, display: 'inline-block', padding: '1px 4px', fontSize: 12 }} disabled={!canEdit} value={a.actual[k] ?? ''} placeholder="?" onChange={e => upd(s => { s.members[person].activities[i].actual[k] = nz(e.target.value); })} />}</div>}</td>; })}<td className="num" style={{ textAlign: 'right', fontWeight: 700 }}>{tot.toLocaleString()}</td>{canEdit && <td><button type="button" className="btn ghost" style={{ padding: '2px 6px' }} onClick={() => upd(s => { s.members[person].activities.splice(i, 1); })}>×</button></td>}</tr>; })}
-        <tr className="total"><td>→ 신규 예상 (건 · 마진)</td>{weeks.map(wk => { const x = ms.weeks[String(wk.no)]; const a = pm.weeks[wk.no]; const done = wk.end < today; return <td key={wk.no} className="num" style={{ textAlign: 'right' }}>{nz(x?.new_cnt)}건 · {man(x?.new_amt)}{(done || wk.no === cur) && a ? <div style={{ fontSize: 12, color: done && nz(x?.new_cnt) && a.new_cnt < nz(x?.new_cnt) ? 'var(--bad-ink)' : 'var(--ok-ink)' }}>실제 {a.new_cnt}건 · {man(a.new_margin)}</div> : null}</td>; })}<td className="num" style={{ textAlign: 'right' }}>{weeks.reduce((s, wk) => s + nz(ms.weeks[String(wk.no)]?.new_cnt), 0)}건 · {man(pc.new)}</td>{canEdit && <td />}</tr>
+        <tr className="total"><td>→ 신규 예상 (건 · 마진)</td>{weeks.map(wk => { const x = ms.weeks[String(wk.no)] ?? { new_cnt: 0, new_amt: 0 }; const a = pm.weeks[wk.no]; const done = wk.end < today; return <td key={wk.no} className="num" style={{ textAlign: 'right' }}>{nz(x?.new_cnt)}건 · {man(x?.new_amt)}{(done || wk.no === cur) && a ? <div style={{ fontSize: 12, color: done && nz(x?.new_cnt) && a.new_cnt < nz(x?.new_cnt) ? 'var(--bad-ink)' : 'var(--ok-ink)' }}>실제 {a.new_cnt}건 · {man(a.new_margin)}</div> : null}</td>; })}<td className="num" style={{ textAlign: 'right' }}>{weeks.reduce((s, wk) => s + nz(ms.weeks[String(wk.no)]?.new_cnt), 0)}건 · {man(pc.new)}</td>{canEdit && <td />}</tr>
       </tbody></table></div>
       {canEdit && <AddActivity types={d.types} used={ms.activities.map(a => a.activity)} onAdd={name => upd(s => { s.members[person].activities.push({ activity: name, plan: {}, actual: {} }); })} />}
       <div style={{ padding: '0 22px 16px' }}><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>타깃 · 방법 · 근거 <span style={{ fontWeight: 400 }}>— 전환율을 지난달({pm.prev.conv != null ? (pm.prev.conv * 100).toFixed(1) + '%' : '-'})보다 크게 잡으면 근거를</span></div><textarea style={{ ...ta, minHeight: 48 }} rows={2} disabled={!canEdit} value={ms.target_note} onChange={e => upd(s => { s.members[person].target_note = e.target.value; })} placeholder="숙박·펜션 · 리워드+플레이스 묶음. 소개 요청은 재계약 ○ 고객 대상 …" /></div>
