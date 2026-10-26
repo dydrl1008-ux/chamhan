@@ -16,8 +16,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // 금일 이슈 미확인 건수 (활성 이슈 중 내가 안 읽은 것)
   const sb = supabaseServer(); const [{ data: issues }, { data: reads }] = await Promise.all([sb.from('issues').select('id').eq('is_active', true).order('issue_date', { ascending: false }).limit(50), sb.from('issue_reads').select('issue_id').eq('user_id', p.id)]);
   const readSet = new Set((reads ?? []).map(x => x.issue_id)); const unreadIssues = (issues ?? []).filter(x => !readSet.has(x.id)).length;
-  const { count: unreadNoti } = await sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', p.id).is('read_at', null);
-  const notiBadge = unreadNoti ? <span className="badge" title="안 읽은 알림">{unreadNoti}</span> : null;
   const issueBadge = unreadIssues ? <span className="badge" title="미확인 이슈">{unreadIssues}</span> : null;
   const badge = pendingCount ? <span className="badge">{pendingCount}</span> : null;
   // 메뉴 6묶음: 홈 · 정산 · 직원/마진 · 근태/계획 · 보고/이슈 · 설정. 역할별로 보이는 항목만
@@ -26,9 +24,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <aside className="side">
         <div className="brand">워크허브<small>참한기획</small></div>
         <NavLink href="/">홈</NavLink>
-        <NavLink href="/notifications">알림{notiBadge}</NavLink>
-        {!p.is_mgmt && p.role !== 'admin' && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
-        {(!p.is_mgmt || lead) && <NavLink href="/renewals">이탈 고객</NavLink>}
 
         {mgmt && pendingCount > 0 && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
         <NavGroup title="정산" hrefs={['/pending', '/settle-request', '/settle-refund', '/settle-customers', '/settle-data', '/settlement']}>
@@ -58,25 +53,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </NavGroup>
 
         {unreadIssues > 0 && <NavLink href="/issues">금일 이슈 미확인{issueBadge}</NavLink>}
-        <NavGroup title="보고 · 이슈" hrefs={['/weekly', '/reports', '/issues', '/products']}>
+        <NavGroup title="보고 · 이슈" hrefs={['/monthly', '/weekly', '/reports', '/issues', '/products']}>
+          {(mgr || lead) && <NavLink href="/monthly">월간 계획서</NavLink>}
           {(mgr || lead) && <NavLink href="/weekly">팀장 주간보고</NavLink>}
           <NavLink href="/reports">보고서</NavLink>
           <NavLink href="/issues">금일 이슈{issueBadge}</NavLink>
           <NavLink href="/products">상품 안내 · 접수</NavLink>
         </NavGroup>
-
-        {(lead || mgr) && (
-          <NavGroup title="AI팀 (테스트)" hrefs={['/ai']}>
-            <NavLink href="/ai/orders">지시 · 작업 현황</NavLink>
-            {lead && <>
-              <NavLink href="/ai/checks">점검 결과</NavLink>
-              <NavLink href="/ai/agencies">대행사 컨택</NavLink>
-              <NavLink href="/ai/leads">콜 리스트 관리</NavLink>
-              <NavLink href="/calls">콜 리스트 (영업사원 화면)</NavLink>
-              <NavLink href="/ai/agents">에이전트 · 자동 일정</NavLink>
-            </>}
-          </NavGroup>
-        )}
 
         {p.role === 'admin' && (
           <NavGroup title="설정" hrefs={['/admin']}>

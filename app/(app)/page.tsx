@@ -4,6 +4,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { todayKST, won, man, weekStartOf, addDays, fmtMD, fmtKST } from '@/lib/date/kst';
 import { bizMonthOf, bizMonthRange, bizLabel, prevBizMonth } from '@/lib/date/period';
 import { teamReportStatus } from '@/lib/reports';
+import { loadPlan, teamSummary } from '@/lib/monthly';
 import { evaluatePeople, type PersonEval } from '@/lib/eval';
 import { PageHeader, Stat, Section, Cell, Money, Status, Empty } from '@/components/ui';
 import { endingSoon, dLabel, type SlotEx } from '@/lib/slots';
@@ -174,6 +175,7 @@ export default async function Home() {
   // ---------- 팀장 홈 ----------
   if (isMgr) {
     const tes = await endingSoon(p.id);
+    const mpl = p.team_id ? teamSummary(await loadPlan(p.team_id, bm)) : null; const mpNeed = !mpl ? 0 : !mpl.hasPlan ? 1 : (mpl.lastWeek && !mpl.reviewed ? 1 : 0);
     const w = wrCur(p.team_id);
     return (
       <div className="page">
@@ -184,6 +186,7 @@ export default async function Home() {
           <Chip n={noAtt.length} label="미출근" href="/attendance" hot />
           <Chip n={noKpi.length} label="KPI 미제출" href="/kpi" />
           {!w && <Chip n={1} label="주간보고 미작성" href="/weekly" />}
+          <Chip n={mpNeed} label={!mpl?.hasPlan ? '월간 계획서 미작성' : `${mpl.lastWeek?.no ?? ''}주 리뷰 안 함`} href="/monthly" hot={!!mpl && mpl.overdue >= 3} />
         </div>
         <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', padding: '22px 0' }}>
           <Big l={`${bizLabel(bm)} 팀 마진 (확정)`} v={won(mm)} d={mp ? <>승인 대기 <b style={{ color: 'var(--wait-ink)' }}>+{won(mp)}</b> 별도</> : '승인 대기분 없음'} />
@@ -209,6 +212,7 @@ export default async function Home() {
   const oldest = openRows.length ? openRows.reduce((a, x) => x.first_seen < a ? x.first_seen : a, openRows[0].first_seen) : null;
   const hasTargets = tg > 0; const lateList = (att ?? []).filter(a => a.is_late && rows.some(x => x.id === a.user_id)); const lvList = (lvToday ?? []).filter(l => rows.some(x => x.id === l.user_id));
   const top = [...staff].sort((a, b) => b.monthMargin - a.monthMargin).slice(0, 5); const mxTop = Math.max(1, ...top.map(x => Math.abs(x.monthMargin)));
+  const mps = await Promise.all(teamsShown.filter(t => rows.some(x => x.team_id === t.id && x.role === 'manager')).map(async t => ({ t, s: teamSummary(await loadPlan(t.id, bm)) }))); const mpMissing = mps.filter(x => !x.s.hasPlan || (x.s.lastWeek && !x.s.reviewed));
   return (
     <div className="page">
       <PageHeader title={dayLabel(today)} desc={`${p.name}님 · ${bizLabel(bm)} (${fmtMD(ms)} ~) · 이달 ${dayIdx + 1}일째`} actions={<Link href="/overview" className="btn ghost">직원 현황</Link>} />
@@ -219,6 +223,7 @@ export default async function Home() {
         <Chip n={pendMine.length} label="근태 최종 승인" href="/leave" />
         <Chip n={noKpi.length} label="KPI 미제출" href="/kpi" />
         <Chip n={wrMissing.length} label="주간보고 미제출 팀" href="/weekly" />
+        <Chip n={mpMissing.length} label="월간 계획서 미작성·리뷰 안 한 팀" href="/monthly" hot={mpMissing.some(x => x.s.overdue >= 3)} />
         {openRows.length > 0 && <span className="cell-sub" style={{ marginLeft: 'auto' }}>승인 대기 {won(openSum)} · 가장 오래된 건 {oldest ? fmtKST(oldest) : ''}</span>}
       </div>
 
