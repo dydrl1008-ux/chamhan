@@ -11,7 +11,7 @@ export type MemberState = {
   pipes: Record<string, { checked: boolean; week_no: number | null }>;   // pipeline_id → 체크
   upsells: { cust_name: string; proposal: string; amount: number; week_no: number | null }[];
   activities: { activity: string; plan: Record<string, number>; actual: Record<string, number> }[];
-  weeks: Record<string, { new_cnt: number; new_amt: number; keep_amt: number; tried: string; judged: string; changed: string }>;
+  weeks: Record<string, { new_cnt: number; new_amt: number; keep_amt: number; goal: string; tried: string; judged: string; changed: string }>;
   verdict: string; strategy: string; target_note: string;
 };
 export type PlanState = {
@@ -46,7 +46,7 @@ export async function savePlan(teamId: number, bm: string, st: PlanState, refs: 
     for (const u of (m.upsells ?? []).filter(u => u.cust_name?.trim())) upRows.push({ plan_id: pid, user_id: uid, cust_name: u.cust_name.trim(), proposal: u.proposal ?? '', amount: n(u.amount), week_no: u.week_no ?? null });
     const newAmt = Object.values(m.weeks ?? {}).reduce((a, x) => a + n(x.new_amt), 0);
     for (const a of (m.activities ?? []).filter(a => a.activity?.trim())) actRows.push({ plan_id: pid, user_id: uid, activity: a.activity.trim(), plan: a.plan ?? {}, actual: a.actual ?? {} });
-    for (const wk of weeks) { const x = m.weeks?.[String(wk.no)]; if (!x) continue; mwRows.push({ plan_id: pid, user_id: uid, week_no: wk.no, new_cnt: n(x.new_cnt), new_amt: n(x.new_amt), keep_amt: n(x.keep_amt), tried: x.tried ?? '', judged: x.judged ?? '', changed: x.changed ?? '' }); }
+    for (const wk of weeks) { const x = m.weeks?.[String(wk.no)]; if (!x) continue; mwRows.push({ plan_id: pid, user_id: uid, week_no: wk.no, new_cnt: n(x.new_cnt), new_amt: n(x.new_amt), keep_amt: n(x.keep_amt), goal: x.goal ?? '', tried: x.tried ?? '', judged: x.judged ?? '', changed: x.changed ?? '' }); }
     memberRows.push({ plan_id: pid, user_id: uid, renew_amt: renew, pipe_amt: pipe, new_amt: newAmt, upsell_amt: upsell, verdict: m.verdict ?? '', strategy: m.strategy ?? '', target_note: m.target_note ?? '' });
   }
   const weekRows = weeks.map(wk => { const x = st.weeks?.[String(wk.no)]; const reviewedBefore = mode === 'review' && wk.end < new Date().toISOString().slice(0, 10); return { plan_id: pid, week_no: wk.no, start_date: wk.start, end_date: wk.end, plan_margin: n(x?.plan_margin), issue: x?.issue ?? '', fix: x?.fix ?? '', focus: x?.focus ?? '', support: x?.support ?? '', risk: x?.risk ?? '', ...(reviewedBefore && (x?.issue || x?.fix) ? { reviewed_at: new Date().toISOString() } : {}) }; });
