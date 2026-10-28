@@ -85,7 +85,7 @@ export async function registerSlots(p: { codes: number[]; url: string; keyword: 
   if (!rows?.length) return { ok: false, msg: `슬롯 #${p.codes.join(',')} 을 ykreward 에서 찾지 못함`, n: 0 };
   const targets = rows.filter(x => x.opened_by && !x.dropped_at);
   if (!targets.length) return { ok: false, msg: '워크허브에서 연 슬롯만 등록할 수 있습니다 (opened_by 없음 또는 회수됨)', n: 0 };
-  const { data, error } = await sb.from('slots').update({ url: r.url, mid: r.mid, keyword: kw, cmp: '단독', cmp_checked: true, cmp_mid: null, registered_at: new Date().toISOString() })
+  const { data, error } = await sb.from('slots').update({ url: r.url, mid: r.mid, keyword: kw, cmp_checked: true, cmp_mid: null, registered_at: new Date().toISOString() })
     .in('id', targets.map(x => x.id)).select('code');
   if (error) return { ok: false, msg: 'ykreward 등록 실패: ' + error.message + (error.details ? ` (${error.details})` : ''), n: 0 };
   if (!data?.length) return { ok: false, msg: '등록 요청은 갔지만 바뀐 행이 없음 (ykreward 트리거/권한 확인 필요)', n: 0 };
