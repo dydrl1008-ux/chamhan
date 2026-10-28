@@ -20,3 +20,11 @@ export async function removeMyCustomer(id: number): Promise<R> {
   if (error) return { ok: false, msg: error.message }; if (!data?.length) return { ok: false, msg: '본인이 적은 고객만 뺄 수 있습니다' };
   revalidatePath('/calls'); return { ok: true, msg: '뺐음' };
 }
+
+export async function updateMyCustomer(id: number, name: string, phone: string, memo: string): Promise<R> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const n = name.trim(); if (!n) return { ok: false, msg: '업체명을 입력하세요' };
+  const { data, error } = await supabaseServer().from('my_customers').update({ name: n, phone: phone.replace(/[^\d-]/g, ''), memo: memo.trim() }).eq('id', id).select('id');
+  if (error) return { ok: false, msg: error.message }; if (!data?.length) return { ok: false, msg: '본인이 적은 고객만 수정할 수 있습니다' };
+  revalidatePath('/calls'); revalidatePath('/leads'); return { ok: true, msg: '수정됨' };
+}

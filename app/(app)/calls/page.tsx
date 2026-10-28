@@ -36,14 +36,15 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   const target = (lead || mgr) && searchParams.u && people.some(p => p.id === searchParams.u) ? searchParams.u : me.id;
   const who = people.find(p => p.id === target)?.name ?? me.name;
   const h = headers(); const origin = `${h.get('x-forwarded-proto') ?? 'https'}://${h.get('host')}`;
-  const cols = 'id,store_name,store_url,product_url,keyword,category,phone,score,score_why,status,note,contact_round,rank_now,rank_prev';
+  const cols = 'id,store_name,store_url,product_url,keyword,category,phone,score,score_why,status,note,contact_round,rank_now,rank_prev,next_contact_on';
   const [{ data: todayRows }, { data: follow }, { data: props }] = await Promise.all([
     sb.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', today).order('score', { ascending: false }).order('id', { ascending: true }).range(0, 4999),   // 점수 같으면 id 순 → 번호 고정
     sb.from('leads').select(cols).eq('assigned_to', target).eq('status', 'interested').neq('assigned_date', today).order('last_result_at', { ascending: false }).order('id', { ascending: true }).limit(50),
     sb.from('proposals').select('code,lead_id,title,views,last_view_at').eq('owner_id', target).order('last_view_at', { ascending: false, nullsFirst: false }).limit(300),
   ]);
   const { data: myC } = await sb.from('my_customers').select('id,name,phone,memo,created_at').eq('user_id', target).order('created_at', { ascending: false });
-  const t = (todayRows ?? []) as Lead[]; const left = t.filter(x => x.status === 'assigned').length;
+  const t0 = (todayRows ?? []) as Lead[]; const t = [...t0.filter(x => x.next_contact_on && x.next_contact_on <= today), ...t0.filter(x => !(x.next_contact_on && x.next_contact_on <= today))];   // 약속 팔로업 먼저
+  const left = t.filter(x => x.status === 'assigned').length;
   const ids = [...t, ...((follow ?? []) as Lead[])].map(x => x.id);
   const { data: hist } = ids.length ? await sb.from('lead_contacts').select('lead_id,user_id,round,status,note,created_at').in('lead_id', ids).order('created_at', { ascending: false }).limit(2000) : { data: [] as any[] };
   const uids = [...new Set((hist ?? []).map((h: any) => h.user_id).filter(Boolean))];
