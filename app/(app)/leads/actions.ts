@@ -24,7 +24,7 @@ export async function saveLeadSettings(fd: FormData): Promise<R> {
   const sb = supabaseServer();
   const rows = [
     { key: 'lead_score_weights', value: JSON.stringify(weights) },
-    { key: 'lead_daily_per_person', value: String(Math.max(1, Math.min(300, Number(fd.get('per')) || 30))) },
+    { key: 'lead_daily_per_person', value: String(Math.max(0, Math.min(100000, Math.floor(Number(fd.get('per')) || 0)))) },   // 0 = 제한 없음(균등)
     { key: 'lead_recontact_days', value: String(Math.max(1, Math.min(365, Number(fd.get('recontact')) || 30))) },
   ];
   const { error } = await sb.from('app_settings').upsert(rows, { onConflict: 'key' });

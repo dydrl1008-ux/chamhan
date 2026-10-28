@@ -91,7 +91,7 @@ export default function LeadsClient({ isAdmin, w, per, recontact, people, recipi
         <form action={fd => act(saveLeadSettings(fd))} style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8, alignItems: 'center' }}>
           {([['ad_running', '광고 집행 중'], ['rank_drop', '순위 하락'], ['review_vs_rank', '리뷰 100+인데 40위 밖'], ['new_store', '개설 6개월 이내'], ['has_phone', '전화번호 있음']] as const).map(([k, l]) =>
             <Fragment key={k}><label htmlFor={k}>{l} (점)</label><input id={k} name={k} type="number" defaultValue={w[k] ?? 0} disabled={!isAdmin} /></Fragment>)}
-          <label htmlFor="per">1인당 하루 배분 (곳)</label><input id="per" name="per" type="number" defaultValue={per} disabled={!isAdmin} />
+          <label htmlFor="per">1인당 하루 배분 (곳) — 0 = 제한 없이 인원수로 균등</label><input id="per" name="per" type="number" min={0} defaultValue={per} disabled={!isAdmin} />
           <label htmlFor="recontact">거절 후 다시 배분까지 (일)</label><input id="recontact" name="recontact" type="number" defaultValue={recontact} disabled={!isAdmin} />
           {isAdmin && <div style={{ gridColumn: '1 / -1', textAlign: 'right' }}><button className="btn sm" disabled={busy}>저장</button></div>}
         </form>
