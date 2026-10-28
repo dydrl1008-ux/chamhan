@@ -1,0 +1,58 @@
+// ykreward (리워드 슬롯 관리, 별도 Supabase 프로젝트) 연동 — 서비스 키로 서버에서만 호출
+//   env: YKREWARD_URL, YKREWARD_SERVICE_KEY
+import { createClient } from '@supabase/supabase-js';
+
+export const ykrReady = () => !!(process.env.YKREWARD_URL && process.env.YKREWARD_SERVICE_KEY);
+export const ykr = () => createClient(process.env.YKREWARD_URL!, process.env.YKREWARD_SERVICE_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
+const EMAIL_DOMAIN = 'ykad.local';                                   // ykreward 로그인 이메일 규칙: <아이디>@ykad.local
+
+export type Seller = { id: string; login_id: string; name: string; parent: string; manager: string | null; active: boolean; slots: number };
+export type SlotType = { name: string; sort_order: number };
+
+export async function listSellers(): Promise<Seller[]> {
+  const sb = ykr();
+  const [{ data: accs }, { data: cnt }] = await Promise.all([
+    sb.from('accounts').select('id,login_id,name,role,parent_id,manager,active').in('role', ['seller', 'agency', 'admin']).order('login_id'),
+    sb.from('slots').select('owner_id').is('stopped_at', null).is('dropped_at', null),
+  ]);
+  const byId = new Map((accs ?? []).map((a: any) => [a.id, a]));
+  const n = new Map<string, number>(); for (const s of cnt ?? []) n.set(s.owner_id, (n.get(s.owner_id) ?? 0) + 1);
+  return (accs ?? []).filter((a: any) => a.role === 'seller').map((a: any) => ({ id: a.id, login_id: a.login_id, name: a.name ?? '', parent: byId.get(a.parent_id)?.name ?? '', manager: a.manager, active: !!a.active, slots: n.get(a.id) ?? 0 }));
+}
+export async function listSlotTypes(): Promise<SlotType[]> {
+  const { data } = await ykr().from('slot_types').select('name,sort_order').eq('active', true).order('sort_order');
+  return (data ?? []) as SlotType[];
+}
+/** 셀러 계정 생성: auth 유저(<id>@ykad.local) + accounts 행. 소속(parent)은 app_settings.ykreward_parent_login */
+export async function createSeller(p: { login: string; password: string; name: string; parentLogin: string; manager: string }): Promise<{ ok: boolean; msg: string }> {
+  const login = p.login.trim().toLowerCase();
+  if (!/^[a-z0-9_]{3,30}$/.test(login)) return { ok: false, msg: '아이디는 영문 소문자·숫자·_ 3~30자' };
+  if (p.password.length < 4) return { ok: false, msg: '비밀번호는 4자 이상' };
+  const sb = ykr();
+  const { data: dup } = await sb.from('accounts').select('id').eq('login_id', login).maybeSingle();
+  if (dup) return { ok: false, msg: `이미 있는 아이디입니다: ${login}` };
+  const { data: parent } = await sb.from('accounts').select('id,role').eq('login_id', p.parentLogin).maybeSingle();
+  if (!parent) return { ok: false, msg: `소속 계정(${p.parentLogin})을 ykreward 에서 찾을 수 없습니다. 설정 › ykreward_parent_login 확인` };
+  const { data: u, error: e1 } = await sb.auth.admin.createUser({ email: `${login}@${EMAIL_DOMAIN}`, password: p.password, email_confirm: true, user_metadata: { login_id: login, created_by: 'workhub' } });
+  if (e1 || !u.user) return { ok: false, msg: `auth 생성 실패: ${e1?.message ?? ''}` };
+  const { error: e2 } = await sb.from('accounts').insert({ id: u.user.id, login_id: login, role: 'seller', parent_id: parent.id, name: p.name.trim() || login, manager: p.manager, active: true });
+  if (e2) { await sb.auth.admin.deleteUser(u.user.id).catch(() => {}); return { ok: false, msg: `계정 행 생성 실패: ${e2.message}` }; }
+  return { ok: true, msg: `셀러 계정 생성: ${login}` };
+}
+/** 슬롯 발급 (ykreward workhub_issue_slots) → 발급된 슬롯 code 목록 */
+export async function issueSlots(p: { login: string; count: number; dailyGoal: number; start: string; days: number; slotType: string; rewardName: string; openedBy: string }): Promise<{ ok: boolean; msg: string; codes: number[] }> {
+  const { data, error } = await ykr().rpc('workhub_issue_slots', { p_target_login: p.login, p_count: p.count, p_daily_goal: p.dailyGoal, p_start: p.start, p_days: p.days, p_slot_type: p.slotType || null, p_reward_name: p.rewardName || null, p_opened_by: p.openedBy });
+  if (error) return { ok: false, msg: error.message.replace(/^.*?: /, ''), codes: [] };
+  const codes = ((data ?? []) as any[]).map(s => Number(s.code)).filter(Boolean);
+  return { ok: true, msg: `${codes.length}개 발급`, codes };
+}
+/** 워크허브에서 연 슬롯 현황 (opened_by = 워크허브 직원 이름) */
+export type OpenedSlot = { id: string; code: number; owner: string; slot_type: string | null; reward_name: string | null; opened_by: string; keyword: string | null; mid: string | null; registered_at: string | null; stopped_at: string | null; dropped_at: string | null; start_date: string | null; end_date: string | null; daily_goal: number | null };
+export async function openedSlots(openedBy?: string[]): Promise<OpenedSlot[]> {
+  let q = ykr().from('slots').select('id,code,owner_id,slot_type,reward_name,opened_by,keyword,mid,registered_at,stopped_at,dropped_at,accounts!owner_id(login_id,name),slot_segments(start_date,end_date,daily_goal,seq)').not('opened_by', 'is', null).order('code', { ascending: false }).limit(1000);
+  if (openedBy?.length) q = q.in('opened_by', openedBy);
+  const { data, error } = await q;
+  if (error) throw new Error('ykreward 조회 실패: ' + error.message);
+  return (data ?? []).map((s: any) => { const segs = [...(s.slot_segments ?? [])].sort((a: any, b: any) => a.seq - b.seq); const acc = Array.isArray(s.accounts) ? s.accounts[0] : s.accounts;
+    return { id: s.id, code: Number(s.code), owner: acc ? `${acc.name ?? ''} (${acc.login_id})` : '', slot_type: s.slot_type, reward_name: s.reward_name, opened_by: s.opened_by, keyword: s.keyword, mid: s.mid, registered_at: s.registered_at, stopped_at: s.stopped_at, dropped_at: s.dropped_at, start_date: segs[0]?.start_date ?? null, end_date: segs.at(-1)?.end_date ?? null, daily_goal: segs[0]?.daily_goal ?? null }; });
+}
