@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   const clean = rows.slice(0, 2000).map((r: any) => ({
     store_name: String(r.store_name ?? r.name ?? '').trim(), store_url: String(r.store_url ?? r.url ?? ''), keyword: String(r.keyword ?? ''), category: String(r.category ?? ''),
     phone: String(r.phone ?? '').replace(/[^\d-]/g, ''), ad_running: r.ad_running == null ? true : !!r.ad_running,
-    rank_now: r.rank_now == null || r.rank_now === '' ? null : Number(r.rank_now), review_cnt: r.review_cnt == null || r.review_cnt === '' ? null : Number(r.review_cnt), opened_on: r.opened_on || null,
+    rank_now: r.rank_now == null || r.rank_now === '' ? null : Number(r.rank_now), rank_prev: r.rank_prev == null || r.rank_prev === '' ? null : Number(r.rank_prev), review_cnt: r.review_cnt == null || r.review_cnt === '' ? null : Number(r.review_cnt), opened_on: r.opened_on || null,
   }));
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
   const { data, error } = await sb.rpc('leads_upsert', { p_rows: clean, p_file: String(body.source ?? 'rank-ykad').slice(0, 200) });
