@@ -1,0 +1,11 @@
+name: rank-alert
+on:
+  schedule:
+    - cron: '0 3 * * *'     # 12:00 KST — ykreward 오전 수집 뒤
+    - cron: '0 10 * * *'    # 19:00 KST
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" https://chamhan.vercel.app/api/cron/rank

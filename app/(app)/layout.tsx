@@ -26,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavLink href="/">홈</NavLink>
 
         {mgmt && pendingCount > 0 && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
-        <NavGroup title="정산" hrefs={['/pending', '/settle-request', '/settle-refund', '/settle-customers', '/settle-data', '/settlement', '/slots-open']}>
+        <NavGroup title="정산" hrefs={['/pending', '/settle-request', '/settle-refund', '/settle-customers', '/settle-data', '/settlement', '/slots-open', '/rank-watch']}>
           {mgmt && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
           <NavLink href="/settle-request">정산요청</NavLink>
           <NavLink href="/settle-refund">환불요청</NavLink>
@@ -34,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {mgmt && <NavLink href="/settle-data">정산 데이터</NavLink>}
           {mgmt && <NavLink href="/settlement">정산 연동</NavLink>}
           <NavLink href="/slots-open">슬롯 오픈</NavLink>
+          <NavLink href="/rank-watch">순위 체크</NavLink>
         </NavGroup>
 
         <NavGroup title="직원 · 마진" hrefs={['/overview', '/employees', '/margin', '/kpi', '/users', '/criteria']}>

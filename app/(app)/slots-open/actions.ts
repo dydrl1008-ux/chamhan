@@ -66,3 +66,4 @@ export async function registerOne(fd: FormData): Promise<R> {
   if (g.ok) revalidatePath('/slots-open');
   return { ok: g.ok, msg: g.ok ? `#${code} 등록 완료` : g.msg };
 }
+
