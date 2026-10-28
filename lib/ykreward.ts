@@ -177,9 +177,13 @@ export type HistPt = { t: string; r: number | null };
 export async function watchHistory(ids: string[], days = 30): Promise<Record<string, HistPt[]>> {
   if (!ids.length) return {};
   const since = new Date(Date.now() - days * 864e5).toISOString(); const out: Record<string, HistPt[]> = {};
-  for (let i = 0; i < ids.length; i += 200) {
-    const { data } = await ykr().from('rank_watch_history').select('watch_id,rank,checked_at,checked_ok').in('watch_id', ids.slice(i, i + 200)).gte('checked_at', since).order('checked_at');
-    for (const h of data ?? []) { if (h.checked_ok === false) continue; (out[h.watch_id] ??= []).push({ t: h.checked_at, r: h.rank && h.rank > 0 ? h.rank : null }); }
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    for (let off = 0; ; off += 1000) {                       // PostgREST 1000행 제한 → 페이지로 전부
+      const { data } = await ykr().from('rank_watch_history').select('watch_id,rank,checked_at,checked_ok').in('watch_id', chunk).gte('checked_at', since).order('checked_at').range(off, off + 999);
+      for (const h of data ?? []) { if (h.checked_ok === false) continue; (out[h.watch_id] ??= []).push({ t: h.checked_at, r: h.rank && h.rank > 0 ? h.rank : null }); }
+      if (!data || data.length < 1000) break;
+    }
   }
   return out;
 }

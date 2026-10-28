@@ -69,23 +69,30 @@ function Spark({ pts }: { pts: HistPt[] }) {
   const last = pts.at(-1)!, first = pts.find(p => p.r != null); const up = last.r != null && first?.r != null && last.r < first.r;
   return <svg width={W} height={H} style={{ display: 'block' }}><path d={d} fill="none" stroke={up ? 'var(--ok)' : 'var(--bad)'} strokeWidth={1.5} />{pts.map((p, i) => p.r == null ? <circle key={i} cx={x(i)} cy={H - 2} r={2} fill="var(--bad)" /> : null)}<circle cx={x(pts.length - 1)} cy={y(last.r)} r={2.5} fill={up ? 'var(--ok)' : 'var(--bad)'} /></svg>;
 }
-/** 펼친 상세: 큰 차트 + 날짜별 순위 */
+/** 펼친 상세: 큰 차트(마우스 따라 순위 표시) + 날짜별 순위 */
 function History({ pts, w }: { pts: HistPt[]; w: WatchRow }) {
+  const [hi, setHi] = useState<number | null>(null);
   if (!pts.length) return <Empty>최근 30일 수집 기록 없음</Empty>;
-  const W = 720, H = 140, vals = pts.map(p => p.r).filter((r): r is number => r != null); const max = Math.max(...vals, 1), min = Math.min(...vals, max);
-  const y = (r: number | null) => r == null ? H - 8 : 10 + (max === min ? (H - 30) / 2 : ((r - min) / (max - min)) * (H - 30));
+  const W = 720, H = 150, vals = pts.map(p => p.r).filter((r): r is number => r != null); const max = Math.max(...vals, 1), min = Math.min(...vals, max);
+  const y = (r: number | null) => r == null ? H - 10 : 14 + (max === min ? (H - 40) / 2 : ((r - min) / (max - min)) * (H - 40));
   const x = (i: number) => 40 + (i / Math.max(1, pts.length - 1)) * (W - 60);
   const d = pts.map((p, i) => `${i === 0 || pts[i - 1].r == null || p.r == null ? 'M' : 'L'}${x(i)},${y(p.r)}`).join(' ');
   const best = Math.min(...vals), worst = Math.max(...vals);
-  const byDay = new Map<string, HistPt>(); for (const p of pts) byDay.set(p.t.slice(0, 10), p);   // 하루 마지막 수집
+  const byDay = new Map<string, HistPt>(); for (const p of pts) byDay.set(p.t.slice(0, 10), p);
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => { const b = e.currentTarget.getBoundingClientRect(); const px = (e.clientX - b.left) / b.width * W; let best = 0, bd = 1e9; pts.forEach((_, i) => { const dd = Math.abs(x(i) - px); if (dd < bd) { bd = dd; best = i; } }); setHi(best); };
+  const hp = hi != null ? pts[hi] : null;
   return <div style={{ display: 'grid', gap: 10 }}>
     <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>{w.image_url && <img src={w.image_url} alt="" width={64} height={64} style={{ borderRadius: 10, objectFit: 'cover', border: '1px solid var(--line)' }} />}<div><b>{w.title ?? w.keyword}</b><div className="cell-sub">{w.store ?? ''} · {w.keyword} · MID {w.mid ?? '-'}{w.url && <> · <a href={w.url} target="_blank" rel="noreferrer">상품 열기</a></>}</div></div><div className="cell-sub" style={{ marginLeft: 'auto' }}>30일 최고 <b style={{ color: 'var(--ok-ink)' }}>{best}</b> · 최저 <b style={{ color: 'var(--bad-ink)' }}>{worst}</b> · 수집 {pts.length}회</div></div>
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ maxWidth: W, background: '#fff', border: '1px solid var(--line)', borderRadius: 10 }}>
-      <text x={4} y={14} fontSize={10} fill="var(--muted)">{min}위</text><text x={4} y={H - 22} fontSize={10} fill="var(--muted)">{max}위</text>
-      <line x1={40} x2={W - 20} y1={H - 8} y2={H - 8} stroke="var(--line)" strokeDasharray="3 3" /><text x={4} y={H - 4} fontSize={10} fill="var(--bad-ink)">미노출</text>
-      <path d={d} fill="none" stroke="var(--accent)" strokeWidth={2} />
-      {pts.map((p, i) => <circle key={i} cx={x(i)} cy={y(p.r)} r={2.5} fill={p.r == null ? 'var(--bad)' : 'var(--accent)'}><title>{fmtKST(p.t)} · {p.r ?? '미노출'}</title></circle>)}
-    </svg>
+    <div style={{ position: 'relative', maxWidth: W }}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', background: '#fff', border: '1px solid var(--line)', borderRadius: 10, cursor: 'crosshair' }} onMouseMove={onMove} onMouseLeave={() => setHi(null)}>
+        <text x={4} y={18} fontSize={10} fill="var(--muted)">{min}위</text><text x={4} y={H - 24} fontSize={10} fill="var(--muted)">{max}위</text>
+        <line x1={40} x2={W - 20} y1={H - 10} y2={H - 10} stroke="var(--line)" strokeDasharray="3 3" /><text x={4} y={H - 6} fontSize={10} fill="var(--bad-ink)">미노출</text>
+        <path d={d} fill="none" stroke="var(--accent)" strokeWidth={2} />
+        {pts.map((p, i) => <circle key={i} cx={x(i)} cy={y(p.r)} r={hi === i ? 5 : 2.5} fill={p.r == null ? 'var(--bad)' : 'var(--accent)'} />)}
+        {hp && hi != null && <line x1={x(hi)} x2={x(hi)} y1={8} y2={H - 10} stroke="var(--muted)" strokeDasharray="2 2" />}
+      </svg>
+      {hp && hi != null && <div style={{ position: 'absolute', left: `${Math.min(88, x(hi) / W * 100)}%`, top: 6, transform: 'translateX(-50%)', background: '#111', color: '#fff', fontSize: 12, padding: '4px 8px', borderRadius: 6, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{fmtKST(hp.t)} · <b style={{ fontSize: 14 }}>{hp.r == null ? '미노출' : `${hp.r}위`}</b></div>}
+    </div>
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{[...byDay.entries()].reverse().map(([d2, p]) => <span key={d2} className="num" style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, background: p.r == null ? 'var(--bad-soft)' : 'var(--bg)', color: p.r == null ? 'var(--bad-ink)' : undefined }}>{d2.slice(5).replace('-', '/')} <b>{p.r ?? '미노출'}</b></span>)}</div>
   </div>;
 }
