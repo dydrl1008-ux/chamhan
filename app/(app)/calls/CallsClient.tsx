@@ -8,6 +8,8 @@ import { nameQuery, type LeadIndex } from '@/lib/leadIndex';
 
 export type Lead = { id: number; store_name: string; store_url: string; product_url?: string; keyword: string; category: string; phone: string; score: number; score_why: string; status: string; note: string; contact_round?: number; rank_now?: number | null; rank_prev?: number | null };
 export type Hist = { round: number; status: string; note: string; at: string; who: string };
+/** 01012345678 → 010-1234-5678, 0212345678 → 02-1234-5678 */
+const fmtPhone = (p: string) => { const d = (p ?? '').replace(/\D/g, ''); if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`; if (d.length === 10) return d.startsWith('02') ? `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`; if (d.length === 9 && d.startsWith('02')) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`; return p; };
 const ST: Record<string, string> = { called: '부재·연결 안 됨', interested: '관심', rejected: '거절', won: '계약', excluded: '제외' };
 export type Prop = { code: string; lead_id: number | null; title: string; views: number; last_view_at: string | null };
 
@@ -33,7 +35,7 @@ export default function CallsClient({ rows, props, origin, history = {}, indexes
             <div style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: 12 }}>{l.product_url && <a href={l.product_url} target="_blank" rel="noreferrer">상품 열기 →</a>}{l.keyword && <a href={`https://search.shopping.naver.com/search/all?query=${encodeURIComponent(l.keyword)}`} target="_blank" rel="noreferrer">‘{l.keyword}’ 검색 결과 →</a>}</div>
             {seen > 0 && <div style={{ fontWeight: 700, color: 'var(--wait-ink)', fontSize: 13, marginTop: 4 }}>🔥 제안서 {seen}회 열람 {kst(ps[0].last_view_at)}</div>}
           </td>
-          <td style={{ minWidth: 120 }}>{l.phone ? <a href={`tel:${l.phone}`}>{l.phone}</a> : <span className="muted">-</span>}</td>
+          <td style={{ minWidth: 130, whiteSpace: 'nowrap' }}>{l.phone ? <a href={`tel:${l.phone.replace(/\D/g, '')}`} className="num" style={{ fontSize: 15 }}>{fmtPhone(l.phone)}</a> : <span className="muted">-</span>}</td>
           <td style={{ minWidth: 200 }}>{l.rank_now != null && l.rank_prev != null && <div className="num" style={{ fontWeight: 800, fontSize: 15, color: l.rank_now > l.rank_prev ? 'var(--bad-ink)' : 'var(--ok-ink)' }}>{l.rank_prev}위 → {l.rank_now >= 120 ? `${l.rank_now - 1}위 밖` : `${l.rank_now}위`}</div>}<div className="cell-sub">{l.score_why || '-'}</div><div className="cell-sub" title="광고 집행 30 · 순위 하락 25 · 리뷰 많은데 40위 밖 20 · 개설 6개월 이내 15 · 전화 있음 10 — 높을수록 먼저 배분">우선순위 {l.score}</div></td>
           <td style={{ minWidth: 170 }}>{(() => { const x = indexes[l.id]; if (!x) { const qn = nameQuery(l.category || '') || l.keyword; return <button type="button" className="btn ghost xs" disabled={busy || !qn} title={`‘${qn}’ 로 시크릿 지수 조회 (상품명 검색이라 100위 밖도 잡힘 · 하루 한도 차감 · 24시간 캐시)`} onClick={() => start(async () => { const r2 = await nscSearch(qn); notify(r2.ok ? `‘${qn}’ 지수 ${r2.msg}` : r2.msg, r2.ok ? 'ok' : 'bad'); if (r2.ok) r.refresh(); })}>지수 조회</button>; }
             const S = ({ k, v }: { k: string; v: number }) => <span style={{ display: 'inline-block', marginRight: 6 }}><span className="cell-sub" style={{ display: 'inline' }}>{k}</span> <b className="num">{v}</b></span>;
