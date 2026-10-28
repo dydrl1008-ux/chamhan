@@ -187,3 +187,32 @@ export async function watchHistory(ids: string[], days = 30): Promise<Record<str
   }
   return out;
 }
+
+/** 순위 체크 등록 — 내 ykreward 계정 담당으로 상품 URL + 키워드 여러 개. 중복(같은 MID·키워드)은 건너뜀. 수집 큐에 바로 넣음 */
+export async function addWatch(p: { ownerLogin: string; url: string; keywords: string[]; group: string; memo: string }): Promise<{ ok: boolean; msg: string; n: number }> {
+  const r = parseMid(p.url); if (!r.ok) return { ok: false, msg: r.msg, n: 0 };
+  const kws = [...new Set(p.keywords.map(k => k.trim()).filter(Boolean))]; if (!kws.length) return { ok: false, msg: '키워드를 입력하세요', n: 0 };
+  const sb = ykr();
+  const { data: acc } = await sb.from('accounts').select('id').eq('login_id', p.ownerLogin).maybeSingle(); if (!acc) return { ok: false, msg: 'ykreward 계정을 찾을 수 없습니다', n: 0 };
+  const { data: dup } = await sb.from('rank_watch').select('keyword').eq('owner_id', acc.id).eq('mid', r.mid).in('keyword', kws);
+  const have = new Set((dup ?? []).map((x: any) => x.keyword)); const todo = kws.filter(k => !have.has(k));
+  if (!todo.length) return { ok: false, msg: '이미 등록된 상품·키워드입니다', n: 0 };
+  const { data: mx } = await sb.from('rank_watch').select('sort_order').eq('owner_id', acc.id).order('sort_order', { ascending: false }).limit(1);
+  let so = Number(mx?.[0]?.sort_order ?? 0);
+  const group = p.group.trim() && p.group.trim() !== GROUP_NONE ? p.group.trim() : null;
+  const { data: ins, error } = await sb.from('rank_watch').insert(todo.map(k => ({ owner_id: acc.id, mid: r.mid, url: r.url, keyword: k, group_name: group, memo: p.memo.trim() || null, active: true, cmp_checked: true, sort_order: (so += 100) }))).select('id,keyword,mid,url');
+  if (error) return { ok: false, msg: '등록 실패: ' + error.message, n: 0 };
+  await sb.from('rank_watch_queue').upsert((ins ?? []).map((w: any) => ({ watch_id: w.id, keyword: w.keyword, mid: w.mid, url: w.url, status: 'pending', tries: 0 })), { onConflict: 'watch_id' });
+  return { ok: true, msg: `${ins?.length ?? 0}개 등록 — 곧 첫 순위가 수집됩니다${have.size ? ` (이미 있던 ${have.size}개 제외)` : ''}`, n: ins?.length ?? 0 };
+}
+/** 업체(그룹) 이동 · 이름 변경 */
+export async function setWatchGroup(ids: string[], group: string): Promise<{ ok: boolean; msg: string }> {
+  const g = group.trim() && group.trim() !== GROUP_NONE ? group.trim() : null;
+  const { error } = await ykr().from('rank_watch').update({ group_name: g }).in('id', ids);
+  return error ? { ok: false, msg: error.message } : { ok: true, msg: `${ids.length}개 → ${g ?? GROUP_NONE}` };
+}
+/** 순위 체크 항목 삭제(비활성) */
+export async function removeWatch(ids: string[]): Promise<{ ok: boolean; msg: string }> {
+  const { error } = await ykr().from('rank_watch').update({ active: false }).in('id', ids);
+  return error ? { ok: false, msg: error.message } : { ok: true, msg: `${ids.length}개 삭제` };
+}
