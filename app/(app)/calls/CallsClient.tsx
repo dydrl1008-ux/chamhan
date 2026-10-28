@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
-import { setResult, makeTrackLink } from './actions';
+import { setResult, makeTrackLink, undoResult } from './actions';
 
 export type Lead = { id: number; store_name: string; store_url: string; product_url?: string; keyword: string; category: string; phone: string; score: number; score_why: string; status: string; note: string; contact_round?: number; rank_now?: number | null; rank_prev?: number | null };
 export type Hist = { round: number; status: string; note: string; at: string; who: string };
@@ -38,6 +38,7 @@ export default function CallsClient({ rows, props, origin, history = {} }: { row
               {BTN.map(([k, label]) => <button key={k} className={'btn xs ' + (l.status === k ? '' : 'ghost')} disabled={busy}
                 onClick={() => start(async () => { const x = await setResult(l.id, k, note[l.id] ?? l.note); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); })}>{label}</button>)}
             </div>
+            {l.status !== 'assigned' && <div className="cell-sub" style={{ marginTop: 4 }}>오늘 다른 버튼을 누르면 차수 안 올라가고 결과만 바뀜 · <button type="button" className="help" style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }} disabled={busy} onClick={() => { if (confirm('오늘 남긴 결과를 지우고 미기록 상태로 되돌릴까요?')) start(async () => { const x = await undoResult(l.id); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }); }}>↩ 되돌리기</button></div>}
             <input style={{ marginTop: 6, width: '100%' }} placeholder="메모 (통화 내용·다음 연락일)" defaultValue={l.note} onChange={e => setNote(s => ({ ...s, [l.id]: e.target.value }))} />
             <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               {ps.map(p => <button key={p.code} className="btn ghost xs" onClick={() => copyLink(p.code)}>링크 복사 · {p.views}회</button>)}

@@ -27,3 +27,12 @@ export async function makeTrackLink(leadId: number | null, title: string, url: s
   revalidatePath('/calls');
   return { ok: true, msg: '추적 링크 생성', code };
 }
+
+/** 되돌리기 — 오늘 내가 남긴 마지막 결과 삭제 (차수 -1, 다시 오늘 리스트로) */
+export async function undoResult(id: number): Promise<R> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const { error } = await supabaseServer().rpc('lead_undo_result', { p_id: id });
+  if (error) return { ok: false, msg: error.message.replace(/^.*?: /, '') };
+  revalidatePath('/calls'); revalidatePath('/leads');
+  return { ok: true, msg: '되돌림 — 다시 오늘 리스트에 있음' };
+}
