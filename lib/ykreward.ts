@@ -9,25 +9,30 @@ const EMAIL_DOMAIN = 'ykad.local';                                   // ykreward
 export type Seller = { id: string; login_id: string; name: string; parent: string; manager: string | null; active: boolean; slots: number };
 export type SlotType = { name: string; sort_order: number };
 
-export async function listSellers(): Promise<Seller[]> {
-  const sb = ykr();
-  const [{ data: accs }, { data: cnt }] = await Promise.all([
-    sb.from('accounts').select('id,login_id,name,role,parent_id,manager,active').in('role', ['seller', 'agency', 'admin']).order('login_id'),
-    sb.from('slots').select('owner_id').is('stopped_at', null).is('dropped_at', null),
+/** 셀러 아이디 하나 조회 (목록은 안 보여줌 — 각자 자기 고객만) */
+export async function findSeller(login: string): Promise<Seller | null> {
+  const sb = ykr(); const id = login.trim().toLowerCase(); if (!id) return null;
+  const { data: a } = await sb.from('accounts').select('id,login_id,name,role,parent_id,manager,active').eq('login_id', id).maybeSingle();
+  if (!a || a.role !== 'seller') return null;
+  const [{ data: parent }, { count }] = await Promise.all([
+    a.parent_id ? sb.from('accounts').select('name').eq('id', a.parent_id).maybeSingle() : Promise.resolve({ data: null as any }),
+    sb.from('slots').select('id', { count: 'exact', head: true }).eq('owner_id', a.id).is('stopped_at', null).is('dropped_at', null),
   ]);
-  const byId = new Map((accs ?? []).map((a: any) => [a.id, a]));
-  const n = new Map<string, number>(); for (const s of cnt ?? []) n.set(s.owner_id, (n.get(s.owner_id) ?? 0) + 1);
-  return (accs ?? []).filter((a: any) => a.role === 'seller').map((a: any) => ({ id: a.id, login_id: a.login_id, name: a.name ?? '', parent: byId.get(a.parent_id)?.name ?? '', manager: a.manager, active: !!a.active, slots: n.get(a.id) ?? 0 }));
+  return { id: a.id, login_id: a.login_id, name: a.name ?? '', parent: parent?.name ?? '', manager: a.manager, active: !!a.active, slots: count ?? 0 };
 }
-export async function listSlotTypes(): Promise<SlotType[]> {
+export const DEFAULT_BLOCK = '아센도,리얼,세이브';
+export const parseBlock = (v: string | null | undefined) => (v ?? DEFAULT_BLOCK).split(',').map(x => x.trim()).filter(Boolean);
+export const isBlocked = (type: string, block: string[]) => block.some(b => type.replace(/\s/g, '').includes(b.replace(/\s/g, '')));
+/** 발급 가능한 유형만 (설정 ykreward_block_types 에 걸리는 유형 제외) */
+export async function listSlotTypes(block: string[]): Promise<SlotType[]> {
   const { data } = await ykr().from('slot_types').select('name,sort_order').eq('active', true).order('sort_order');
-  return (data ?? []) as SlotType[];
+  return ((data ?? []) as SlotType[]).filter(t => !isBlocked(t.name, block));
 }
 /** 셀러 계정 생성: auth 유저(<id>@ykad.local) + accounts 행. 소속(parent)은 app_settings.ykreward_parent_login */
 export async function createSeller(p: { login: string; password: string; name: string; parentLogin: string; manager: string }): Promise<{ ok: boolean; msg: string }> {
   const login = p.login.trim().toLowerCase();
   if (!/^[a-z0-9_]{3,30}$/.test(login)) return { ok: false, msg: '아이디는 영문 소문자·숫자·_ 3~30자' };
-  if (p.password.length < 4) return { ok: false, msg: '비밀번호는 4자 이상' };
+  if (p.password.length < 6) return { ok: false, msg: '비밀번호는 6자 이상' };
   const sb = ykr();
   const { data: dup } = await sb.from('accounts').select('id').eq('login_id', login).maybeSingle();
   if (dup) return { ok: false, msg: `이미 있는 아이디입니다: ${login}` };
@@ -55,4 +60,22 @@ export async function openedSlots(openedBy?: string[]): Promise<OpenedSlot[]> {
   if (error) throw new Error('ykreward 조회 실패: ' + error.message);
   return (data ?? []).map((s: any) => { const segs = [...(s.slot_segments ?? [])].sort((a: any, b: any) => a.seq - b.seq); const acc = Array.isArray(s.accounts) ? s.accounts[0] : s.accounts;
     return { id: s.id, code: Number(s.code), owner: acc ? `${acc.name ?? ''} (${acc.login_id})` : '', slot_type: s.slot_type, reward_name: s.reward_name, opened_by: s.opened_by, keyword: s.keyword, mid: s.mid, registered_at: s.registered_at, stopped_at: s.stopped_at, dropped_at: s.dropped_at, start_date: segs[0]?.start_date ?? null, end_date: segs.at(-1)?.end_date ?? null, daily_goal: segs[0]?.daily_goal ?? null }; });
+}
+
+/** 상품 URL → MID (스마트스토어·브랜드스토어 상품 페이지만, 가격비교(catalog)는 ykreward 에서) */
+export function parseMid(url: string): { ok: true; mid: string; url: string } | { ok: false; msg: string } {
+  const u = url.trim(); if (!u) return { ok: false, msg: '상품 URL이 없습니다' };
+  const m = u.match(/^https?:\/\/(?:m\.)?(?:smartstore|brand)\.naver\.com\/[^/?#]+\/products\/(\d+)/i);
+  if (m) return { ok: true, mid: m[1], url: u.split(/[?#]/)[0] };
+  if (/shopping\.naver\.com\/.*catalog\/\d+/i.test(u)) return { ok: false, msg: '가격비교(카탈로그) 상품은 ykreward 에서 등록해 주세요' };
+  return { ok: false, msg: '스마트스토어·브랜드스토어 상품 URL(…/products/숫자)만 등록할 수 있습니다' };
+}
+/** 발급된 슬롯에 상품·키워드 등록 — 워크허브가 연 슬롯(opened_by 있음)만. 트리거가 수집 큐에 넣음 */
+export async function registerSlots(p: { codes: number[]; url: string; keyword: string }): Promise<{ ok: boolean; msg: string; n: number }> {
+  const r = parseMid(p.url); if (!r.ok) return { ok: false, msg: r.msg, n: 0 };
+  const kw = p.keyword.trim(); if (!kw) return { ok: false, msg: '키워드를 입력하세요', n: 0 };
+  const { data, error } = await ykr().from('slots').update({ url: r.url, mid: r.mid, keyword: kw, cmp: '단독', cmp_checked: true, cmp_mid: null, registered_at: new Date().toISOString() })
+    .in('code', p.codes).not('opened_by', 'is', null).is('dropped_at', null).select('code');
+  if (error) return { ok: false, msg: 'ykreward 등록 실패: ' + error.message, n: 0 };
+  return { ok: true, msg: `${data?.length ?? 0}개 슬롯에 등록 (MID ${r.mid} · ${kw})`, n: data?.length ?? 0 };
 }
