@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   let body: any; try { body = await req.json(); } catch { return NextResponse.json({ ok: false, msg: 'JSON 아님' }, { status: 400 }); }
   const rows = Array.isArray(body?.rows) ? body.rows : []; if (!rows.length) return NextResponse.json({ ok: false, msg: 'rows 비어 있음' }, { status: 400 });
   const clean = rows.slice(0, 2000).map((r: any) => ({
-    store_name: String(r.store_name ?? r.name ?? '').trim(), store_url: String(r.store_url ?? r.url ?? ''), keyword: String(r.keyword ?? ''), category: String(r.category ?? ''),
+    store_name: String(r.store_name ?? r.name ?? '').trim(), store_url: String(r.store_url ?? ''), product_url: String(r.product_url ?? r.url ?? ''), keyword: String(r.keyword ?? ''), category: String(r.category ?? ''),
     phone: String(r.phone ?? '').replace(/[^\d-]/g, ''), ad_running: r.ad_running == null ? true : !!r.ad_running,
     rank_now: r.rank_now == null || r.rank_now === '' ? null : Number(r.rank_now), rank_prev: r.rank_prev == null || r.rank_prev === '' ? null : Number(r.rank_prev), review_cnt: r.review_cnt == null || r.review_cnt === '' ? null : Number(r.review_cnt), opened_on: r.opened_on || null,
   }));

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { setResult, makeTrackLink } from './actions';
 
-export type Lead = { id: number; store_name: string; store_url: string; keyword: string; category: string; phone: string; score: number; score_why: string; status: string; note: string; contact_round?: number; rank_now?: number | null; rank_prev?: number | null };
+export type Lead = { id: number; store_name: string; store_url: string; product_url?: string; keyword: string; category: string; phone: string; score: number; score_why: string; status: string; note: string; contact_round?: number; rank_now?: number | null; rank_prev?: number | null };
 export type Hist = { round: number; status: string; note: string; at: string; who: string };
 const ST: Record<string, string> = { called: '부재·연결 안 됨', interested: '관심', rejected: '거절', won: '계약', excluded: '제외' };
 export type Prop = { code: string; lead_id: number | null; title: string; views: number; last_view_at: string | null };
@@ -25,8 +25,9 @@ export default function CallsClient({ rows, props, origin, history = {} }: { row
         const ps = byLead[l.id] ?? []; const seen = ps.reduce((a, p) => a + p.views, 0);
         return <tr key={l.id} style={{ verticalAlign: 'top', background: seen ? 'var(--wait-soft)' : undefined }}>
           <td style={{ minWidth: 190 }}>
-            <div className="cell-main">{l.store_url ? <a href={l.store_url.startsWith('http') ? l.store_url : `https://${l.store_url}`} target="_blank" rel="noreferrer">{l.store_name}</a> : l.store_name}</div>
+            <div className="cell-main">{(l.product_url || l.store_url) ? <a href={(l.product_url || l.store_url).startsWith('http') ? (l.product_url || l.store_url) : `https://${l.product_url || l.store_url}`} target="_blank" rel="noreferrer">{l.store_name}</a> : l.store_name}</div>
             <div className="cell-sub">{[l.keyword, l.category].filter(Boolean).join(' · ')}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: 12 }}>{l.product_url && <a href={l.product_url} target="_blank" rel="noreferrer">상품 열기 →</a>}{l.keyword && <a href={`https://search.shopping.naver.com/search/all?query=${encodeURIComponent(l.keyword)}`} target="_blank" rel="noreferrer">‘{l.keyword}’ 검색 결과 →</a>}</div>
             {seen > 0 && <div style={{ fontWeight: 700, color: 'var(--wait-ink)', fontSize: 13, marginTop: 4 }}>🔥 제안서 {seen}회 열람 {kst(ps[0].last_view_at)}</div>}
           </td>
           <td style={{ minWidth: 120 }}>{l.phone ? <a href={`tel:${l.phone}`}>{l.phone}</a> : <span className="muted">-</span>}</td>

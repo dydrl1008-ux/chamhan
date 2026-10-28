@@ -7,7 +7,8 @@ rank-ykad(네이버쇼핑랭크 폴더) → 워크허브 콜 리스트 푸시
 워크허브에서 같은 몰은 하나로 합쳐지고(전화 > 몰명), 점수 = 광고 +30 · 하락 +25 · 전화 +10 → 매일 아침 직원에게 배분
 
 사용:  python push_leads.py                → 하락 리드 전송
-       python push_leads.py --days 14     → 14일 전과 비교
+       python push_leads.py --days 7      → 7일 전과 비교 (기본 1일 = 어제 대비)
+       python push_leads.py --no-gone     → 200위 밖으로 사라진 건 제외 (노출 중 하락만)
        python push_leads.py --dry         → 보내지 않고 목록만 출력
        python push_leads.py --all-ads     → 하락 여부 상관없이 전화 있는 광고주 전부 (처음 한 번 채울 때)
 환경변수: WORKHUB_CRON_SECRET (Vercel CRON_SECRET), WORKHUB_URL (기본 https://chamhan.vercel.app)
@@ -23,7 +24,7 @@ MIN_DROP = 10       # 이만큼 이상 밀렸을 때 (미노출은 무조건)
 GONE_RANK = 200     # 스냅샷에 없으면 미노출 → 200위로 기록
 MIN_ROWS = 40       # 스냅샷에 이만큼은 있어야 '제대로 수집된 것'으로 봄 (적으면 비교 안 함)
 MAX_AGE = 30        # 마지막 완료 스냅샷이 이 일수보다 오래된 키워드는 건너뜀 (수집은 순차라 당일 완료 안 돼도 됨)
-LIMIT = 300         # 한 번에 보낼 최대 건수 (광고 집행 · 많이 떨어진 순)
+LIMIT = 5000        # 한 번에 보낼 최대 건수
 FRESH_DAYS = 3      # 최신 스냅샷이 이보다 오래된 키워드는 제외 (수집 중단)
 MIN_ROWS = 40       # 최신 스냅샷 행 수가 이보다 적으면 수집 실패로 보고 제외
 MAX_GONE_RATIO = 0.5  # 1페이지 몰 중 절반 넘게 사라졌으면 수집 이상으로 보고 제외
@@ -38,9 +39,10 @@ def env(k, d=''):
     return d
 
 def store_base(url):
-    """상품 URL → 스토어 주소 (워크허브 중복 판정 키). 스마트스토어·브랜드스토어만, 나머지는 빈값"""
-    m = re.match(r'^(https?://(?:m\.)?(?:smartstore|brand)\.naver\.com/[^/?#]+)', url or '')
-    return m.group(1) if m else ''
+    """상품 URL → 스토어 주소. 네이버쇼핑 결과의 'smartstore.naver.com/main/…' 은 스토어명이 아니라서 제외 → 그땐 빈값(전화번호로 중복 판정)"""
+    m = re.match(r'^(https?://(?:m\.)?(?:smartstore|brand)\.naver\.com/([^/?#]+))', url or '')
+    if not m or m.group(2).lower() in ('main', 'inflow', 'products'): return ''
+    return m.group(1)
 
 def phone_ok(p):
     d = re.sub(r'\D', '', p or '')
@@ -117,7 +119,7 @@ def drop_leads(days, diag=False):
             if not phone: stat['no_phone'] += 1; continue
             r = rows.get(phone)
             if r is None or (nrank - prank) > (r['rank_now'] - r['rank_prev']):
-                rows[phone] = dict(store_name=mall, store_url=store_base(purl), keyword=kw, phone=phone, ad_running=mall in ad_names,
+                rows[phone] = dict(store_name=mall, store_url=store_base(purl), product_url=(purl or '').split('?')[0][:500], keyword=kw, phone=phone, ad_running=mall in ad_names,
                                    rank_now=nrank, rank_prev=prank, category=pname[:40] if pname else '', _cov=max_now, _at=cur_date)
     if diag:
         print(f"키워드 {stat['kw']} · 비교 사용 {stat['used']} · 최신 스냅샷 {MAX_AGE}일 넘어 제외 {stat['stale']} · 스냅샷 부족 {stat['thin']} · 사라진 몰 {stat['gone_total']} · 전화 없어 제외 {stat['no_phone']}")
@@ -153,10 +155,12 @@ def push(rows, source):
     return tot
 
 if __name__ == '__main__':
-    args = sys.argv[1:]; days = int(args[args.index('--days') + 1]) if '--days' in args else 7
+    args = sys.argv[1:]; days = int(args[args.index('--days') + 1]) if '--days' in args else 1
     if '--all-ads' in args: rows, src = all_ad_leads(), 'rank-ykad 광고주 전체'
-    else: rows, src = drop_leads(days, diag=True), f'rank-ykad 1페이지 하락 ({days}일 비교)'
-    rows.sort(key=lambda r: (r.get('_at', ''), r['ad_running'], (r['rank_now'] or 0) - (r['rank_prev'] or 0)), reverse=True)   # 최근 수집된 키워드 → 광고 → 하락폭
+    else: rows, src = drop_leads(days, diag=True), 'rank-ykad 1페이지 하락 (' + ('어제' if days == 1 else f'{days}일 전') + ' 대비)'
+    if '--no-gone' in args: rows = [r for r in rows if r['rank_now'] != GONE_RANK]
+    # 정렬: 최근 수집된 키워드 → 아직 노출 중인 하락(확실) → 사라진 것(리워드 종료 추정) → 광고 → 하락폭
+    rows.sort(key=lambda r: (r.get('_at', ''), r['rank_now'] != GONE_RANK, r['ad_running'], (r['rank_now'] or 0) - (r['rank_prev'] or 0)), reverse=True)
     limit = int(args[args.index('--limit') + 1]) if '--limit' in args else LIMIT
     if len(rows) > limit: print(f'{len(rows)}건 중 상위 {limit}건만 (광고 집행 → 하락폭 순, --limit 로 조정)'); rows = rows[:limit]
     print(f'{src}: {len(rows)}건')

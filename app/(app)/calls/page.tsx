@@ -35,7 +35,7 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   const target = (lead || mgr) && searchParams.u && people.some(p => p.id === searchParams.u) ? searchParams.u : me.id;
   const who = people.find(p => p.id === target)?.name ?? me.name;
   const h = headers(); const origin = `${h.get('x-forwarded-proto') ?? 'https'}://${h.get('host')}`;
-  const cols = 'id,store_name,store_url,keyword,category,phone,score,score_why,status,note,contact_round,rank_now,rank_prev';
+  const cols = 'id,store_name,store_url,product_url,keyword,category,phone,score,score_why,status,note,contact_round,rank_now,rank_prev';
   const [{ data: todayRows }, { data: follow }, { data: props }] = await Promise.all([
     sb.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', today).order('score', { ascending: false }).range(0, 4999),
     sb.from('leads').select(cols).eq('assigned_to', target).eq('status', 'interested').neq('assigned_date', today).order('last_result_at', { ascending: false }).limit(50),
