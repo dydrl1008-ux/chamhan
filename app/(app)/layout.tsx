@@ -28,15 +28,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavLink href="/">홈</NavLink>
 
         {mgmt && pendingCount > 0 && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
-        <NavGroup title="정산" hrefs={['/pending', '/settle-request', '/settle-refund', '/settle-customers', '/settle-data', '/settlement', '/slots-open', '/rank-watch']}>
+        <NavGroup title="정산" hrefs={['/pending', '/settle-request', '/settle-refund', '/settle-customers', '/settle-data', '/settlement']}>
           {mgmt && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
           <NavLink href="/settle-request">정산요청</NavLink>
           <NavLink href="/settle-refund">환불요청</NavLink>
           {mgmt && <NavLink href="/settle-customers">고객 등록 · 배정</NavLink>}
           {mgmt && <NavLink href="/settle-data">정산 데이터</NavLink>}
           {mgmt && <NavLink href="/settlement">정산 연동</NavLink>}
-          <NavLink href="/slots-open">슬롯 오픈</NavLink>
-          <NavLink href="/rank-watch">순위 체크</NavLink>
         </NavGroup>
 
         <NavGroup title="직원 · 마진" hrefs={['/overview', '/employees', '/margin', '/kpi', '/users', '/criteria']}>
@@ -65,9 +63,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/products">상품 안내 · 접수</NavLink>
         </NavGroup>
 
-        <NavGroup title="영업 · 리드" hrefs={['/calls', '/ai/leads', '/renewals', '/notifications']}>
+        <NavGroup title="리워드" hrefs={['/slots-open', '/rank-watch']}>
+          <NavLink href="/slots-open">슬롯 오픈</NavLink>
+          <NavLink href="/rank-watch">순위 체크</NavLink>
+        </NavGroup>
+
+        <NavGroup title="영업 · 리드" hrefs={['/calls', '/leads', '/renewals', '/notifications']}>
           {!p.is_mgmt && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
-          {lead && <NavLink href="/ai/leads">콜 리스트 관리</NavLink>}
+          {lead && <NavLink href="/leads">콜 리스트 관리</NavLink>}
           <NavLink href="/renewals">이탈 고객</NavLink>
           <NavLink href="/notifications">알림{notiBadge}</NavLink>
         </NavGroup>
