@@ -38,8 +38,8 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   const h = headers(); const origin = `${h.get('x-forwarded-proto') ?? 'https'}://${h.get('host')}`;
   const cols = 'id,store_name,store_url,product_url,keyword,category,phone,score,score_why,status,note,contact_round,rank_now,rank_prev';
   const [{ data: todayRows }, { data: follow }, { data: props }] = await Promise.all([
-    sb.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', today).order('score', { ascending: false }).range(0, 4999),
-    sb.from('leads').select(cols).eq('assigned_to', target).eq('status', 'interested').neq('assigned_date', today).order('last_result_at', { ascending: false }).limit(50),
+    sb.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', today).order('score', { ascending: false }).order('id', { ascending: true }).range(0, 4999),   // 점수 같으면 id 순 → 번호 고정
+    sb.from('leads').select(cols).eq('assigned_to', target).eq('status', 'interested').neq('assigned_date', today).order('last_result_at', { ascending: false }).order('id', { ascending: true }).limit(50),
     sb.from('proposals').select('code,lead_id,title,views,last_view_at').eq('owner_id', target).order('last_view_at', { ascending: false, nullsFirst: false }).limit(300),
   ]);
   const { data: myC } = await sb.from('my_customers').select('id,name,phone,memo,created_at').eq('user_id', target).order('created_at', { ascending: false });
@@ -49,7 +49,7 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   const uids = [...new Set((hist ?? []).map((h: any) => h.user_id).filter(Boolean))];
   const { data: names } = uids.length ? await sb.from('profiles').select('id,name').in('id', uids) : { data: [] as any[] };
   const nm = Object.fromEntries((names ?? []).map((x: any) => [x.id, x.name]));
-  const idx = await leadIndexes([...t, ...((follow ?? []) as Lead[])].map(x => ({ id: x.id, keyword: x.keyword, product_url: x.product_url, store_name: x.store_name })));
+  const idx = await leadIndexes([...t, ...((follow ?? []) as Lead[])].map(x => ({ id: x.id, keyword: x.keyword, product_url: x.product_url, store_name: x.store_name, category: x.category })));
   const history: Record<number, Hist[]> = {}; (hist ?? []).forEach((h: any) => { (history[h.lead_id] ??= []).push({ round: h.round, status: h.status, note: h.note, at: h.created_at, who: nm[h.user_id] ?? '' }); });
   return (
     <div style={{ display: 'grid', gap: 20 }}>

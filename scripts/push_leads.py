@@ -125,7 +125,7 @@ def drop_leads(days, diag=False):
             r = rows.get(phone)
             if r is None or (nrank - prank) > (r['rank_now'] - r['rank_prev']):
                 rows[phone] = dict(store_name=mall, store_url=store_base(purl), product_url=(purl or '').split('?')[0][:500], keyword=kw, phone=phone, ad_running=mall in ad_names,
-                                   rank_now=nrank, rank_prev=prank, category=pname[:40] if pname else '', _cov=max_now, _at=cur_date)
+                                   rank_now=nrank, rank_prev=prank, category=pname[:80] if pname else '', _cov=max_now, _at=cur_date)
     if diag:
         print(f"키워드 {stat['kw']} · 비교 사용 {stat['used']} · 최신 스냅샷 {MAX_AGE}일 넘어 제외 {stat['stale']} · 스냅샷 부족 {stat['thin']} · 사라진 몰 {stat['gone_total']} · 전화 없어 제외 {stat['no_phone']}")
         # 최근 스냅샷 상태 한눈에
