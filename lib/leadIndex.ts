@@ -1,7 +1,7 @@
 // 콜 리스트용 상품 지수 — 시크릿 지수(nsc_searches) 캐시에서 리드의 키워드·상품을 찾아 붙임 (새 조회 없음)
 import { createClient } from '@supabase/supabase-js';
 const admin = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
-export type LeadIndex = { rank: number | null; total: number | null; hit: number; sale: number; quality: number; review: number; reviewCount: number; diag: string | null; fetched_at: string; matched: 'product' | 'mall' };
+export type LeadIndex = { rank: number | null; total: number | null; hit: number; sale: number; quality: number; review: number; reviewCount: number; diag: string | null; fetched_at: string; matched: 'product' | 'mall'; by: 'name' | 'keyword' };
 const norm = (t: string) => (t ?? '').toLowerCase().replace(/\s|\(주\)|주식회사|스토어|store|공식|몰$/g, '');
 const pid = (url: string) => url.match(/\/products\/(\d+)/)?.[1] ?? null;
 /** leads(keyword, product_url, store_name) → id별 지수. 캐시된 키워드만 */
@@ -24,7 +24,7 @@ export async function leadIndexes(rows: { id: number; keyword: string; product_u
         if (!p) { p = prods.find(x => norm(String(x.mallName ?? '')) === norm(r.store_name)); how = 'mall'; }
         if (!p) continue;
         const n = (v: unknown) => Number(v ?? 0) || 0;
-        out[r.id] = { rank: n(p.rank) || null, total: p['종합점수'] != null ? n(p['종합점수']) : (p.prediction?.['종합점수'] != null ? n(p.prediction['종합점수']) : null), hit: n(p.hitStarScore), sale: n(p.saleStarScore), quality: n(p.qualityStarScore), review: n(p.reviewCountStarScore), reviewCount: n(p.reviewCount), diag: p['진단'] ?? p.prediction?.['진단'] ?? null, fetched_at: s.fetched_at, matched: how };
+        out[r.id] = { rank: n(p.rank) || null, total: p['종합점수'] != null ? n(p['종합점수']) : (p.prediction?.['종합점수'] != null ? n(p.prediction['종합점수']) : null), hit: n(p.hitStarScore), sale: n(p.saleStarScore), quality: n(p.qualityStarScore), review: n(p.reviewCountStarScore), reviewCount: n(p.reviewCount), diag: p['진단'] ?? p.prediction?.['진단'] ?? null, fetched_at: s.fetched_at, matched: how, by: s.keyword === r.keyword.trim().replace(/\s+/g, ' ') ? 'keyword' : 'name' };
       }
     }
   }
