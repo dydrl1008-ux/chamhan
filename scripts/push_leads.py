@@ -69,12 +69,14 @@ def load_ad_malls():
     return names, phones
 
 def best_rank_by_mall(conn, snapshot_id):
-    """스냅샷 안에서 몰별 최고 순위 (한 몰이 여러 상품이면 가장 위)"""
-    out = {}
-    for rank, mall, url, pname in conn.execute('select rank, mall_name, url, product_name from rankings where snapshot_id = ? order by rank', (snapshot_id,)):
+    """스냅샷 안에서 몰별 최고 순위 (rank, url, 상품명, product_id) + 상품ID→순위 맵 + 스냅샷 최대 순위"""
+    out = {}; by_pid = {}; max_rank = 0
+    for rank, mall, url, pname, pid in conn.execute('select rank, mall_name, url, product_name, product_id from rankings where snapshot_id = ? order by rank', (snapshot_id,)):
+        max_rank = max(max_rank, rank or 0)
+        if pid and pid not in by_pid: by_pid[pid] = rank
         if not mall: continue
-        if mall not in out: out[mall] = (rank, url or '', pname or '')
-    return out
+        if mall not in out: out[mall] = (rank, url or '', pname or '', pid or '')
+    return out, by_pid, max_rank
 
 def drop_leads(days, diag=False):
     import datetime as dt
@@ -108,13 +110,16 @@ def drop_leads(days, diag=False):
         old = pick(cands, lambda d: d <= _shift(cur_date, -days))
         if old is None: stat['thin'] += 1; continue
         stat['used'] += 1
-        now = best_rank_by_mall(conn, cur_id); before = best_rank_by_mall(conn, old[0])
-        max_now = max((v[0] for v in now.values()), default=0)
-        for mall, (prank, purl, pname) in before.items():
+        now, now_pid, max_now = best_rank_by_mall(conn, cur_id); before, _, _ = best_rank_by_mall(conn, old[0])
+        if max_now < 100: continue                                   # 최신 스냅샷이 100위도 안 담겼으면 '사라짐' 판정 못 믿음 → 건너뜀
+        for mall, (prank, purl, pname, ppid) in before.items():
             if prank > PAGE1: continue
-            if mall in now: nrank = now[mall][0]
-            else: nrank = GONE_RANK; stat['gone_total'] += 1
-            if nrank != GONE_RANK and nrank - prank < MIN_DROP: continue
+            if ppid and ppid in now_pid: nrank = now_pid[ppid]        # 같은 상품이 있으면 그 순위 (몰명 바뀌어도 OK)
+            elif mall in now: nrank = now[mall][0]                   # 상품은 바뀌었지만 같은 몰이 있으면 그 몰 최고 순위
+            else: nrank = max_now + 1; stat['gone_total'] += 1       # 스냅샷 범위(보통 200위) 밖
+            if nrank > PAGE1 * 5 and nrank != max_now + 1: pass
+            gone = nrank == max_now + 1
+            if not gone and nrank - prank < MIN_DROP: continue
             phone = contacts.get(mall) or ad_phones.get(mall) or ''
             if not phone: stat['no_phone'] += 1; continue
             r = rows.get(phone)
@@ -158,9 +163,9 @@ if __name__ == '__main__':
     args = sys.argv[1:]; days = int(args[args.index('--days') + 1]) if '--days' in args else 1
     if '--all-ads' in args: rows, src = all_ad_leads(), 'rank-ykad 광고주 전체'
     else: rows, src = drop_leads(days, diag=True), 'rank-ykad 1페이지 하락 (' + ('어제' if days == 1 else f'{days}일 전') + ' 대비)'
-    if '--no-gone' in args: rows = [r for r in rows if r['rank_now'] != GONE_RANK]
+    if '--no-gone' in args: rows = [r for r in rows if r['rank_now'] < 200]
     # 정렬: 최근 수집된 키워드 → 아직 노출 중인 하락(확실) → 사라진 것(리워드 종료 추정) → 광고 → 하락폭
-    rows.sort(key=lambda r: (r.get('_at', ''), r['rank_now'] != GONE_RANK, r['ad_running'], (r['rank_now'] or 0) - (r['rank_prev'] or 0)), reverse=True)
+    rows.sort(key=lambda r: (r.get('_at', ''), r['rank_now'] < 200, r['ad_running'], (r['rank_now'] or 0) - (r['rank_prev'] or 0)), reverse=True)
     limit = int(args[args.index('--limit') + 1]) if '--limit' in args else LIMIT
     if len(rows) > limit: print(f'{len(rows)}건 중 상위 {limit}건만 (광고 집행 → 하락폭 순, --limit 로 조정)'); rows = rows[:limit]
     print(f'{src}: {len(rows)}건')

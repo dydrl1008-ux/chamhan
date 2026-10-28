@@ -20,10 +20,11 @@ export default function CallsClient({ rows, props, origin, history = {} }: { row
 
   return (
     <div className="tbl-wrap"><table>
-      <thead><tr><th>업체</th><th>연락처</th><th>왜 이 업체?</th><th>차수 · 지난 콜</th><th>결과 기록</th></tr></thead>
-      <tbody>{rows.map(l => {
+      <thead><tr><th style={{ width: 36 }}>#</th><th>업체</th><th>연락처</th><th>왜 이 업체?</th><th>차수 · 지난 콜</th><th>결과 기록</th></tr></thead>
+      <tbody>{rows.map((l, idx) => {
         const ps = byLead[l.id] ?? []; const seen = ps.reduce((a, p) => a + p.views, 0);
         return <tr key={l.id} style={{ verticalAlign: 'top', background: seen ? 'var(--wait-soft)' : undefined }}>
+          <td className="num" style={{ color: 'var(--muted)' }}>{idx + 1}</td>
           <td style={{ minWidth: 190 }}>
             <div className="cell-main">{(l.product_url || l.store_url) ? <a href={(l.product_url || l.store_url).startsWith('http') ? (l.product_url || l.store_url) : `https://${l.product_url || l.store_url}`} target="_blank" rel="noreferrer">{l.store_name}</a> : l.store_name}</div>
             <div className="cell-sub">{[l.keyword, l.category].filter(Boolean).join(' · ')}</div>
@@ -31,7 +32,7 @@ export default function CallsClient({ rows, props, origin, history = {} }: { row
             {seen > 0 && <div style={{ fontWeight: 700, color: 'var(--wait-ink)', fontSize: 13, marginTop: 4 }}>🔥 제안서 {seen}회 열람 {kst(ps[0].last_view_at)}</div>}
           </td>
           <td style={{ minWidth: 120 }}>{l.phone ? <a href={`tel:${l.phone}`}>{l.phone}</a> : <span className="muted">-</span>}</td>
-          <td style={{ minWidth: 200 }}><div className="num" style={{ fontWeight: 700 }}>{l.score}점{l.rank_now != null && l.rank_prev != null && <span style={{ marginLeft: 6, color: l.rank_now > l.rank_prev ? 'var(--bad-ink)' : 'var(--ok-ink)' }}>{l.rank_prev}→{l.rank_now >= 200 ? '미노출' : l.rank_now}</span>}</div><div className="cell-sub">{l.score_why || '-'}</div></td>
+          <td style={{ minWidth: 200 }}>{l.rank_now != null && l.rank_prev != null && <div className="num" style={{ fontWeight: 800, fontSize: 15, color: l.rank_now > l.rank_prev ? 'var(--bad-ink)' : 'var(--ok-ink)' }}>{l.rank_prev}위 → {l.rank_now >= 120 ? `${l.rank_now - 1}위 밖` : `${l.rank_now}위`}</div>}<div className="cell-sub">{l.score_why || '-'}</div><div className="cell-sub" title="광고 집행 30 · 순위 하락 25 · 리뷰 많은데 40위 밖 20 · 개설 6개월 이내 15 · 전화 있음 10 — 높을수록 먼저 배분">우선순위 {l.score}</div></td>
           <td style={{ minWidth: 180 }}>{(l.contact_round ?? 0) > 0 ? <><div style={{ fontWeight: 800, color: 'var(--accent)' }}>{(l.contact_round ?? 0) + 1}차 콜</div>{(history[l.id] ?? []).slice(0, 3).map((h, i) => <div key={i} className="cell-sub" style={{ marginTop: 2 }}>{h.round}차 {ST[h.status] ?? h.status} · {h.who} · {kst(h.at)}{h.note ? <div style={{ color: 'var(--ink)' }}>“{h.note.slice(0, 60)}”</div> : null}</div>)}</> : <span style={{ fontWeight: 700 }}>1차 (첫 콜)</span>}</td>
           <td style={{ minWidth: 330 }}>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
