@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
-import { accountExists, ykrReady, watchRows, requeueWatch, addWatch, setWatchGroup, removeWatch } from '@/lib/ykreward';
+import { accountExists, ykrReady, watchRows, requeueWatch, addWatch, setWatchGroup, removeWatch, saveWatchOrder } from '@/lib/ykreward';
 type R = { ok: boolean; msg: string };
 export async function linkAccount(login: string): Promise<R> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
@@ -57,4 +57,11 @@ export async function removeItems(ids: string[]): Promise<R> {
   const mine = new Set((await watchRows([x.login])).map(w => w.id)); const ok = ids.filter(i => mine.has(i));
   if (!ok.length) return { ok: false, msg: '본인 계정 담당 건만 삭제할 수 있습니다' };
   const r = await removeWatch(ok); if (r.ok) revalidatePath('/rank-watch'); return r;
+}
+
+/** 드래그 순서 저장 (본인 계정 담당만) */
+export async function reorder(p: { groups?: string[]; items?: string[] }): Promise<R> {
+  const x = await myLogin(); if (!x) return { ok: false, msg: '로그인 필요' };
+  if (!x.login) return { ok: false, msg: '계정 연결 필요' };
+  const r = await saveWatchOrder({ ownerLogin: x.login, ...p }); if (r.ok) revalidatePath('/rank-watch'); return r;
 }

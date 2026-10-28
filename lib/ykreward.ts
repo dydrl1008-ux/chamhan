@@ -216,3 +216,22 @@ export async function removeWatch(ids: string[]): Promise<{ ok: boolean; msg: st
   const { error } = await ykr().from('rank_watch').update({ active: false }).in('id', ids);
   return error ? { ok: false, msg: error.message } : { ok: true, msg: `${ids.length}개 삭제` };
 }
+
+
+/** 순서 저장 — 업체(그룹) 순서: group_order, 업체 안 상품 순서: sort_order (내 계정 담당 건만, 호출 쪽에서 필터) */
+export async function saveWatchOrder(p: { ownerLogin: string; groups?: string[]; items?: string[] }): Promise<{ ok: boolean; msg: string }> {
+  const sb = ykr();
+  const { data: acc } = await sb.from('accounts').select('id').eq('login_id', p.ownerLogin).maybeSingle(); if (!acc) return { ok: false, msg: '계정 없음' };
+  if (p.groups?.length) {
+    for (let i = 0; i < p.groups.length; i++) {
+      const g = p.groups[i]; const q = sb.from('rank_watch').update({ group_order: (i + 1) * 10 }).eq('owner_id', acc.id);
+      const { error } = g === GROUP_NONE ? await q.is('group_name', null) : await q.eq('group_name', g);
+      if (error) return { ok: false, msg: error.message };
+    }
+  }
+  if (p.items?.length) {
+    const { data: mine } = await sb.from('rank_watch').select('id').eq('owner_id', acc.id).in('id', p.items); const ok = new Set((mine ?? []).map(x => x.id));
+    let i = 0; for (const id of p.items) { if (!ok.has(id)) continue; const { error } = await sb.from('rank_watch').update({ sort_order: (++i) * 100 }).eq('id', id); if (error) return { ok: false, msg: error.message }; }
+  }
+  return { ok: true, msg: '순서 저장' };
+}
