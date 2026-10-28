@@ -29,7 +29,7 @@ export default function RankWatchClient({ me, myLink, people, sel, rows, hist, s
   const del = async (w: WatchRow) => { if (!confirm(`${w.keyword} (${w.store ?? ''}) 순위 체크에서 삭제할까요?`)) return; setBusy(true); const x = await removeItems([w.id]); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
   const star = async (g: string, on: boolean) => { const x = await toggleGroupStar(g, on); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
   const delta = (w: WatchRow) => w.cur_rank != null && w.prev_rank != null ? w.prev_rank - w.cur_rank : null;   // + = 상승
-  const isDown = (w: WatchRow) => (w.cur_rank == null && w.prev_rank != null) || (delta(w) ?? 0) < 0;
+  const isDown = (w: WatchRow) => (w.cur_rank == null && w.prev_rank != null && !!w.cur_at) || (delta(w) ?? 0) < 0;
   const isUp = (w: WatchRow) => (w.cur_rank != null && w.prev_rank == null) || (delta(w) ?? 0) > 0;
   const groups = useMemo(() => {
     const k = q.trim().toLowerCase(); const m = new Map<string, WatchRow[]>();
@@ -37,8 +37,8 @@ export default function RankWatchClient({ me, myLink, people, sel, rows, hist, s
     return [...m.entries()];
   }, [rows, q, filter, stars]);
   const groupsOrdered = useMemo(() => { const base = gOrder ? [...groups].sort((a, b) => { const ia = gOrder.indexOf(a[0]), ib = gOrder.indexOf(b[0]); return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib); }) : groups; return base.map(([g, list]) => { const o = iOrder[g]; return [g, o ? [...list].sort((a, b) => { const ia = o.indexOf(a.id), ib = o.indexOf(b.id); return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib); }) : list] as [string, WatchRow[]]; }); }, [groups, gOrder, iOrder]);
-  const nDown = rows.filter(isDown).length, nUp = rows.filter(isUp).length, nNone = rows.filter(w => w.cur_rank == null).length;
-  const cell = (w: WatchRow) => { const d = delta(w); const cur = w.cur_rank; return <span className="num"><b style={{ fontSize: 16, color: cur == null ? 'var(--bad-ink)' : undefined }}>{cur ?? '미노출'}</b>{d != null && d !== 0 && <span style={{ marginLeft: 6, fontWeight: 700, color: d > 0 ? 'var(--ok-ink)' : 'var(--bad-ink)' }}>{d > 0 ? `▲${d}` : `▼${-d}`}</span>}{cur == null && w.prev_rank != null && <span style={{ marginLeft: 6, color: 'var(--bad-ink)', fontWeight: 700 }}>▼ 전 {w.prev_rank}</span>}{cur != null && w.prev_rank == null && <span style={{ marginLeft: 6, color: 'var(--ok-ink)', fontWeight: 700 }}>▲ 진입</span>}</span>; };
+  const nDown = rows.filter(isDown).length, nUp = rows.filter(isUp).length, nNone = rows.filter(w => w.cur_rank == null && !!w.cur_at).length;
+  const cell = (w: WatchRow) => { const d = delta(w); const cur = w.cur_rank; if (cur == null && !w.cur_at) return <span className="cell-sub">수집 전</span>; return <span className="num"><b style={{ fontSize: 16, color: cur == null ? 'var(--bad-ink)' : undefined }}>{cur ?? '미노출'}</b>{d != null && d !== 0 && <span style={{ marginLeft: 6, fontWeight: 700, color: d > 0 ? 'var(--ok-ink)' : 'var(--bad-ink)' }}>{d > 0 ? `▲${d}` : `▼${-d}`}</span>}{cur == null && w.prev_rank != null && <span style={{ marginLeft: 6, color: 'var(--bad-ink)', fontWeight: 700 }}>▼ 전 {w.prev_rank}</span>}{cur != null && w.prev_rank == null && <span style={{ marginLeft: 6, color: 'var(--ok-ink)', fontWeight: 700 }}>▲ 진입</span>}</span>; };
   const setAll = (v: boolean) => setOpen(Object.fromEntries(groups.map(([g]) => [g, v])));
 
   return (
