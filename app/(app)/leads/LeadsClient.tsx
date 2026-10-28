@@ -3,7 +3,7 @@ import { Fragment, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { Section } from '@/components/ui';
-import { importLeads, saveLeadSettings, assignNow } from './actions';
+import { importLeads, saveLeadSettings, assignNow, recallToday, saveRecipients } from './actions';
 
 // 열 이름 → 필드 (애드대시보드·엑셀 어떤 이름이든 아래 중 하나면 인식)
 const MAP: Record<string, string[]> = {
@@ -35,7 +35,9 @@ const int = (v: string) => { const n = parseInt(v.replace(/[^\d-]/g, ''), 10); r
 const date = (v: string) => { const m = v.match(/(\d{4})[.\-/년\s]+(\d{1,2})[.\-/월\s]+(\d{1,2})/); return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null; };
 async function readText(f: File) { const b = await f.arrayBuffer(); const u = new TextDecoder('utf-8').decode(b); return (u.match(/�/g)?.length ?? 0) > 5 ? new TextDecoder('euc-kr').decode(b) : u; }
 
-export default function LeadsClient({ isAdmin, w, per, recontact }: { isAdmin: boolean; w: Record<string, number>; per: number; recontact: number }) {
+type Person = { id: string; name: string; team_id: number | null };
+export default function LeadsClient({ isAdmin, w, per, recontact, people, recipients }: { isAdmin: boolean; w: Record<string, number>; per: number; recontact: number; people: Person[]; recipients: string[] }) {
+  const [sel, setSel] = useState<string[]>(recipients); const toggle = (id: string) => setSel(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]);
   const r = useRouter(); const [busy, start] = useTransition(); const [file, setFile] = useState<File | null>(null); const [preview, setPreview] = useState('');
   const upload = () => start(async () => {
     const rows = parseCSV(await readText(file!)); if (rows.length < 2) { notify('읽을 행이 없습니다. 첫 줄이 열 이름인 CSV인지 확인하세요.', 'bad'); return; }
@@ -72,8 +74,18 @@ export default function LeadsClient({ isAdmin, w, per, recontact }: { isAdmin: b
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn sm" disabled={!file || busy} onClick={upload}>{busy ? '처리 중…' : '올리기'}</button>
             <button className="btn ghost sm" disabled={busy} onClick={() => act(assignNow())}>지금 배분</button>
+            <button className="btn ghost sm" disabled={busy} style={{ color: 'var(--bad-ink)' }} onClick={() => { if (confirm('오늘 배분된 건 중 결과를 안 남긴 것을 전부 회수해서 배분 대기로 돌립니다. 계속할까요?')) act(recallToday()); }}>오늘 배분 수거</button>
           </div>
         </div>
+      </Section>
+      <Section title="배분 대상" sub={sel.length ? `${sel.length}명에게만 배분` : '영업사원 전원에게 배분'} style={{ gridColumn: '1 / -1' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {people.map(p => <label key={p.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', padding: '6px 10px', border: '1px solid var(--line)', borderRadius: 8, background: sel.includes(p.id) ? 'var(--accent-soft)' : 'transparent', cursor: 'pointer' }}><input type="checkbox" checked={sel.includes(p.id)} onChange={() => toggle(p.id)} />{p.name}</label>)}
+          <button type="button" className="btn ghost sm" onClick={() => setSel(people.map(p => p.id))}>전체</button>
+          <button type="button" className="btn ghost sm" onClick={() => setSel([])}>해제(전원)</button>
+          <button type="button" className="btn sm" disabled={busy} onClick={() => act(saveRecipients(sel))}>저장</button>
+        </div>
+        <div className="muted" style={{ marginTop: 6 }}>체크한 사람에게만 아침 자동 배분·「지금 배분」이 나갑니다. 아무도 안 고르면 영업사원 전원.</div>
       </Section>
       <Section title="점수 · 배분 기준" sub={isAdmin ? '어드민 수정 가능' : '어드민만 수정'}>
         <form action={fd => act(saveLeadSettings(fd))} style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8, alignItems: 'center' }}>

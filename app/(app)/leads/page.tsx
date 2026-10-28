@@ -8,15 +8,15 @@ export const dynamic = 'force-dynamic';
 
 const LS: Record<string, string> = { new: '배분 대기', assigned: '오늘 배분', called: '연결 안 됨', interested: '관심', rejected: '거절', won: '계약', excluded: '제외' };
 
-/** AI팀 › 콜 리스트 관리 */
+/** 콜 리스트 관리 */
 export default async function LeadsAdminPage() {
   const me = await requireRole(['admin', 'head']);
   const sb = supabaseServer(); const today = todayKST();
   const [{ data: st }, { data: settings }, { data: todayRows }, { data: people }, { data: imports }, { data: hot }] = await Promise.all([
     sb.from('leads').select('status'),
-    sb.from('app_settings').select('key,value').in('key', ['lead_score_weights', 'lead_daily_per_person', 'lead_recontact_days']),
+    sb.from('app_settings').select('key,value').in('key', ['lead_score_weights', 'lead_daily_per_person', 'lead_recontact_days', 'lead_recipients']),
     sb.from('leads').select('assigned_to,status').eq('assigned_date', today),
-    sb.from('v_sales_people').select('id,name'),
+    sb.from('v_sales_people').select('id,name,team_id').order('name'),
     sb.from('lead_imports').select('id,file_name,rows_in,added,updated,skipped,created_at').order('id', { ascending: false }).limit(5),
     sb.from('proposals').select('code,title,views,last_view_at,owner_id').gt('views', 0).order('last_view_at', { ascending: false }).limit(15),
   ]);
@@ -33,7 +33,7 @@ export default async function LeadsAdminPage() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {Object.entries(LS).map(([k, l]) => <span key={k} className="pill" style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}>{l} {cnt[k] ?? 0}</span>)}
       </div>
-      <LeadsClient isAdmin={me.role === 'admin'} w={w} per={Number(s.lead_daily_per_person || 30)} recontact={Number(s.lead_recontact_days || 30)} />
+      <LeadsClient isAdmin={me.role === 'admin'} w={w} per={Number(s.lead_daily_per_person || 30)} recontact={Number(s.lead_recontact_days || 30)} people={(people ?? []) as { id: string; name: string; team_id: number | null }[]} recipients={(() => { try { return JSON.parse(s.lead_recipients || '[]') as string[]; } catch { return []; } })()} />
       <div className="grid2">
         <Section title="오늘 배분 · 결과" sub={today} flush>
           {Object.keys(per).length ? <div className="tbl-wrap"><table><thead><tr><th>영업사원</th><th>배분</th><th>남음</th><th>관심</th><th>계약</th><th>거절·부재</th></tr></thead><tbody>

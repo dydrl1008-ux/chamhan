@@ -41,3 +41,20 @@ export async function assignNow(): Promise<R> {
   revalidatePath('/leads'); revalidatePath('/calls');
   return { ok: true, msg: `오늘 배분된 콜 리스트 ${data}건` };
 }
+
+/** 오늘 배분 수거 — 결과 안 남긴 건을 배분 대기로 되돌림 */
+export async function recallToday(): Promise<R> {
+  if (!(await lead())) return { ok: false, msg: '권한 없음' };
+  const { data, error } = await supabaseServer().rpc('leads_recall_today');
+  if (error) return { ok: false, msg: error.message };
+  revalidatePath('/leads'); revalidatePath('/calls');
+  return { ok: true, msg: `${data}건 수거 — 배분 대기로 돌아감` };
+}
+/** 배분 대상 영업사원 저장 (비우면 전원) */
+export async function saveRecipients(ids: string[]): Promise<R> {
+  if (!(await lead())) return { ok: false, msg: '권한 없음' };
+  const { error } = await supabaseServer().from('app_settings').upsert({ key: 'lead_recipients', value: JSON.stringify(ids) }, { onConflict: 'key' });
+  if (error) return { ok: false, msg: error.message };
+  revalidatePath('/leads');
+  return { ok: true, msg: ids.length ? `배분 대상 ${ids.length}명 저장` : '배분 대상: 영업사원 전원' };
+}
