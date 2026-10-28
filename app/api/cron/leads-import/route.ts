@@ -17,5 +17,6 @@ export async function POST(req: Request) {
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
   const { data, error } = await sb.rpc('leads_upsert', { p_rows: clean, p_file: String(body.source ?? 'rank-ykad').slice(0, 200) });
   if (error) return NextResponse.json({ ok: false, msg: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, ...(data as object) });
+  const { data: ex } = await sb.rpc('leads_exclude_ours');   // 우리 고객 자동 제외
+  return NextResponse.json({ ok: true, ...(data as object), excluded_ours: ex ?? 0 });
 }
