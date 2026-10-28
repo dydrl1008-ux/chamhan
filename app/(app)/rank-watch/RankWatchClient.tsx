@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { PageHeader, Section, Empty, Status } from '@/components/ui';
 import { fmtKST } from '@/lib/date/kst';
-import { linkAccount, toggleGroupStar } from './actions';
+import { linkAccount, toggleGroupStar, recheck } from './actions';
 import type { WatchRow } from '@/lib/ykreward';
 
 type Props = { me: { id: string; name: string; role: string }; myLink: string; people: { user_id: string; login: string; name: string }[]; sel: string; rows: WatchRow[]; stars: string[]; err: string };
@@ -15,6 +15,8 @@ export default function RankWatchClient({ me, myLink, people, sel, rows, stars, 
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isMe = sel === me.id;
   const link = async () => { setBusy(true); const x = await linkAccount(login); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
+  const selLogin = people.find(p => p.user_id === sel)?.login ?? myLink; const canRe = isMe || me.role === 'admin' || me.role === 'head';
+  const re = async (p: { ids?: string[]; group?: string }) => { if (busy) return; setBusy(true); const x = await recheck({ ...p, login: selLogin }); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
   const star = async (g: string, on: boolean) => { const x = await toggleGroupStar(g, on); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
   const delta = (w: WatchRow) => w.cur_rank != null && w.prev_rank != null ? w.prev_rank - w.cur_rank : null;   // + = 상승
   const isDown = (w: WatchRow) => (w.cur_rank == null && w.prev_rank != null) || (delta(w) ?? 0) < 0;
@@ -40,16 +42,16 @@ export default function RankWatchClient({ me, myLink, people, sel, rows, stars, 
       {(myLink || !isMe) && <Section title={isMe ? '내 순위 체크' : `${people.find(p => p.user_id === sel)?.name ?? ''} 순위 체크`} right={<span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="업체 · 키워드 검색" style={{ padding: '5px 10px', width: 180 }} />
         {(['all', 'down', 'up', 'star'] as const).map(k => <button key={k} type="button" className={`btn ${filter === k ? '' : 'ghost'}`} style={{ padding: '4px 10px' }} onClick={() => setFilter(k)}>{k === 'all' ? '전체' : k === 'down' ? `하락 ${nDown}` : k === 'up' ? `상승 ${nUp}` : `★ 주요`}</button>)}
-        <button type="button" className="btn ghost" style={{ padding: '4px 10px' }} onClick={() => setAll(true)}>모두 펼침</button><button type="button" className="btn ghost" style={{ padding: '4px 10px' }} onClick={() => setAll(false)}>모두 접기</button></span>} flush>
+        {canRe && nDown > 0 && <button type="button" className="btn" style={{ padding: '4px 10px', background: 'var(--bad)' }} disabled={busy} onClick={() => re({ ids: rows.filter(isDown).map(w => w.id) })}>하락 {nDown}건 재체크</button>}<button type="button" className="btn ghost" style={{ padding: '4px 10px' }} onClick={() => setAll(true)}>모두 펼침</button><button type="button" className="btn ghost" style={{ padding: '4px 10px' }} onClick={() => setAll(false)}>모두 접기</button></span>} flush>
         {groups.length === 0 && <div style={{ padding: 16 }}><Empty>{rows.length ? '조건에 맞는 항목 없음' : '이 계정 담당으로 등록된 순위 체크 항목이 없습니다 (ykreward 순위 체크에서 담당자 확인)'}</Empty></div>}
         {groups.map(([g, list]) => { const isOpen = open[g] ?? (filter !== 'all' || groups.length <= 3); const gd = list.filter(isDown).length, gu = list.filter(isUp).length; const st = stars.includes(g);
           return <div key={g} style={{ borderTop: '1px solid var(--line)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', background: 'var(--bg)' }}>
               {isMe ? <button type="button" title={st ? '주요 해제' : '주요 업체로 — 변동 알림'} onClick={() => star(g, !st)} style={{ border: 0, background: 'transparent', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: st ? '#F5A524' : 'var(--line)' }}>★</button> : <span style={{ fontSize: 20, color: st ? '#F5A524' : 'var(--line)' }}>★</span>}
-              <button type="button" onClick={() => setOpen({ ...open, [g]: !isOpen })} style={{ border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', flex: 1, display: 'flex', gap: 10, alignItems: 'center', fontSize: 14 }}><b>{g}</b><span className="cell-sub" style={{ display: 'inline' }}>{list.length}건</span>{gd > 0 && <Status kind="bad">하락 {gd}</Status>}{gu > 0 && <Status kind="ok">상승 {gu}</Status>}<span className="cell-sub" style={{ marginLeft: 'auto' }}>{isOpen ? '▲' : '▼'}</span></button>
+              <button type="button" onClick={() => setOpen({ ...open, [g]: !isOpen })} style={{ border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', flex: 1, display: 'flex', gap: 10, alignItems: 'center', fontSize: 14 }}><b>{g}</b><span className="cell-sub" style={{ display: 'inline' }}>{list.length}건</span>{gd > 0 && <Status kind="bad">하락 {gd}</Status>}{gu > 0 && <Status kind="ok">상승 {gu}</Status>}<span className="cell-sub" style={{ marginLeft: 'auto' }}>{isOpen ? '▲' : '▼'}</span></button>{canRe && <button type="button" className="btn ghost" style={{ padding: '3px 10px', fontSize: 12 }} disabled={busy} onClick={() => re({ group: g })}>업체 재체크</button>}
             </div>
-            {isOpen && <table><thead><tr><th>상품</th><th>키워드</th><th className="num">순위</th><th>수집</th><th>메모</th></tr></thead><tbody>
-              {list.map(w => <tr key={w.id} style={{ background: isDown(w) ? 'var(--bad-soft)' : undefined }}><td><div style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.url ? <a href={w.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>{w.title ?? w.url}</a> : (w.title ?? '-')}</div><div className="cell-sub">{w.store ?? ''}</div></td><td><b>{w.keyword}</b></td><td style={{ textAlign: 'right' }}>{cell(w)}</td><td className="cell-sub num">{w.cur_at ? fmtKST(w.cur_at) : '-'}</td><td className="cell-sub">{w.memo ?? ''}</td></tr>)}
+            {isOpen && <table><thead><tr><th>상품</th><th>키워드</th><th className="num">순위</th><th>수집</th><th>메모</th><th></th></tr></thead><tbody>
+              {list.map(w => <tr key={w.id} style={{ background: isDown(w) ? 'var(--bad-soft)' : undefined }}><td><div style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.url ? <a href={w.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>{w.title ?? w.url}</a> : (w.title ?? '-')}</div><div className="cell-sub">{w.store ?? ''}</div></td><td><b>{w.keyword}</b></td><td style={{ textAlign: 'right' }}>{cell(w)}</td><td className="cell-sub num">{w.cur_at ? fmtKST(w.cur_at) : '-'}</td><td className="cell-sub">{w.memo ?? ''}</td><td style={{ whiteSpace: 'nowrap' }}>{w.q_status === 'pending' || w.q_status === 'running' ? <Status kind="wait">{w.q_status === 'running' ? '수집 중' : '대기 중'}</Status> : w.q_status === 'error' ? <Status kind="bad">오류</Status> : null}{canRe && <button type="button" className="btn ghost" style={{ padding: '2px 8px', fontSize: 12, marginLeft: 4 }} disabled={busy} onClick={() => re({ ids: [w.id] })}>재체크</button>}</td></tr>)}
             </tbody></table>}
           </div>; })}
       </Section>}
