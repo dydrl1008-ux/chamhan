@@ -65,3 +65,19 @@ export async function reorder(p: { groups?: string[]; items?: string[] }): Promi
   if (!x.login) return { ok: false, msg: '계정 연결 필요' };
   const r = await saveWatchOrder({ ownerLogin: x.login, ...p }); if (r.ok) revalidatePath('/rank-watch'); return r;
 }
+
+/** 업체(그룹) 추가 — 상품 없어도 목록에 뜸 */
+export async function addGroup(name: string, memo = ''): Promise<R> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const n = name.trim(); if (!n || n === '(미분류)') return { ok: false, msg: '업체명을 입력하세요' };
+  const { error } = await supabaseServer().from('reward_watch_groups').upsert({ user_id: me.id, name: n, memo: memo.trim() }, { onConflict: 'user_id,name' });
+  if (error) return { ok: false, msg: error.message };
+  revalidatePath('/rank-watch'); return { ok: true, msg: `업체 추가: ${n} — 이제 상품을 등록하세요` };
+}
+/** 빈 업체 삭제 (상품이 있으면 ykreward 쪽 상품부터) */
+export async function removeGroup(name: string): Promise<R> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const { error } = await supabaseServer().from('reward_watch_groups').delete().eq('user_id', me.id).eq('name', name);
+  if (error) return { ok: false, msg: error.message };
+  revalidatePath('/rank-watch'); return { ok: true, msg: '업체 삭제' };
+}
