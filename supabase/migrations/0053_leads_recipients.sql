@@ -1,5 +1,6 @@
 -- 0053: 콜 리스트 배분 대상 지정(app_settings.lead_recipients = uuid 목록 JSON, 비면 영업사원 전원) + 오늘 배분 수거
 insert into app_settings(key, value) values ('lead_recipients', '[]') on conflict (key) do nothing;
+insert into app_settings(key, value) values ('lead_only_rank_drop', 'true') on conflict (key) do nothing;   -- 순위 하락 건만 배분
 
 -- 배분 대상 영업사원 (설정이 비어 있으면 전원)
 create or replace function lead_recipients() returns table(id uuid, name text, team_id int)
@@ -29,6 +30,7 @@ create or replace function leads_assign_today(p_date date default (now() at time
 language plpgsql security definer set search_path = public as $$
 declare per int := coalesce((select value::int from app_settings where key = 'lead_daily_per_person'), 30);
         recontact int := coalesce((select value::int from app_settings where key = 'lead_recontact_days'), 30);
+        only_drop boolean := coalesce((select value from app_settings where key = 'lead_only_rank_drop'), 'true') = 'true';
         n int := 0; r record; pick uuid;
 begin
   if auth.uid() is not null and not can_see_all() then raise exception '권한 없음'; end if;
@@ -42,7 +44,9 @@ begin
   select sp.id, sp.name, per - (select count(*) from leads x where x.assigned_to = sp.id and x.assigned_date = p_date) from lead_recipients() sp;
   delete from _need where remain <= 0;
   if exists (select 1 from _need) then
-    for r in select id from leads where status = 'new' order by score desc, id loop
+    for r in select id from leads where status = 'new'
+               and (not only_drop or (rank_now is not null and rank_prev is not null and rank_now > rank_prev))   -- 순위 하락 건만
+             order by score desc, id loop
       select id into pick from _need where remain > 0 order by remain desc, name, id limit 1;
       exit when pick is null;
       update leads set status = 'assigned', assigned_to = pick, assigned_date = p_date where id = r.id;

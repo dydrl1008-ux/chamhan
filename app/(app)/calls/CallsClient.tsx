@@ -4,13 +4,15 @@ import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { setResult, makeTrackLink } from './actions';
 
-export type Lead = { id: number; store_name: string; store_url: string; keyword: string; category: string; phone: string; score: number; score_why: string; status: string; note: string };
+export type Lead = { id: number; store_name: string; store_url: string; keyword: string; category: string; phone: string; score: number; score_why: string; status: string; note: string; contact_round?: number; rank_now?: number | null; rank_prev?: number | null };
+export type Hist = { round: number; status: string; note: string; at: string; who: string };
+const ST: Record<string, string> = { called: '부재·연결 안 됨', interested: '관심', rejected: '거절', won: '계약', excluded: '제외' };
 export type Prop = { code: string; lead_id: number | null; title: string; views: number; last_view_at: string | null };
 
 const BTN: [string, string][] = [['called', '부재·연결 안 됨'], ['interested', '관심'], ['won', '계약'], ['rejected', '거절'], ['excluded', '대상 아님']];
 const kst = (s: string | null) => s ? new Date(s).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
 
-export default function CallsClient({ rows, props, origin }: { rows: Lead[]; props: Prop[]; origin: string }) {
+export default function CallsClient({ rows, props, origin, history = {} }: { rows: Lead[]; props: Prop[]; origin: string; history?: Record<number, Hist[]> }) {
   const r = useRouter(); const [busy, start] = useTransition();
   const [note, setNote] = useState<Record<number, string>>({}); const [url, setUrl] = useState<Record<number, string>>({}); const [linkFor, setLinkFor] = useState<number | null>(null);
   const byLead: Record<number, Prop[]> = {}; props.forEach(p => { if (p.lead_id) (byLead[p.lead_id] ??= []).push(p); });
@@ -18,7 +20,7 @@ export default function CallsClient({ rows, props, origin }: { rows: Lead[]; pro
 
   return (
     <div className="tbl-wrap"><table>
-      <thead><tr><th>업체</th><th>연락처</th><th>왜 이 업체?</th><th>결과 기록</th></tr></thead>
+      <thead><tr><th>업체</th><th>연락처</th><th>왜 이 업체?</th><th>차수 · 지난 콜</th><th>결과 기록</th></tr></thead>
       <tbody>{rows.map(l => {
         const ps = byLead[l.id] ?? []; const seen = ps.reduce((a, p) => a + p.views, 0);
         return <tr key={l.id} style={{ verticalAlign: 'top', background: seen ? 'var(--wait-soft)' : undefined }}>
@@ -28,7 +30,8 @@ export default function CallsClient({ rows, props, origin }: { rows: Lead[]; pro
             {seen > 0 && <div style={{ fontWeight: 700, color: 'var(--wait-ink)', fontSize: 13, marginTop: 4 }}>🔥 제안서 {seen}회 열람 {kst(ps[0].last_view_at)}</div>}
           </td>
           <td style={{ minWidth: 120 }}>{l.phone ? <a href={`tel:${l.phone}`}>{l.phone}</a> : <span className="muted">-</span>}</td>
-          <td style={{ minWidth: 200 }}><div className="num" style={{ fontWeight: 700 }}>{l.score}점</div><div className="cell-sub">{l.score_why || '-'}</div></td>
+          <td style={{ minWidth: 200 }}><div className="num" style={{ fontWeight: 700 }}>{l.score}점{l.rank_now != null && l.rank_prev != null && <span style={{ marginLeft: 6, color: l.rank_now > l.rank_prev ? 'var(--bad-ink)' : 'var(--ok-ink)' }}>{l.rank_prev}→{l.rank_now >= 200 ? '미노출' : l.rank_now}</span>}</div><div className="cell-sub">{l.score_why || '-'}</div></td>
+          <td style={{ minWidth: 180 }}>{(l.contact_round ?? 0) > 0 ? <><div style={{ fontWeight: 800, color: 'var(--accent)' }}>{(l.contact_round ?? 0) + 1}차 콜</div>{(history[l.id] ?? []).slice(0, 3).map((h, i) => <div key={i} className="cell-sub" style={{ marginTop: 2 }}>{h.round}차 {ST[h.status] ?? h.status} · {h.who} · {kst(h.at)}{h.note ? <div style={{ color: 'var(--ink)' }}>“{h.note.slice(0, 60)}”</div> : null}</div>)}</> : <span style={{ fontWeight: 700 }}>1차 (첫 콜)</span>}</td>
           <td style={{ minWidth: 330 }}>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {BTN.map(([k, label]) => <button key={k} className={'btn xs ' + (l.status === k ? '' : 'ghost')} disabled={busy}
