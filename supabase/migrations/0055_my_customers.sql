@@ -10,30 +10,47 @@ create table if not exists my_customers (
 create index if not exists my_customers_user_idx on my_customers(user_id);
 alter table my_customers enable row level security;
 drop policy if exists mc_sel on my_customers;
-create policy mc_sel on my_customers for select using (user_id = auth.uid() or same_team(user_id) or can_see_all() or is_mgmt());
+create policy mc_sel on my_customers for select using (user_id = auth.uid() or can_see_all());   -- 본인 + 총괄·대표만 (팀장도 못 봄)
 drop policy if exists mc_write on my_customers;
 create policy mc_write on my_customers for all using (user_id = auth.uid() or is_admin()) with check (user_id = auth.uid() or is_admin());
 
 create or replace function norm_name(t text) returns text language sql immutable as $$
   select lower(regexp_replace(coalesce(t, ''), '\s|\(주\)|주식회사|스토어|store|공식|몰$', '', 'g')) $$;
 
--- 우리 고객인가? → 사유 텍스트 (아니면 null)
+-- 리드 쪽 비교 키를 저장해 두고(인덱스) 집합 조인으로 한 번에 — 행마다 함수 호출 안 함
+alter table leads add column if not exists name_key text generated always as (norm_name(store_name)) stored;
+alter table leads add column if not exists phone_key text generated always as (regexp_replace(phone, '\D', '', 'g')) stored;
+create index if not exists leads_name_key_idx on leads(name_key);
+create index if not exists leads_phone_key_idx on leads(phone_key);
+
+-- 우리 고객 키 목록 (내 고객 + 정산 고객)
+create or replace function our_customer_keys() returns table(k text, why text)
+language sql stable security definer set search_path = public as $$
+  select 'n:' || norm_name(c.name), c.name || ' (' || coalesce(p.name, '') || ' 고객)' from my_customers c join profiles p on p.id = c.user_id where norm_name(c.name) <> ''
+  union all
+  select 'p:' || regexp_replace(c.phone, '\D', '', 'g'), c.name || ' (' || coalesce(p.name, '') || ' 고객)' from my_customers c join profiles p on p.id = c.user_id where length(regexp_replace(c.phone, '\D', '', 'g')) = 11
+  union all
+  select 'n:' || norm_name(cust_name), '정산 고객 ' || cust_name from settlement_customers where norm_name(cust_name) <> ''
+  union all
+  select 'p:' || regexp_replace(coalesce(cust_tel, ''), '\D', '', 'g'), '정산 고객 ' || cust_name from settlement_customers where length(regexp_replace(coalesce(cust_tel, ''), '\D', '', 'g')) = 11
+$$;
+
+-- 우리 고객인가? (단건 조회용)
 create or replace function lead_is_ours(p_name text, p_phone text) returns text
 language sql stable security definer set search_path = public as $$
-  with ph as (select regexp_replace(coalesce(p_phone, ''), '\D', '', 'g') d), nm as (select norm_name(p_name) n)
-  select coalesce(
-    (select c.name || ' (' || coalesce(p.name, '') || ' 고객)' from my_customers c join profiles p on p.id = c.user_id, ph, nm
-      where (nm.n <> '' and norm_name(c.name) = nm.n) or (length(ph.d) = 11 and regexp_replace(c.phone, '\D', '', 'g') = ph.d) limit 1),
-    (select '정산 고객 ' || cust_name from settlement_customers, ph, nm
-      where (nm.n <> '' and norm_name(cust_name) = nm.n) or (length(ph.d) = 11 and regexp_replace(coalesce(cust_tel, ''), '\D', '', 'g') = ph.d) limit 1)) $$;
+  select why from our_customer_keys() where k = 'n:' || norm_name(p_name) or k = 'p:' || regexp_replace(coalesce(p_phone, ''), '\D', '', 'g') limit 1 $$;
 
 create or replace function leads_exclude_ours() returns int
 language plpgsql security definer set search_path = public as $$
 declare n int;
 begin
   if auth.uid() is not null and not can_see_all() then raise exception '권한 없음'; end if;
-  update leads l set status = 'excluded', note = left('기존 고객: ' || lead_is_ours(l.store_name, l.phone) || case when l.note <> '' then ' · ' || l.note else '' end, 1000), last_result_at = now()
-   where l.status in ('new', 'assigned') and lead_is_ours(l.store_name, l.phone) is not null;
+  create temp table if not exists _ours(k text primary key, why text) on commit drop;
+  delete from _ours where true;
+  insert into _ours select k, min(why) from our_customer_keys() group by k;
+  update leads l set status = 'excluded', note = left('기존 고객: ' || o.why || case when l.note <> '' then ' · ' || l.note else '' end, 1000), last_result_at = now()
+  from _ours o
+  where l.status in ('new', 'assigned') and ((l.name_key <> '' and o.k = 'n:' || l.name_key) or (length(l.phone_key) = 11 and o.k = 'p:' || l.phone_key));
   get diagnostics n = row_count;
   return n;
 end $$;
@@ -45,8 +62,8 @@ create or replace function my_customers_exclude() returns trigger language plpgs
 begin
   update leads l set status = 'excluded', note = left('기존 고객: ' || new.name || ' (' || (select name from profiles where id = new.user_id) || ' 고객)' || case when l.note <> '' then ' · ' || l.note else '' end, 1000), last_result_at = now()
    where l.status in ('new', 'assigned')
-     and ((norm_name(new.name) <> '' and norm_name(l.store_name) = norm_name(new.name))
-       or (length(regexp_replace(new.phone, '\D', '', 'g')) = 11 and regexp_replace(l.phone, '\D', '', 'g') = regexp_replace(new.phone, '\D', '', 'g')));
+     and ((norm_name(new.name) <> '' and l.name_key = norm_name(new.name))
+       or (length(regexp_replace(new.phone, '\D', '', 'g')) = 11 and l.phone_key = regexp_replace(new.phone, '\D', '', 'g')));
   return new;
 end $$;
 drop trigger if exists my_customers_exclude_trg on my_customers;
