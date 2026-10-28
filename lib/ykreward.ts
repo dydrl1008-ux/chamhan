@@ -28,6 +28,11 @@ export async function listSlotTypes(block: string[]): Promise<SlotType[]> {
   const { data } = await ykr().from('slot_types').select('name,sort_order').eq('active', true).order('sort_order');
   return ((data ?? []) as SlotType[]).filter(t => !isBlocked(t.name, block));
 }
+/** 활성 유형이 하나도 없으면 ykreward 도 유형 없이(null) 발급하므로 그대로 허용 */
+export async function hasActiveTypes(): Promise<boolean> {
+  const { count } = await ykr().from('slot_types').select('id', { count: 'exact', head: true }).eq('active', true);
+  return (count ?? 0) > 0;
+}
 /** 셀러 계정 생성: auth 유저(<id>@ykad.local) + accounts 행. 소속(parent)은 app_settings.ykreward_parent_login */
 export async function createSeller(p: { login: string; password: string; name: string; parentLogin: string; manager: string }): Promise<{ ok: boolean; msg: string }> {
   const login = p.login.trim().toLowerCase();

@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
-import { issueSlots, createSeller, findSeller, registerSlots, parseMid, ykrReady, parseBlock, isBlocked, listSlotTypes, type Seller } from '@/lib/ykreward';
+import { issueSlots, createSeller, findSeller, registerSlots, parseMid, ykrReady, parseBlock, isBlocked, type Seller } from '@/lib/ykreward';
 type R = { ok: boolean; msg: string };
 const admin = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
 const ALLOWED = ['staff', 'manager', 'head', 'admin'];
@@ -13,7 +13,7 @@ export async function openSlots(fd: FormData): Promise<R & { codes?: number[] }>
   if (!ALLOWED.includes(me.role)) return { ok: false, msg: '권한 없음' };
   if (!ykrReady()) return { ok: false, msg: 'ykreward 연동 설정(YKREWARD_URL / YKREWARD_SERVICE_KEY)이 없습니다.' };
   const login = String(fd.get('login') || '').trim(); const count = Number(fd.get('count')); const dailyGoal = Number(fd.get('daily_goal')); const start = String(fd.get('start') || ''); const days = Number(fd.get('days'));
-  const slotType = String(fd.get('slot_type') || ''); const rewardName = String(fd.get('reward_name') || '').trim(); const targetName = String(fd.get('target_name') || '');
+  const rewardName = String(fd.get('reward_name') || '').trim(); const targetName = String(fd.get('target_name') || '');
   const url = String(fd.get('url') || '').trim(); const keyword = String(fd.get('keyword') || '').trim();
   if (!login) return { ok: false, msg: '셀러를 선택하세요' };
   if (!(count >= 1 && count <= 500)) return { ok: false, msg: '슬롯 수는 1~500' };
@@ -24,9 +24,8 @@ export async function openSlots(fd: FormData): Promise<R & { codes?: number[] }>
   if ((url || keyword) && (!url || !keyword)) return { ok: false, msg: '상품 등록은 URL과 키워드를 둘 다 넣어야 합니다' };
   if (url) { const pm = parseMid(url); if (!pm.ok) return { ok: false, msg: pm.msg }; }
   const { data: bl } = await supabaseServer().from('app_settings').select('value').eq('key', 'ykreward_block_types').maybeSingle(); const block = parseBlock(bl?.value);
-  if (slotType && isBlocked(slotType, block)) return { ok: false, msg: `${slotType} 유형은 워크허브에서 오픈할 수 없습니다 (${block.join('·')})` };
-  if (!slotType) { const ok = await listSlotTypes(block); if (!ok.length) return { ok: false, msg: '오픈 가능한 슬롯 유형이 없습니다' }; }
-  const typeToUse = slotType || (await listSlotTypes(block))[0]?.name || '';
+  if (isBlocked(rewardName, block)) return { ok: false, msg: `"${rewardName}" 는 워크허브에서 쓸 수 없는 이름입니다 (${block.join('·')} 는 ykreward 에서만)` };
+  const typeToUse = rewardName;   // ykreward 유형 칸 = 리워드 이름
   const r = await issueSlots({ login, count, dailyGoal, start, days, slotType: typeToUse, rewardName, openedBy: me.name });
   if (!r.ok) return r;
   const { error } = await admin().from('reward_slot_opens').insert({ user_id: me.id, team_id: me.team_id, target_login: login, target_name: targetName, cnt: count, daily_goal: dailyGoal, start_date: start, days, slot_type: typeToUse || null, reward_name: rewardName, slot_codes: r.codes });
