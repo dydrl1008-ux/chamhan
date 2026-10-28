@@ -15,6 +15,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let pendingCount = 0; if (mgmt) { pendingCount = await cachedPendingCount(); }
   // 금일 이슈 미확인 건수 (활성 이슈 중 내가 안 읽은 것)
   const sb = supabaseServer(); const [{ data: issues }, { data: reads }] = await Promise.all([sb.from('issues').select('id').eq('is_active', true).order('issue_date', { ascending: false }).limit(50), sb.from('issue_reads').select('issue_id').eq('user_id', p.id)]);
+  const { count: unreadNoti } = await sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', p.id).is('read_at', null);
+  const notiBadge = unreadNoti ? <span className="badge">{unreadNoti}</span> : null;
   const readSet = new Set((reads ?? []).map(x => x.issue_id)); const unreadIssues = (issues ?? []).filter(x => !readSet.has(x.id)).length;
   const issueBadge = unreadIssues ? <span className="badge" title="미확인 이슈">{unreadIssues}</span> : null;
   const badge = pendingCount ? <span className="badge">{pendingCount}</span> : null;
@@ -62,6 +64,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/issues">금일 이슈{issueBadge}</NavLink>
           <NavLink href="/products">상품 안내 · 접수</NavLink>
         </NavGroup>
+
+        <NavGroup title="영업 · 리드" hrefs={['/calls', '/ai/leads', '/renewals', '/notifications']}>
+          {!p.is_mgmt && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
+          {lead && <NavLink href="/ai/leads">콜 리스트 관리</NavLink>}
+          <NavLink href="/renewals">이탈 고객</NavLink>
+          <NavLink href="/notifications">알림{notiBadge}</NavLink>
+        </NavGroup>
+
+        {(mgr || lead) && (
+          <NavGroup title="AI팀" hrefs={['/ai']}>
+            <NavLink href="/ai/orders">지시 · 작업 현황</NavLink>
+            {lead && <NavLink href="/ai/agents">에이전트 · 일정</NavLink>}
+            {lead && <NavLink href="/ai/checks">점검 결과</NavLink>}
+            {lead && <NavLink href="/ai/agencies">대행사 컨택</NavLink>}
+          </NavGroup>
+        )}
 
         {p.role === 'admin' && (
           <NavGroup title="설정" hrefs={['/admin']}>
