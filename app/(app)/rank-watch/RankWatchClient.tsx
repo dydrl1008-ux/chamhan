@@ -1,18 +1,18 @@
 'use client';
 // 순위 체크 — 업체 그룹별 접기, ★ 주요 업체 토글, 하락 빨강 · 상승 초록
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { PageHeader, Section, Empty, Status } from '@/components/ui';
 import { fmtKST } from '@/lib/date/kst';
 import { linkAccount, toggleGroupStar, recheck } from './actions';
-import type { WatchRow } from '@/lib/ykreward';
+import type { WatchRow, HistPt } from '@/lib/ykreward';
 
-type Props = { me: { id: string; name: string; role: string }; myLink: string; people: { user_id: string; login: string; name: string }[]; sel: string; rows: WatchRow[]; stars: string[]; err: string };
+type Props = { me: { id: string; name: string; role: string }; myLink: string; people: { user_id: string; login: string; name: string }[]; sel: string; rows: WatchRow[]; hist: Record<string, HistPt[]>; stars: string[]; err: string };
 
-export default function RankWatchClient({ me, myLink, people, sel, rows, stars, err }: Props) {
+export default function RankWatchClient({ me, myLink, people, sel, rows, hist, stars, err }: Props) {
   const r = useRouter(); const [login, setLogin] = useState(myLink); const [busy, setBusy] = useState(false); const [filter, setFilter] = useState<'all' | 'down' | 'up' | 'star'>('all'); const [q, setQ] = useState('');
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [open, setOpen] = useState<Record<string, boolean>>({}); const [detail, setDetail] = useState<string | null>(null);
   const isMe = sel === me.id;
   const link = async () => { setBusy(true); const x = await linkAccount(login); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
   const selLogin = people.find(p => p.user_id === sel)?.login ?? myLink; const canRe = isMe || me.role === 'admin' || me.role === 'head';
@@ -50,11 +50,42 @@ export default function RankWatchClient({ me, myLink, people, sel, rows, stars, 
               {isMe ? <button type="button" title={st ? '주요 해제' : '주요 업체로 — 변동 알림'} onClick={() => star(g, !st)} style={{ border: 0, background: 'transparent', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: st ? '#F5A524' : 'var(--line)' }}>★</button> : <span style={{ fontSize: 20, color: st ? '#F5A524' : 'var(--line)' }}>★</span>}
               <button type="button" onClick={() => setOpen({ ...open, [g]: !isOpen })} style={{ border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', flex: 1, display: 'flex', gap: 10, alignItems: 'center', fontSize: 14 }}><b>{g}</b><span className="cell-sub" style={{ display: 'inline' }}>{list.length}건</span>{gd > 0 && <Status kind="bad">하락 {gd}</Status>}{gu > 0 && <Status kind="ok">상승 {gu}</Status>}<span className="cell-sub" style={{ marginLeft: 'auto' }}>{isOpen ? '▲' : '▼'}</span></button>{canRe && <button type="button" className="btn ghost" style={{ padding: '3px 10px', fontSize: 12 }} disabled={busy} onClick={() => re({ group: g })}>업체 재체크</button>}
             </div>
-            {isOpen && <table><thead><tr><th>상품</th><th>키워드</th><th className="num">순위</th><th>수집</th><th>메모</th><th></th></tr></thead><tbody>
-              {list.map(w => <tr key={w.id} style={{ background: isDown(w) ? 'var(--bad-soft)' : undefined }}><td><div style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.url ? <a href={w.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>{w.title ?? w.url}</a> : (w.title ?? '-')}</div><div className="cell-sub">{w.store ?? ''}</div></td><td><b>{w.keyword}</b></td><td style={{ textAlign: 'right' }}>{cell(w)}</td><td className="cell-sub num">{w.cur_at ? fmtKST(w.cur_at) : '-'}</td><td className="cell-sub">{w.memo ?? ''}</td><td style={{ whiteSpace: 'nowrap' }}>{w.q_status === 'pending' || w.q_status === 'running' ? <Status kind="wait">{w.q_status === 'running' ? '수집 중' : '대기 중'}</Status> : w.q_status === 'error' ? <Status kind="bad">오류</Status> : null}{canRe && <button type="button" className="btn ghost" style={{ padding: '2px 8px', fontSize: 12, marginLeft: 4 }} disabled={busy} onClick={() => re({ ids: [w.id] })}>재체크</button>}</td></tr>)}
+            {isOpen && <table><thead><tr><th style={{ width: 52 }}></th><th>상품</th><th>키워드</th><th className="num">순위</th><th>30일 추이</th><th>수집</th><th>메모</th><th></th></tr></thead><tbody>
+              {list.map(w => <Fragment key={w.id}><tr style={{ background: isDown(w) ? 'var(--bad-soft)' : undefined, cursor: 'pointer' }} onClick={() => setDetail(detail === w.id ? null : w.id)}><td>{w.image_url ? <img src={w.image_url} alt="" width={44} height={44} style={{ borderRadius: 8, objectFit: 'cover', display: 'block', border: '1px solid var(--line)' }} /> : <div style={{ width: 44, height: 44, borderRadius: 8, background: 'var(--bg)' }} />}</td><td><div style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.url ? <a href={w.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }} onClick={e => e.stopPropagation()}>{w.title ?? w.url}</a> : (w.title ?? '-')}</div><div className="cell-sub">{w.store ?? ''}</div></td><td><b>{w.keyword}</b></td><td style={{ textAlign: 'right' }}>{cell(w)}</td><td><Spark pts={hist[w.id] ?? []} /></td><td className="cell-sub num">{w.cur_at ? fmtKST(w.cur_at) : '-'}</td><td className="cell-sub">{w.memo ?? ''}</td><td style={{ whiteSpace: 'nowrap' }}>{w.q_status === 'pending' || w.q_status === 'running' ? <Status kind="wait">{w.q_status === 'running' ? '수집 중' : '대기 중'}</Status> : w.q_status === 'error' ? <Status kind="bad">오류</Status> : null}{canRe && <button type="button" className="btn ghost" style={{ padding: '2px 8px', fontSize: 12, marginLeft: 4 }} disabled={busy} onClick={e => { e.stopPropagation(); re({ ids: [w.id] }); }}>재체크</button>}</td></tr>{detail === w.id && <tr key={w.id + '-d'}><td colSpan={8} style={{ background: 'var(--bg)', padding: '12px 18px' }}><History pts={hist[w.id] ?? []} w={w} /></td></tr>}</Fragment>)}
             </tbody></table>}
           </div>; })}
       </Section>}
     </div>
   );
+}
+
+/** 미니 추이: 왼쪽 과거 → 오른쪽 최근. 위가 1위. 미노출은 바닥에 빨간 점 */
+function Spark({ pts }: { pts: HistPt[] }) {
+  if (pts.length < 2) return <span className="cell-sub">-</span>;
+  const W = 120, H = 32, vals = pts.map(p => p.r).filter((r): r is number => r != null); const max = Math.max(...vals, 1), min = Math.min(...vals, max);
+  const y = (r: number | null) => r == null ? H - 2 : 3 + (max === min ? (H - 6) / 2 : ((r - min) / (max - min)) * (H - 6));
+  const x = (i: number) => (i / (pts.length - 1)) * (W - 4) + 2;
+  const d = pts.map((p, i) => `${i === 0 || pts[i - 1].r == null || p.r == null ? 'M' : 'L'}${x(i)},${y(p.r)}`).join(' ');
+  const last = pts.at(-1)!, first = pts.find(p => p.r != null); const up = last.r != null && first?.r != null && last.r < first.r;
+  return <svg width={W} height={H} style={{ display: 'block' }}><path d={d} fill="none" stroke={up ? 'var(--ok)' : 'var(--bad)'} strokeWidth={1.5} />{pts.map((p, i) => p.r == null ? <circle key={i} cx={x(i)} cy={H - 2} r={2} fill="var(--bad)" /> : null)}<circle cx={x(pts.length - 1)} cy={y(last.r)} r={2.5} fill={up ? 'var(--ok)' : 'var(--bad)'} /></svg>;
+}
+/** 펼친 상세: 큰 차트 + 날짜별 순위 */
+function History({ pts, w }: { pts: HistPt[]; w: WatchRow }) {
+  if (!pts.length) return <Empty>최근 30일 수집 기록 없음</Empty>;
+  const W = 720, H = 140, vals = pts.map(p => p.r).filter((r): r is number => r != null); const max = Math.max(...vals, 1), min = Math.min(...vals, max);
+  const y = (r: number | null) => r == null ? H - 8 : 10 + (max === min ? (H - 30) / 2 : ((r - min) / (max - min)) * (H - 30));
+  const x = (i: number) => 40 + (i / Math.max(1, pts.length - 1)) * (W - 60);
+  const d = pts.map((p, i) => `${i === 0 || pts[i - 1].r == null || p.r == null ? 'M' : 'L'}${x(i)},${y(p.r)}`).join(' ');
+  const best = Math.min(...vals), worst = Math.max(...vals);
+  const byDay = new Map<string, HistPt>(); for (const p of pts) byDay.set(p.t.slice(0, 10), p);   // 하루 마지막 수집
+  return <div style={{ display: 'grid', gap: 10 }}>
+    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>{w.image_url && <img src={w.image_url} alt="" width={64} height={64} style={{ borderRadius: 10, objectFit: 'cover', border: '1px solid var(--line)' }} />}<div><b>{w.title ?? w.keyword}</b><div className="cell-sub">{w.store ?? ''} · {w.keyword} · MID {w.mid ?? '-'}{w.url && <> · <a href={w.url} target="_blank" rel="noreferrer">상품 열기</a></>}</div></div><div className="cell-sub" style={{ marginLeft: 'auto' }}>30일 최고 <b style={{ color: 'var(--ok-ink)' }}>{best}</b> · 최저 <b style={{ color: 'var(--bad-ink)' }}>{worst}</b> · 수집 {pts.length}회</div></div>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ maxWidth: W, background: '#fff', border: '1px solid var(--line)', borderRadius: 10 }}>
+      <text x={4} y={14} fontSize={10} fill="var(--muted)">{min}위</text><text x={4} y={H - 22} fontSize={10} fill="var(--muted)">{max}위</text>
+      <line x1={40} x2={W - 20} y1={H - 8} y2={H - 8} stroke="var(--line)" strokeDasharray="3 3" /><text x={4} y={H - 4} fontSize={10} fill="var(--bad-ink)">미노출</text>
+      <path d={d} fill="none" stroke="var(--accent)" strokeWidth={2} />
+      {pts.map((p, i) => <circle key={i} cx={x(i)} cy={y(p.r)} r={2.5} fill={p.r == null ? 'var(--bad)' : 'var(--accent)'}><title>{fmtKST(p.t)} · {p.r ?? '미노출'}</title></circle>)}
+    </svg>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{[...byDay.entries()].reverse().map(([d2, p]) => <span key={d2} className="num" style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, background: p.r == null ? 'var(--bad-soft)' : 'var(--bg)', color: p.r == null ? 'var(--bad-ink)' : undefined }}>{d2.slice(5).replace('-', '/')} <b>{p.r ?? '미노출'}</b></span>)}</div>
+  </div>;
 }

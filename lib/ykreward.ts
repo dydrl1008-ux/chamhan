@@ -109,19 +109,19 @@ export async function registerSlots(p: { codes: number[]; url: string; keyword: 
 }
 
 // ───────── 순위 체크 (rank_watch) ─────────
-export type WatchRow = { id: string; owner_login: string; owner: string; group: string; keyword: string; title: string | null; store: string | null; url: string | null; memo: string | null; cur_rank: number | null; cur_at: string | null; prev_rank: number | null; diff: number | null; trend: string | null; active: boolean; q_status: string | null; mid: string | null; mid_type: string | null; cmp_mid: string | null };
+export type WatchRow = { id: string; owner_login: string; owner: string; group: string; keyword: string; title: string | null; store: string | null; url: string | null; memo: string | null; cur_rank: number | null; cur_at: string | null; prev_rank: number | null; diff: number | null; trend: string | null; active: boolean; q_status: string | null; mid: string | null; mid_type: string | null; cmp_mid: string | null; image_url: string | null };
 export const GROUP_NONE = '(미분류)';
 /** ykreward 계정 → 순위 체크 항목 (v_rank_watch). logins 비우면 전체 */
 export async function watchRows(logins?: string[]): Promise<WatchRow[]> {
   const sb = ykr();
   let ids: string[] | undefined;
   if (logins) { if (!logins.length) return []; const { data: accs } = await sb.from('accounts').select('id').in('login_id', logins); ids = (accs ?? []).map(a => a.id); if (!ids.length) return []; }
-  let q = sb.from('v_rank_watch').select('id,owner_id,owner,url,mid,mid_type,cmp_mid,keyword,title,store,memo,active,cur_rank,cur_at,prev_rank,diff,trend,group_name,group_order,sort_order,q_status').eq('active', true).order('group_order', { ascending: true, nullsFirst: false }).order('sort_order').limit(3000);
+  let q = sb.from('v_rank_watch').select('id,owner_id,owner,url,mid,mid_type,cmp_mid,image_url,keyword,title,store,memo,active,cur_rank,cur_at,prev_rank,diff,trend,group_name,group_order,sort_order,q_status').eq('active', true).order('group_order', { ascending: true, nullsFirst: false }).order('sort_order').limit(3000);
   if (ids) q = q.in('owner_id', ids);
   const { data, error } = await q; if (error) throw new Error('ykreward 순위 체크 조회 실패: ' + error.message);
   const { data: accs2 } = await sb.from('accounts').select('id,login_id').in('id', [...new Set((data ?? []).map((x: any) => x.owner_id))]);
   const lg = new Map((accs2 ?? []).map(a => [a.id, a.login_id]));
-  return (data ?? []).map((x: any) => ({ id: x.id, owner_login: lg.get(x.owner_id) ?? '', owner: x.owner ?? '', group: x.group_name?.trim() || GROUP_NONE, keyword: x.keyword, title: x.title, store: x.store, url: x.url, memo: x.memo, cur_rank: x.cur_rank > 0 ? x.cur_rank : null, cur_at: x.cur_at, prev_rank: x.prev_rank > 0 ? x.prev_rank : null, diff: x.diff, trend: x.trend, active: !!x.active, q_status: x.q_status, mid: x.mid, mid_type: x.mid_type, cmp_mid: x.cmp_mid }));
+  return (data ?? []).map((x: any) => ({ id: x.id, owner_login: lg.get(x.owner_id) ?? '', owner: x.owner ?? '', group: x.group_name?.trim() || GROUP_NONE, keyword: x.keyword, title: x.title, store: x.store, url: x.url, memo: x.memo, cur_rank: x.cur_rank > 0 ? x.cur_rank : null, cur_at: x.cur_at, prev_rank: x.prev_rank > 0 ? x.prev_rank : null, diff: x.diff, trend: x.trend, active: !!x.active, q_status: x.q_status, mid: x.mid, mid_type: x.mid_type, cmp_mid: x.cmp_mid, image_url: x.image_url }));
 }
 export async function accountExists(login: string): Promise<{ ok: boolean; name?: string }> {
   const { data } = await ykr().from('accounts').select('name').eq('login_id', login.trim().toLowerCase()).maybeSingle();
@@ -170,4 +170,16 @@ export async function requeueWatch(rows: WatchRow[]): Promise<{ ok: boolean; msg
     if (e2) return { ok: false, msg: '재체크 요청 실패: ' + e2.message, n: 0 };
   }
   return { ok: true, msg: `${rows.length}건 재체크 요청 — 수집 봇이 순서대로 다시 확인합니다`, n: rows.length };
+}
+
+/** 순위 히스토리 (최근 N일, 성공 수집만) → watch_id 별 [{t, r}] 시간순. r = null 은 미노출 */
+export type HistPt = { t: string; r: number | null };
+export async function watchHistory(ids: string[], days = 30): Promise<Record<string, HistPt[]>> {
+  if (!ids.length) return {};
+  const since = new Date(Date.now() - days * 864e5).toISOString(); const out: Record<string, HistPt[]> = {};
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await ykr().from('rank_watch_history').select('watch_id,rank,checked_at,checked_ok').in('watch_id', ids.slice(i, i + 200)).gte('checked_at', since).order('checked_at');
+    for (const h of data ?? []) { if (h.checked_ok === false) continue; (out[h.watch_id] ??= []).push({ t: h.checked_at, r: h.rank && h.rank > 0 ? h.rank : null }); }
+  }
+  return out;
 }
