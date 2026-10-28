@@ -16,9 +16,10 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   let people: { id: string; name: string; team_id: number | null }[] = [];
   if (lead || mgr) { const q = sb.from('v_sales_people').select('id,name,team_id').order('name'); const { data } = mgr ? await q.eq('team_id', me.team_id ?? -1) : await q; people = (data ?? []) as any[]; }
   if (lead && !searchParams.u) {   // 총괄·대표: 사람별 오늘 현황 한눈에 → 이름 누르면 그 사람 리스트
-    const { data: rows } = await sb.from('leads').select('assigned_to,status').eq('assigned_date', today);
-    const per: Record<string, Record<string, number>> = {}; (rows ?? []).forEach(r => { const k = r.assigned_to ?? '-'; per[k] = per[k] ?? {}; per[k][r.status] = (per[k][r.status] ?? 0) + 1; });
-    const tot = (rows ?? []).length; const left = (rows ?? []).filter(r => r.status === 'assigned').length;
+    const { data: rows } = await sb.rpc('leads_today_summary', { p_date: today });
+    const sm = (rows ?? []) as { assigned_to: string | null; status: string; cnt: number }[];
+    const per: Record<string, Record<string, number>> = {}; sm.forEach(r => { const k = r.assigned_to ?? '-'; per[k] = per[k] ?? {}; per[k][r.status] = (per[k][r.status] ?? 0) + r.cnt; });
+    const tot = sm.reduce((a, r) => a + r.cnt, 0); const left = sm.filter(r => r.status === 'assigned').reduce((a, r) => a + r.cnt, 0);
     const { data: allC } = await sb.from('my_customers').select('id,name,phone,memo,created_at,user_id').order('created_at', { ascending: false }).limit(2000);
     const pn = Object.fromEntries(people.map(p => [p.id, p.name]));
     return <div style={{ display: 'grid', gap: 20 }}>
@@ -36,7 +37,7 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   const h = headers(); const origin = `${h.get('x-forwarded-proto') ?? 'https'}://${h.get('host')}`;
   const cols = 'id,store_name,store_url,keyword,category,phone,score,score_why,status,note,contact_round,rank_now,rank_prev';
   const [{ data: todayRows }, { data: follow }, { data: props }] = await Promise.all([
-    sb.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', today).order('score', { ascending: false }),
+    sb.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', today).order('score', { ascending: false }).range(0, 4999),
     sb.from('leads').select(cols).eq('assigned_to', target).eq('status', 'interested').neq('assigned_date', today).order('last_result_at', { ascending: false }).limit(50),
     sb.from('proposals').select('code,lead_id,title,views,last_view_at').eq('owner_id', target).order('last_view_at', { ascending: false, nullsFirst: false }).limit(300),
   ]);

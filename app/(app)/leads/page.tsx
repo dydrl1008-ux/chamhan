@@ -15,7 +15,7 @@ export default async function LeadsAdminPage() {
   const [{ data: st }, { data: settings }, { data: todayRows }, { data: people }, { data: imports }, { data: hot }] = await Promise.all([
     sb.from('leads').select('status'),
     sb.from('app_settings').select('key,value').in('key', ['lead_score_weights', 'lead_daily_per_person', 'lead_recontact_days', 'lead_recipients']),
-    sb.from('leads').select('assigned_to,status').eq('assigned_date', today),
+    sb.rpc('leads_today_summary', { p_date: today }),
     sb.from('v_sales_people').select('id,name,team_id').order('name'),
     sb.from('lead_imports').select('id,file_name,rows_in,added,updated,skipped,created_at').order('id', { ascending: false }).limit(5),
     sb.from('proposals').select('code,title,views,last_view_at,owner_id').gt('views', 0).order('last_view_at', { ascending: false }).limit(15),
@@ -24,7 +24,7 @@ export default async function LeadsAdminPage() {
   const s = Object.fromEntries((settings ?? []).map(x => [x.key, x.value]));
   const w = JSON.parse(s.lead_score_weights || '{}'); const name = Object.fromEntries((people ?? []).map(p => [p.id, p.name]));
   const per: Record<string, Record<string, number>> = {};
-  (todayRows ?? []).forEach(r => { const k = r.assigned_to ?? '-'; per[k] = per[k] ?? {}; per[k][r.status] = (per[k][r.status] ?? 0) + 1; });
+  ((todayRows ?? []) as { assigned_to: string | null; status: string; cnt: number }[]).forEach(r => { const k = r.assigned_to ?? '-'; per[k] = per[k] ?? {}; per[k][r.status] = (per[k][r.status] ?? 0) + r.cnt; });
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
