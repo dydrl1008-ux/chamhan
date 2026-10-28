@@ -31,7 +31,7 @@ export async function openSlots(fd: FormData): Promise<R & { codes?: number[] }>
   const { error } = await admin().from('reward_slot_opens').insert({ user_id: me.id, team_id: me.team_id, target_login: login, target_name: targetName, cnt: count, daily_goal: dailyGoal, start_date: start, days, slot_type: typeToUse || null, reward_name: rewardName, slot_codes: r.codes });
   if (error) return { ok: true, msg: `${r.msg} (이력 저장 실패: ${error.message})`, codes: r.codes };
   let regMsg = '';
-  if (url && keyword && r.codes.length) { const g = await registerSlots({ codes: r.codes, url, keyword }); regMsg = g.ok ? ` · 상품 등록 ${g.n}개` : ` · 상품 등록 실패: ${g.msg} (아래 표에서 다시 등록)`; }
+  if (url && keyword && r.codes.length) { try { const g = await registerSlots({ codes: r.codes, url, keyword }); regMsg = g.ok ? ` · 상품 등록 ${g.n}개` : ` · 상품 등록 실패: ${g.msg} (아래 표에서 다시 등록)`; } catch (e: any) { regMsg = ` · 상품 등록 오류: ${e?.message ?? e}`; } }
   revalidatePath('/slots-open');
   return { ok: true, msg: `${rewardName} · ${login} 에 ${r.codes.length}개 발급 (#${r.codes[0]}~#${r.codes.at(-1)})${regMsg}`, codes: r.codes };
 }
@@ -60,8 +60,9 @@ export async function registerOne(fd: FormData): Promise<R> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   if (!ALLOWED.includes(me.role)) return { ok: false, msg: '권한 없음' };
   const code = Number(fd.get('code')); if (!code) return { ok: false, msg: '슬롯 번호 오류' };
-  const g = await registerSlots({ codes: [code], url: String(fd.get('url') || ''), keyword: String(fd.get('keyword') || '') });
-  if (g.ok && g.n === 0) return { ok: false, msg: '등록할 수 없는 슬롯입니다 (워크허브에서 연 슬롯만)' };
+  let g: { ok: boolean; msg: string; n: number };
+  try { g = await registerSlots({ codes: [code], url: String(fd.get('url') || ''), keyword: String(fd.get('keyword') || '') }); }
+  catch (e: any) { return { ok: false, msg: '등록 중 오류: ' + (e?.message ?? String(e)) }; }
   if (g.ok) revalidatePath('/slots-open');
   return { ok: g.ok, msg: g.ok ? `#${code} 등록 완료` : g.msg };
 }

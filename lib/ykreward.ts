@@ -79,8 +79,15 @@ export function parseMid(url: string): { ok: true; mid: string; url: string } | 
 export async function registerSlots(p: { codes: number[]; url: string; keyword: string }): Promise<{ ok: boolean; msg: string; n: number }> {
   const r = parseMid(p.url); if (!r.ok) return { ok: false, msg: r.msg, n: 0 };
   const kw = p.keyword.trim(); if (!kw) return { ok: false, msg: '키워드를 입력하세요', n: 0 };
-  const { data, error } = await ykr().from('slots').update({ url: r.url, mid: r.mid, keyword: kw, cmp: '단독', cmp_checked: true, cmp_mid: null, registered_at: new Date().toISOString() })
-    .in('code', p.codes).not('opened_by', 'is', null).is('dropped_at', null).select('code');
-  if (error) return { ok: false, msg: 'ykreward 등록 실패: ' + error.message, n: 0 };
-  return { ok: true, msg: `${data?.length ?? 0}개 슬롯에 등록 (MID ${r.mid} · ${kw})`, n: data?.length ?? 0 };
+  const sb = ykr();
+  const { data: rows, error: e0 } = await sb.from('slots').select('id,code,opened_by,dropped_at,stopped_at').in('code', p.codes);
+  if (e0) return { ok: false, msg: 'ykreward 조회 실패: ' + e0.message, n: 0 };
+  if (!rows?.length) return { ok: false, msg: `슬롯 #${p.codes.join(',')} 을 ykreward 에서 찾지 못함`, n: 0 };
+  const targets = rows.filter(x => x.opened_by && !x.dropped_at);
+  if (!targets.length) return { ok: false, msg: '워크허브에서 연 슬롯만 등록할 수 있습니다 (opened_by 없음 또는 회수됨)', n: 0 };
+  const { data, error } = await sb.from('slots').update({ url: r.url, mid: r.mid, keyword: kw, cmp: '단독', cmp_checked: true, cmp_mid: null, registered_at: new Date().toISOString() })
+    .in('id', targets.map(x => x.id)).select('code');
+  if (error) return { ok: false, msg: 'ykreward 등록 실패: ' + error.message + (error.details ? ` (${error.details})` : ''), n: 0 };
+  if (!data?.length) return { ok: false, msg: '등록 요청은 갔지만 바뀐 행이 없음 (ykreward 트리거/권한 확인 필요)', n: 0 };
+  return { ok: true, msg: `${data.length}개 슬롯에 등록 (MID ${r.mid} · ${kw})`, n: data.length };
 }
