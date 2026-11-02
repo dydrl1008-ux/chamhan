@@ -6,7 +6,7 @@ import { PageHeader, Empty, Section } from '@/components/ui';
 import { fmtKST } from '@/lib/date/kst';
 import ProposalDoc, { PD_CSS, docPageCount } from '@/components/ProposalDoc';
 import type { Doc, Target } from '@/lib/proposalDoc';
-import { loadKeyword, withTarget, makeNativeLink, logProposal } from './actions';
+import { loadKeyword, withTarget, makeNativeLink, logProposal, saveMyPhone } from './actions';
 
 export default function ProposalsClient({ initialKw, phone: phone0, owner: owner0, recent, usage, mine = [], base = '', team = [], lead = null }: { initialKw: string; base?: string; lead?: { id: number; store: string; rank: number } | null; team?: { name: string; keyword: string; target: string | null; action: string; code: string | null; views: number | null; created_at: string }[]; phone: string; owner: string; recent: string[]; usage: { used: number; limit: number }; mine?: { code: string; title: string; views: number; first_view_at: string | null; last_view_at: string | null; created_at: string }[] }) {
   const [kw, setKw] = useState(initialKw); const [phone, setPhone] = useState(phone0); const [owner, setOwner] = useState(owner0); const [basic, setBasic] = useState(''); const [rec, setRec] = useState('');
@@ -49,7 +49,7 @@ export default function ProposalsClient({ initialKw, phone: phone0, owner: owner
       {doc && <>
         <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>대상 업체 (선택)<select value={tgt} onChange={e => pick(e.target.value === '' ? '' : e.target.value === 'manual' ? 'manual' : Number(e.target.value))} style={{ maxWidth: 360 }}><option value="">— 시장 분석용 (업체 없음)</option><option value="manual">직접 입력 (100위 밖·목록에 없는 업체)</option>{cands.map(c => <option key={c.rank} value={c.rank}>{c.rank}위 · {c.mallName} · {c.title.slice(0, 30)}</option>)}</select></label>
         <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>담당자<input value={owner} onChange={e => setOwner(e.target.value)} onBlur={() => pick(tgt)} placeholder="이름" style={{ width: 90 }} /></label>
-        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>연락처<input value={phone} onChange={e => setPhone(e.target.value)} onBlur={() => pick(tgt)} placeholder="010-0000-0000" style={{ width: 140 }} /></label>
+        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>연락처 <span style={{ fontWeight: 400 }}>(저장하면 콜 리스트 원클릭 링크에도 사용)</span><span style={{ display: 'flex', gap: 4 }}><input value={phone} onChange={e => setPhone(e.target.value)} onBlur={() => pick(tgt)} placeholder="010-0000-0000" style={{ width: 140 }} /><button type="button" className="btn ghost" style={{ padding: '3px 10px', fontSize: 12 }} onClick={async () => { const x = await saveMyPhone(phone); notify(x.msg, x.ok ? 'ok' : 'bad'); }}>저장</button></span></label>
         <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>기본 가격<input value={basic} onChange={e => setBasic(e.target.value)} onBlur={() => pick(tgt)} placeholder="비우면 담당자 안내" style={{ width: 130 }} /></label>
         <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>권장 가격<input value={rec} onChange={e => setRec(e.target.value)} onBlur={() => pick(tgt)} placeholder="예: 30만원 / 10일" style={{ width: 130 }} /></label>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>

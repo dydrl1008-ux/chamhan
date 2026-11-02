@@ -5,6 +5,18 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { search } from '@/lib/nsc';
 import { buildDoc, BRAND, type Doc, type Target, type Brand } from '@/lib/proposalDoc';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
+/** 내 연락처: profiles.phone 우선, 없으면 리포트 화면에서 저장한 번호 */
+async function myPhone(uid: string): Promise<string> {
+  const sb = supabaseServer();
+  const [{ data: p }, { data: l }] = await Promise.all([sb.from('profiles').select('phone').eq('id', uid).maybeSingle(), sb.from('reward_watch_links').select('phone').eq('user_id', uid).maybeSingle()]);
+  return (p as any)?.phone || l?.phone || '';
+}
+/** 제안서 화면에서 내 연락처 저장 */
+export async function saveMyPhone(phone: string): Promise<R> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const { error } = await supabaseServer().rpc('set_my_phone', { p_phone: phone.trim() });
+  return error ? { ok: false, msg: error.message } : { ok: true, msg: '연락처 저장' };
+}
 /** 생성 기록 (실패해도 무시) */
 export async function logProposal(action: 'make' | 'pdf' | 'png' | 'link', keyword: string, target: string | null, code: string | null = null): Promise<void> {
   const me = await getProfile(); if (!me) return;
@@ -17,8 +29,7 @@ export async function loadKeyword(keyword: string): Promise<R<{ doc: Doc; candid
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   try {
     const r = await search(keyword, me.id, false);
-    const { data: link } = await supabaseServer().from('reward_watch_links').select('phone').eq('user_id', me.id).maybeSingle();
-    const brand: Brand = { ...BRAND, owner: me.name, phone: link?.phone || '' };
+    const brand: Brand = { ...BRAND, owner: me.name, phone: await myPhone(me.id) };
     const doc = buildDoc(r, brand, null);
     await supabaseServer().from('proposal_logs').insert({ user_id: me.id, keyword: r.keyword, target: null, action: 'make' });
     const candidates: Target[] = r.products.filter(p => p.rank > 0).sort((a, b) => a.rank - b.rank).map(p => ({ rank: p.rank, mallName: p.mallName, title: p.productTitle, price: p.lowPrice, reviews: p.reviewCount, image: p.imageUrl ?? null, link: p.link, hit: p.hitStarScore || undefined, sale: p.saleStarScore || undefined, quality: p.qualityStarScore || undefined }));
@@ -50,12 +61,12 @@ export async function quickLeadLink(leadId: number): Promise<R<{ code: string; u
   if (!lead) return { ok: false, msg: '리드를 찾을 수 없음' };
   if (!lead.keyword?.trim()) return { ok: false, msg: '키워드가 없는 리드' };
   try {
-    const [r, { data: link }] = await Promise.all([search(lead.keyword, me.id, false), sb.from('reward_watch_links').select('phone').eq('user_id', me.id).maybeSingle()]);
+    const [r, phone] = await Promise.all([search(lead.keyword, me.id, false), myPhone(me.id)]);
     const norm = (t: string) => (t || '').replace(/\s+/g, '').toLowerCase(); const sn = norm(lead.store_name);
     const hit = r.products.find(p => p.rank > 0 && sn && (norm(p.mallName) === sn || norm(p.mallName).includes(sn) || sn.includes(norm(p.mallName))));
     const target: Target = hit ? { rank: hit.rank, mallName: hit.mallName, title: hit.productTitle, price: hit.lowPrice, reviews: hit.reviewCount, image: hit.imageUrl ?? null, link: hit.link, hit: hit.hitStarScore || undefined, sale: hit.saleStarScore || undefined, quality: hit.qualityStarScore || undefined }
       : { rank: lead.rank_now && lead.rank_now > 0 ? lead.rank_now : 101, mallName: lead.store_name, title: lead.store_name, price: 0, reviews: 0, image: null };
-    const doc = buildDoc(r, { ...BRAND, owner: me.name, phone: link?.phone || '' }, target);
+    const doc = buildDoc(r, { ...BRAND, owner: me.name, phone }, target);
     const x = await makeNativeLink(doc, leadId);
     if (!x.ok) return x;
     return { ...x, msg: `${lead.store_name} 제안서 링크 생성${hit ? ` (${hit.rank}위 상품 매칭)` : ' (목록에 없어 업체명·순위만 반영)'} — 복사됨` };
