@@ -41,3 +41,23 @@ export async function makeNativeLink(doc: Doc, leadId: number | null = null): Pr
   const base = (process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');   // 제안서 링크 전용 도메인(중립) 우선
   return { ok: true, msg: '링크 생성 — 열람하면 알림이 옵니다', code, url: `${base}/p/${code}` };
 }
+
+/** 콜 리스트에서 원클릭: 리드의 키워드·업체명·순위로 제안서 링크 바로 생성 (화면 안 거침) */
+export async function quickLeadLink(leadId: number): Promise<R<{ code: string; url: string }>> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const sb = supabaseServer();
+  const { data: lead } = await sb.from('leads').select('id,store_name,keyword,rank_now,product_url').eq('id', leadId).maybeSingle();
+  if (!lead) return { ok: false, msg: '리드를 찾을 수 없음' };
+  if (!lead.keyword?.trim()) return { ok: false, msg: '키워드가 없는 리드' };
+  try {
+    const [r, { data: link }] = await Promise.all([search(lead.keyword, me.id, false), sb.from('reward_watch_links').select('phone').eq('user_id', me.id).maybeSingle()]);
+    const norm = (t: string) => (t || '').replace(/\s+/g, '').toLowerCase(); const sn = norm(lead.store_name);
+    const hit = r.products.find(p => p.rank > 0 && sn && (norm(p.mallName) === sn || norm(p.mallName).includes(sn) || sn.includes(norm(p.mallName))));
+    const target: Target = hit ? { rank: hit.rank, mallName: hit.mallName, title: hit.productTitle, price: hit.lowPrice, reviews: hit.reviewCount, image: hit.imageUrl ?? null, link: hit.link, hit: hit.hitStarScore || undefined, sale: hit.saleStarScore || undefined, quality: hit.qualityStarScore || undefined }
+      : { rank: lead.rank_now && lead.rank_now > 0 ? lead.rank_now : 101, mallName: lead.store_name, title: lead.store_name, price: 0, reviews: 0, image: null };
+    const doc = buildDoc(r, { ...BRAND, owner: me.name, phone: link?.phone || '' }, target);
+    const x = await makeNativeLink(doc, leadId);
+    if (!x.ok) return x;
+    return { ...x, msg: `${lead.store_name} 제안서 링크 생성${hit ? ` (${hit.rank}위 상품 매칭)` : ' (목록에 없어 업체명·순위만 반영)'} — 복사됨` };
+  } catch (e: any) { return { ok: false, msg: e.message }; }
+}
