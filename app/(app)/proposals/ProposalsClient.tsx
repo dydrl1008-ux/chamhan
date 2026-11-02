@@ -2,12 +2,13 @@
 // 키워드 제안서 — 키워드 → (대상 업체 선택) → 문서 미리보기 → PDF / PNG(장별) / 링크
 import { useEffect, useRef, useState } from 'react';
 import { notify } from '@/components/Toast';
-import { PageHeader, Empty } from '@/components/ui';
+import { PageHeader, Empty, Section } from '@/components/ui';
+import { fmtKST } from '@/lib/date/kst';
 import ProposalDoc, { PD_CSS, docPageCount } from '@/components/ProposalDoc';
 import type { Doc, Target } from '@/lib/proposalDoc';
 import { loadKeyword, withTarget, makeNativeLink } from './actions';
 
-export default function ProposalsClient({ initialKw, phone: phone0, owner: owner0, recent, usage }: { initialKw: string; phone: string; owner: string; recent: string[]; usage: { used: number; limit: number } }) {
+export default function ProposalsClient({ initialKw, phone: phone0, owner: owner0, recent, usage, mine = [] }: { initialKw: string; phone: string; owner: string; recent: string[]; usage: { used: number; limit: number }; mine?: { code: string; title: string; views: number; first_view_at: string | null; last_view_at: string | null; created_at: string }[] }) {
   const [kw, setKw] = useState(initialKw); const [phone, setPhone] = useState(phone0); const [owner, setOwner] = useState(owner0); const [basic, setBasic] = useState(''); const [rec, setRec] = useState('');
   const [doc, setDoc] = useState<Doc | null>(null); const [cands, setCands] = useState<Target[]>([]); const [tgt, setTgt] = useState<number | '' | 'manual'>(''); const [man, setMan] = useState({ mallName: '', title: '', rank: '', price: '', reviews: '' });
   const [busy, setBusy] = useState(''); const [link, setLink] = useState(''); const wrap = useRef<HTMLDivElement>(null);
@@ -59,6 +60,9 @@ export default function ProposalsClient({ initialKw, phone: phone0, owner: owner
       <span className="cell-sub">순위·가격·리뷰는 네이버쇼핑에서 보고 적으면 됨. 비우면 표에서 빠짐</span>
     </div>}
     {link && <div className="card" style={{ padding: '10px 14px', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><b>링크</b><code style={{ userSelect: 'all' }}>{link}</code><span className="cell-sub">열람하면 알림 · 참한 도메인만 노출 · 메일·카톡에 붙여 보내세요</span></div>}
+    {mine.length > 0 && <Section title="내가 만든 링크" sub="열람하면 알림 + 여기 횟수" flush><table><thead><tr><th>제목</th><th>링크</th><th className="num">열람</th><th>처음 본 시각</th><th>마지막</th><th>생성</th></tr></thead><tbody>
+      {mine.map(m => <tr key={m.code} style={{ background: m.views ? 'var(--ok-soft)' : undefined }}><td>{m.title}</td><td><code style={{ userSelect: 'all', fontSize: 12 }}>/p/{m.code}</code></td><td className="num" style={{ fontWeight: m.views ? 700 : 400 }}>{m.views}</td><td className="cell-sub">{fmtKST(m.first_view_at)}</td><td className="cell-sub">{fmtKST(m.last_view_at)}</td><td className="cell-sub">{fmtKST(m.created_at)}</td></tr>)}
+    </tbody></table></Section>}
     {!doc ? <div className="card"><Empty>키워드를 넣고 「제안서 만들기」</Empty></div> :
       <div ref={wrap} style={{ overflowX: 'auto', paddingBottom: 10 }}>{busy === 'tgt' && <div className="cell-sub" style={{ textAlign: 'center' }}>대상 반영 중…</div>}<ProposalDoc d={doc} total={docPageCount(doc)} img={u => `/api/img?u=${encodeURIComponent(u)}`} /></div>}
   </div>;

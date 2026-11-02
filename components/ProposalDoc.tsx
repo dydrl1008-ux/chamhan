@@ -10,7 +10,7 @@ export const PD_CSS = `
 .pd-in{padding:52px 60px 16px;display:flex;flex-direction:column;gap:18px;flex:1;justify-content:space-between}
 .pd-foot{margin-top:auto;padding:14px 60px 22px;display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);border-top:1px solid var(--line)}
 .pd-page.dark .pd-foot{border-color:rgba(255,255,255,.12);color:#8E97AD}
-.pd mark{background:var(--mark);color:inherit;padding:0 4px;border-radius:2px;font-weight:700}
+.pd mark{background:var(--mark);color:inherit;padding:0 4px;border-radius:2px;font-weight:700;white-space:nowrap}
 .pd-navy mark,.pd-page.dark mark{background:transparent;color:var(--lime);padding:0}
 .pd-fact mark{background:var(--blue-soft);color:var(--blue)}
 /* 섹션 헤더 */
@@ -140,7 +140,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
           <div className="pd-stat"><div className="l">신상품 비율</div><div className="v">{d.newRate}<small>%</small></div><div className="d">최근 90일 등록</div></div>
         </div>
         <div className="pd-g3">
-          {[['경쟁 강도', d.competition], ['진입 장벽', d.barrier], ['진입 타이밍', d.timing]].map(([l, x]: any) => <div className="pd-box" key={l}><h4>{l}</h4><div className="pd-big">{x.level}</div><div style={{ fontSize: 12, color: 'var(--ink2)', marginTop: 6, lineHeight: 1.55 }}><Hl t={x.why} /></div></div>)}
+          {[['경쟁 강도', d.competition], ['진입 장벽', d.barrier], ['진입 타이밍', d.timing]].map(([l, x]: any) => <div className="pd-box" key={l}><h4>{l}</h4><div className="pd-big">{x.level}</div><div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>{x.why}</div></div>)}
         </div>
         {d.related.length > 0 && <div className="pd-box"><h4>함께 노출되는 연관 키워드</h4><div>{d.related.map(t => <span key={t} style={{ display: 'inline-block', background: 'var(--ink)', color: '#fff', fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 999, margin: '0 6px 6px 0' }}>{t}</span>)}</div></div>}
         <div className="pd-navy"><div className="t">요약</div>1페이지 10개 중 <mark>자연 순위 {d.natural10}개</mark> / 광고 {d.adCount10}개</div>
@@ -230,9 +230,9 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
 
   // 6 행동
   pages.push(<div className="pd-page dark" key="next">
-    <div className="pd-in" style={{ gap: 0 }}>
+    <div className="pd-in" style={{ gap: 0, justifyContent: 'flex-start' }}>
       <div className="pd-logo"><i />{d.brand.nameEn}</div>
-      <div style={{ marginTop: 200 }}>
+      <div style={{ margin: 'auto 0', paddingBottom: 40 }}>
         <div style={{ fontSize: 12, letterSpacing: '.2em', color: 'var(--lime)', fontWeight: 800 }}>CONTACT</div>
         <div style={{ fontSize: 38, fontWeight: 900, letterSpacing: '-.02em', lineHeight: 1.2, margin: '14px 0 16px' }}>문의</div>
         <p style={{ fontSize: 15, color: '#A9B1C6', lineHeight: 1.7, margin: 0, maxWidth: 540 }}>회신 시 <mark>연관 키워드 현재 순위</mark> 확인 → 전달 → 진행 여부 결정</p>
