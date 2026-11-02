@@ -234,9 +234,9 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
   // 6 행동 — 문의 + 자료 요약 (하단까지 채움)
   const oneLine = tgt ? (tgt.rank > 100 ? `'${d.keyword}' 100위 밖` : `'${d.keyword}' ${tgt.rank}위 — ${tgt.rank > 40 ? '첫 화면 밖' : '첫 화면 안'}`) : `'${d.keyword}' 상위 ${d.n}개 분석`;
   pages.push(<div className="pd-page dark" key="next">
-    <div className="pd-in" style={{ gap: 22, justifyContent: 'flex-start' }}>
+    <div className="pd-in" style={{ gap: 22, justifyContent: 'space-between' }}>
       <div className="pd-logo"><i />{d.brand.nameEn}</div>
-      <div style={{ marginTop: 40 }}>
+      <div>
         <div style={{ display: 'inline-block', background: 'var(--lime)', color: '#fff', fontSize: 11, letterSpacing: '.14em', fontWeight: 800, padding: '6px 12px', borderRadius: 4 }}>CONTACT</div>
         <div style={{ fontSize: 44, fontWeight: 900, letterSpacing: '-.03em', lineHeight: 1.18, margin: '18px 0 12px' }}>{tgt ? <>{tgt.rank > 100 ? '100위 밖' : `${tgt.rank}위`}에서 <span style={{ color: 'var(--lime)' }}>첫 화면</span>까지</> : <>'{d.keyword}' <span style={{ color: 'var(--lime)' }}>첫 화면</span>까지</>}</div>
         <p style={{ fontSize: 15, color: '#A9B1C6', lineHeight: 1.7, margin: 0, maxWidth: 540 }}>회신 시 <mark>연관 키워드 현재 순위</mark> 확인 → 전달 → 진행 여부 결정</p>
@@ -252,7 +252,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
         {[[tgt ? (tgt.rank > 100 ? '100위 밖' : `${tgt.rank}위`) : `${d.n}개`, tgt ? `'${d.keyword}' 현재 순위` : '분석 상품'], [fmtWon(d.avgPrice10), '상위 10개 평균가'], [fmtCnt(d.avgReview10) + '개', '상위 10개 평균 리뷰']].map(([v, l]) => <div key={l} style={{ borderTop: '2px solid var(--lime)', paddingTop: 10 }}><div style={{ fontSize: 26, fontWeight: 900 }}>{v}</div><div style={{ fontSize: 11, color: '#8E97AD' }}>{l}</div></div>)}
       </div>
-      <div style={{ marginTop: 'auto', fontSize: 11, color: '#8E97AD', lineHeight: 1.6 }}>◆ {d.brand.nameEn} · {d.brand.name} · 네이버쇼핑 검색 결과 공개 데이터 기준 ({d.date})</div>
+      <div style={{ fontSize: 11, color: '#8E97AD', lineHeight: 1.6 }}>◆ {d.brand.nameEn} · {d.brand.name} · 네이버쇼핑 검색 결과 공개 데이터 기준 ({d.date})</div>
     </div>
   </div>);
 
