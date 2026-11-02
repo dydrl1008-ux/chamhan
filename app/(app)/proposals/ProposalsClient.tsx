@@ -25,17 +25,18 @@ export default function ProposalsClient({ initialKw, phone: phone0, owner: owner
   const toPdf = async () => {
     if (!doc) return; setBusy('pdf');
     try {
-      const { toPng } = await import('html-to-image'); const { jsPDF } = await import('jspdf');
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' }); const els = pages();
+      const { toJpeg } = await import('html-to-image'); const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }); const els = pages();
       for (let i = 0; i < els.length; i++) {
-        const u = await toPng(els[i], { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true });
-        if (i) pdf.addPage(); const ratio = els[i].offsetHeight / els[i].offsetWidth; const w = 210, h = Math.min(297, w * ratio); pdf.addImage(u, 'PNG', 0, 0, w, h);
+        // 장마다 캡처 — margin 제거(옆으로 밀림 방지), JPEG 품질 0.9 (PNG 대비 1/20 용량)
+        const u = await toJpeg(els[i], { pixelRatio: 1.6, quality: 0.9, backgroundColor: '#ffffff', cacheBust: true, style: { margin: '0', boxShadow: 'none' } });
+        if (i) pdf.addPage(); const ratio = els[i].offsetHeight / els[i].offsetWidth; const w = 210, h = Math.min(297, w * ratio); pdf.addImage(u, 'JPEG', 0, 0, w, h, undefined, 'FAST');
       }
       pdf.save(fname() + '.pdf'); notify(`PDF 저장 (${els.length}장)`, 'ok'); logProposal('pdf', doc.keyword, doc.target?.mallName ?? null);
     } catch (e: any) { notify('PDF 실패: ' + (e?.message ?? e), 'bad'); } finally { setBusy(''); }
   };
   const toPng1 = async (i: number) => {
-    setBusy('png'); try { const { toPng } = await import('html-to-image'); const el = pages()[i]; const u = await toPng(el, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true }); const a = document.createElement('a'); a.href = u; a.download = `${fname()}_${i + 1}.png`; a.click(); logProposal('png', doc!.keyword, doc!.target?.mallName ?? null); } catch (e: any) { notify('PNG 실패: ' + (e?.message ?? e), 'bad'); } finally { setBusy(''); }
+    setBusy('png'); try { const { toPng } = await import('html-to-image'); const el = pages()[i]; const u = await toPng(el, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true, style: { margin: '0', boxShadow: 'none' } }); const a = document.createElement('a'); a.href = u; a.download = `${fname()}_${i + 1}.png`; a.click(); logProposal('png', doc!.keyword, doc!.target?.mallName ?? null); } catch (e: any) { notify('PNG 실패: ' + (e?.message ?? e), 'bad'); } finally { setBusy(''); }
   };
   const mkLink = async () => { if (!doc) return; setBusy('link'); const x = await makeNativeLink(doc, lead?.id ?? null); setBusy(''); if (!x.ok || !x.url) { notify(x.msg, 'bad'); return; } setLink(x.url); try { await navigator.clipboard.writeText(x.url); notify('링크 복사됨 — ' + x.msg, 'ok'); } catch { notify(x.msg, 'ok'); } };
 

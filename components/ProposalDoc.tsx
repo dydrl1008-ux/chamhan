@@ -3,7 +3,7 @@ import type { Doc } from '@/lib/proposalDoc';
 import { fmtWon, fmtCnt } from '@/lib/proposalDoc';
 
 export const PD_CSS = `
-.pd{word-break:keep-all;--ink:#111111;--ink2:#333333;--muted:#777777;--line:#E8E8E8;--soft:#F5F6F7;--blue:#03C75A;--blue-soft:#E8F8EE;--navy:#141414;--lime:#03C75A;--mark:#03C75A;--red:#E5484D;--red-soft:#FDECEC;--green:#03C75A;--green-soft:#E8F8EE;color:var(--ink);font-family:Pretendard,'Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.pd,.pd-page{word-break:keep-all;--ink:#111111;--ink2:#333333;--muted:#777777;--line:#E8E8E8;--soft:#F5F6F7;--blue:#03C75A;--blue-soft:#E8F8EE;--navy:#141414;--lime:#03C75A;--mark:#03C75A;--red:#E5484D;--red-soft:#FDECEC;--green:#03C75A;--green-soft:#E8F8EE;color:var(--ink);font-family:Pretendard,'Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
 .pd *{box-sizing:border-box}
 .pd-page{width:827px;height:1170px;background:#fff;margin:0 auto 18px;padding:0;position:relative;box-shadow:0 2px 14px rgba(0,0,0,.12);page-break-after:always;break-after:page;overflow:hidden;display:flex;flex-direction:column}
 .pd-page.dark{background:#111;color:#fff}
