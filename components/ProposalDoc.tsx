@@ -223,9 +223,9 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, fontSize: 12 }}>
           {[['회신', '전화 · 문자 · 카톡'], ['키워드 · 옵션 확정', '연관 키워드 순위 확인 후'], ['입금 · 세금계산서', '사업자 기준 발행'], ['익일 시작', '시작 순위 기록 → 매일 확인']].map(([t, d1], i) => <div key={t} style={{ display: 'grid', gridTemplateColumns: '22px 1fr', gap: 8, alignItems: 'start' }}><span style={{ width: 20, height: 20, borderRadius: 6, background: 'var(--blue)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span><span><b>{t}</b><br /><span className="pd-muted" style={{ fontSize: 11 }}>{d1}</span></span></div>)}
         </div></div>
-      <div className="pd-two">
-        <div className="pd-opt"><div className="t">기본</div><div className="p">{price(d.offer.basic)}</div><ul><li>키워드 1개 · 10일</li><li>매일 아침 순위 확인</li><li>종료 리포트</li></ul></div>
-        <div className="pd-opt rec"><span className="tag">같은 키워드 고객 다수 선택</span><div className="t">권장</div><div className="p">{price(d.offer.rec)}</div><ul><li>키워드 1개 · 10일 · 유입량 상향</li><li>연관 키워드 1개 순위 추적 포함</li><li>매일 순위 확인 · 변동 시 연락 · 종료 리포트</li></ul></div>
+      <div className="pd-opt rec" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'center' }}>
+        <div><div className="t" style={{ color: '#A9B1C6' }}>진행 조건</div><div style={{ fontSize: 15, fontWeight: 800, margin: '6px 0 4px' }}>키워드 1개 · 10일 단위 · 매일 순위 확인 · 변동 시 연락 · 종료 리포트</div><div style={{ fontSize: 12, color: '#A9B1C6' }}>연장은 리포트 보고 결정 · 연관 키워드 추가 가능</div></div>
+        <div style={{ textAlign: 'right' }}><div style={{ fontSize: 11, color: '#A9B1C6', letterSpacing: '.1em', fontWeight: 800 }}>비용</div><div style={{ fontSize: 22, fontWeight: 900, color: 'var(--lime)' }}>{d.offer.rec || d.offer.basic || '담당자 안내'}</div></div>
       </div>
       <div className="pd-muted" style={{ fontSize: 10.5 }}>※ 결과는 키워드 경쟁도·상품 반응에 따라 다름 · 특정 순위 보장 없음 · 10일 단위 진행, 연장은 리포트 보고 결정</div>
     </div>{foot(pn)}
