@@ -31,6 +31,6 @@ export async function makeNativeLink(doc: Doc, leadId: number | null = null): Pr
   const title = `${doc.target ? doc.target.mallName + ' · ' : ''}${doc.keyword} 상위노출 제안서`;
   const { error } = await supabaseServer().from('proposals').insert({ code, lead_id: leadId, title, target_url: '', kind: 'native', data: doc, owner_id: me.id });
   if (error) return { ok: false, msg: error.message };
-  const base = (process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');
+  const base = (process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');   // 제안서 링크 전용 도메인(중립) 우선
   return { ok: true, msg: '링크 생성 — 열람하면 알림이 옵니다', code, url: `${base}/p/${code}` };
 }

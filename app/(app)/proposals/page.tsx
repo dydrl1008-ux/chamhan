@@ -8,5 +8,5 @@ export default async function ProposalsPage({ searchParams }: { searchParams: { 
   const me = (await getProfile())!;
   const sb = supabaseServer();
   const [{ data: link }, list, usage, { data: mine }] = await Promise.all([sb.from('reward_watch_links').select('phone').eq('user_id', me.id).maybeSingle(), recent(20).catch(() => []), myUsage(me.id).catch(() => ({ used: 0, limit: 0 })), sb.from('proposals').select('code,title,views,first_view_at,last_view_at,created_at').eq('owner_id', me.id).eq('kind', 'native').order('created_at', { ascending: false }).limit(30)]);
-  return <ProposalsClient initialKw={searchParams.kw ?? ''} phone={link?.phone ?? ''} owner={me.name} recent={(list as any[]).map(x => x.keyword)} usage={usage} mine={(mine ?? []) as any} />;
+  return <ProposalsClient initialKw={searchParams.kw ?? ''} phone={link?.phone ?? ''} owner={me.name} recent={(list as any[]).map(x => x.keyword)} usage={usage} mine={(mine ?? []) as any} base={(process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '')} />;
 }
