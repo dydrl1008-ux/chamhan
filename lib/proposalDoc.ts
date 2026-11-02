@@ -58,7 +58,7 @@ export function buildDoc(r: NscResult, brand: Brand, target: Target | null, offe
   const competition = { level: !isNaN(diffScore) ? (diffScore >= 70 ? '높음' : diffScore >= 40 ? '보통' : '낮음') : (avgReview10 >= 3000 ? '높음' : avgReview10 >= 500 ? '보통' : '낮음'), why: `상위 ${ps.length}개 기준 · 1페이지 광고 ${adCount10}개` };
   const barrier = { level: avgReview10 >= 2000 ? '높음' : avgReview10 >= 300 ? '보통' : '낮음', why: `상위 10개 평균 리뷰 ${cnt(avgReview10)}개` };
   const timing = { level: newRate >= 20 ? '활발' : newRate >= 8 ? '보통' : '안정', why: `최근 90일 등록 ${newRate}%` };
-  const related = (r.trend ?? []).filter(t => typeof t === 'string' && t.trim() && t.trim() !== r.keyword).slice(0, 8);
+  const related = (r.trend ?? []).map(t => String(t ?? '').trim()).filter(t => t && t !== r.keyword && t.length <= 12 && !/[:：]|\d+\s?(개|원|%|위)|제품|상품|리뷰/.test(t)).slice(0, 8);   // 키워드만 (문장형 인사이트 제외)
   const facts = [
     `상위 평균가 ${won(avgPrice10)} · 평균 리뷰 ${cnt(avgReview10)}개`,
     `상위 10개 — 광고 ${adCount10} / 자연 ${10 - adCount10}`,
