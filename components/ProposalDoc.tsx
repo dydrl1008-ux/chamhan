@@ -94,10 +94,14 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
           <div className="pd-huge">{tgt.rank}<small>위</small></div>
           <div style={{ fontSize: 22, fontWeight: 700, margin: '14px 0 0', lineHeight: 1.4 }}>{tgt.rank > 100 ? <>검색 결과 <mark>100위 안에 없음</mark></> : <>상위 10위까지 <mark>{d.gapTop10}계단</mark></>}</div>
         </> : <>
-          <div className="pd-huge">{d.n}<small>개</small></div>
-          <div style={{ fontSize: 22, fontWeight: 700, margin: '14px 0 0', lineHeight: 1.4 }}>상위 상품 데이터와<br /><mark>상위노출 진행 방식</mark> 정리</div>
+          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', marginTop: -6 }}>1페이지 진입 조건</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr', gap: 12, marginTop: 26 }}>
+            <div style={{ background: 'var(--lime)', color: 'var(--ink)', borderRadius: 14, padding: '18px 20px' }}><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em' }}>유입 반영도</div><div style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-.03em', lineHeight: 1.05, margin: '6px 0 4px' }}>{d.traffic.verdict}</div><div style={{ fontSize: 11.5, fontWeight: 600 }}>{d.traffic.verdict === '높음' ? '클릭·유입이 순위를 가르는 시장' : d.traffic.verdict === '보통' ? '유입 + 리뷰가 같이 작용' : '리뷰 비중 큰 시장'}</div></div>
+            <div style={{ border: '1px solid rgba(255,255,255,.18)', borderRadius: 14, padding: '18px 20px' }}><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', color: '#8E97AD' }}>상위 10개 리뷰 중간값</div><div style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-.02em', margin: '10px 0 4px' }}>{fmtCnt(d.medianReview10)}<span style={{ fontSize: 13, color: '#8E97AD' }}> 개</span></div><div style={{ fontSize: 11.5, color: '#A9B1C6' }}>리뷰 적은데 상위권 {d.traffic.lowReviewTop}개</div></div>
+            <div style={{ border: '1px solid rgba(255,255,255,.18)', borderRadius: 14, padding: '18px 20px' }}><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', color: '#8E97AD' }}>클릭지수 상위 10 / 11~40</div><div style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-.02em', margin: '10px 0 4px' }}>{d.traffic.hitTop}<span style={{ fontSize: 13, color: '#8E97AD' }}> / {d.traffic.hitMid}</span></div><div style={{ fontSize: 11.5, color: '#A9B1C6' }}>차이 {(d.traffic.hitTop - d.traffic.hitMid).toFixed(1)}</div></div>
+          </div>
         </>}
-        <p style={{ fontSize: 14, color: '#A9B1C6', margin: '26px 0 0', lineHeight: 1.7, maxWidth: 520 }}>{tgt ? '현재 위치 · 유입 반영도 · 진행 방식' : '시장 데이터 · 유입 반영도 · 진행 방식'}</p>
+        <p style={{ fontSize: 14, color: '#A9B1C6', margin: '26px 0 0', lineHeight: 1.7, maxWidth: 520 }}>{tgt ? '현재 위치 · 유입 반영도 · 진행 방식' : `상위 ${d.n}개 데이터 · 유입 반영도 · 진행 방식`}</p>
       </div>
       <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '1px solid rgba(255,255,255,.14)', paddingTop: 18, marginBottom: 20 }}>
         <div><div style={{ fontSize: 24, fontWeight: 900 }}>{d.n}<span style={{ fontSize: 12, color: '#8E97AD' }}> 개</span></div><div style={{ fontSize: 11, color: '#8E97AD' }}>분석한 상위 상품</div></div>
