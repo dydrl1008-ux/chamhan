@@ -15,7 +15,7 @@ export async function loadKeyword(keyword: string): Promise<R<{ doc: Doc; candid
     const { data: link } = await supabaseServer().from('reward_watch_links').select('phone').eq('user_id', me.id).maybeSingle();
     const brand: Brand = { ...BRAND, owner: me.name, phone: link?.phone || '' };
     const doc = buildDoc(r, brand, null);
-    const candidates: Target[] = r.products.filter(p => p.rank > 0).sort((a, b) => a.rank - b.rank).map(p => ({ rank: p.rank, mallName: p.mallName, title: p.productTitle, price: p.lowPrice, reviews: p.reviewCount, image: p.imageUrl ?? null, link: p.link }));
+    const candidates: Target[] = r.products.filter(p => p.rank > 0).sort((a, b) => a.rank - b.rank).map(p => ({ rank: p.rank, mallName: p.mallName, title: p.productTitle, price: p.lowPrice, reviews: p.reviewCount, image: p.imageUrl ?? null, link: p.link, hit: p.hitStarScore || undefined, sale: p.saleStarScore || undefined, quality: p.qualityStarScore || undefined }));
     return { ok: true, msg: r.cached ? '캐시된 결과 (조회 한도 안 씀)' : '새로 조회함', doc, candidates, cached: r.cached };
   } catch (e: any) { return { ok: false, msg: e.message }; }
 }

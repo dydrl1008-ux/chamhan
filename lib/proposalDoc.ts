@@ -1,7 +1,7 @@
 // 키워드 제안서 — 시크릿 지수(nsc) 조회 결과만으로 문장·수치를 전부 계산 (LLM 호출 없음)
 import type { NscResult, Product } from '@/lib/nsc';
 
-export type Target = { rank: number; mallName: string; title: string; price: number; reviews: number; image?: string | null; link?: string };
+export type Target = { rank: number; mallName: string; title: string; price: number; reviews: number; image?: string | null; link?: string; hit?: number; sale?: number; quality?: number };
 export type Brand = { name: string; nameEn: string; email: string; owner?: string; phone?: string };
 export type Offer = { basic: string; rec: string };   // 옵션 가격 표기 (비우면 '담당자 안내')
 export type Doc = {
@@ -18,7 +18,10 @@ export type Doc = {
   targetFacts: string[];          // 귀사 비교 문장 (target 있을 때)
   entry: { price: string; review: string };
   offer: Offer;
-  natural10: number;            // 상위 10 중 자연 노출 수
+  natural10: number;            // (미사용) 상위 10 중 자연 노출 수
+  /** 유입(리워드) 반영도 근거 */
+  traffic: { verdict: '높음' | '보통' | '낮음'; why: string[]; inversions: number; lowReviewTop: number; hitTop: number; hitMid: number; saleTop: number; saleMid: number; midN: number };
+  checklist: { label: string; ok: boolean | null; note: string }[];   // 귀사 조건 체크 (target 있을 때)
   gapTop10: number | null;      // 귀사 → 10위 계단 수
   meetsPrice: boolean; meetsReview: boolean;
 };
@@ -68,13 +71,36 @@ export function buildDoc(r: NscResult, brand: Brand, target: Target | null, offe
     targetFacts.push(rv >= avgReview10 * 0.7 ? `리뷰 ${cnt(rv)}개 — 상위 평균 ${cnt(avgReview10)}개와 같은 구간` : rv >= med(r10) * 0.3 ? `리뷰 ${cnt(rv)}개 — 상위 평균 ${cnt(avgReview10)}개보다 적음, 상위 10개 중 같은 수준 상품 있음` : `리뷰 ${cnt(rv)}개 — 상위 평균 ${cnt(avgReview10)}개와 차이`);
     targetFacts.push(target.rank > 100 ? `'${r.keyword}' 100위 밖` : `'${r.keyword}' ${target.rank}위${target.rank > 40 ? ' — 첫 화면(40위) 밖' : target.rank > 10 ? ' — 첫 화면 안 · 10위 밖' : ' — 상위 10위'}`);
   }
+  // ── 유입 반영도: 리뷰 순과 순위가 얼마나 다른가 / 상위 10 vs 11~40 클릭·판매지수 차이
+  const mid = ps.filter(p => p.rank > 10 && p.rank <= 40);
+  const medTop = med(r10);
+  const inversions = mid.filter(p => p.reviewCount >= medTop).length;                 // 리뷰는 상위 중간값 이상인데 11~40위
+  const lowReviewTop = top.filter(p => p.reviewCount < (mid.length ? med(mid.map(m => m.reviewCount)) : medTop)).length;   // 리뷰 적은데 상위 10
+  const avgOf = (arr: Product[], k: keyof Product) => avg(arr.map(p => Number(p[k] ?? 0)).filter(v => v > 0));
+  const hitTop = +avgOf(top, 'hitStarScore').toFixed(1), hitMid = +avgOf(mid, 'hitStarScore').toFixed(1), saleTop = +avgOf(top, 'saleStarScore').toFixed(1), saleMid = +avgOf(mid, 'saleStarScore').toFixed(1);
+  const gapHit = hitTop - hitMid, gapSale = saleTop - saleMid;
+  let score = 0; if (inversions >= 5) score += 2; else if (inversions >= 2) score += 1; if (gapHit >= 0.7) score += 2; else if (gapHit >= 0.3) score += 1; if (lowReviewTop >= 2) score += 1;
+  const verdict: '높음' | '보통' | '낮음' = score >= 4 ? '높음' : score >= 2 ? '보통' : '낮음';
+  const why: string[] = [];
+  if (inversions) why.push(`리뷰가 상위 10개 중간값(${cnt(medTop)}개) 이상인데 11~40위에 있는 상품 ${inversions}개 — 순위가 리뷰 순이 아님`);
+  if (lowReviewTop) why.push(`리뷰가 중간값보다 적은데 상위 10위 안인 상품 ${lowReviewTop}개`);
+  if (mid.length) why.push(`클릭지수 상위 10개 ${hitTop} vs 11~40위 ${hitMid}${gapHit >= 0.3 ? ' — 클릭·유입이 순위를 가름' : ' — 차이 작음'}`);
+  if (mid.length) why.push(`판매지수 상위 10개 ${saleTop} vs 11~40위 ${saleMid}${gapSale >= 0.3 ? '' : ' — 차이 작음'}`);
+  // ── 귀사 조건 체크
+  const checklist: Doc['checklist'] = [];
+  if (target) {
+    checklist.push({ label: '가격', ok: target.price > 0 ? target.price <= Math.max(...p10, 0) * 1.1 : null, note: target.price > 0 ? `${won(target.price)} / 상위 10개 ${won(Math.min(...p10))}~${won(Math.max(...p10))}` : '미확인' });
+    checklist.push({ label: '리뷰', ok: target.reviews >= medTop * 0.5 ? true : target.reviews >= med(mid.map(m => m.reviewCount)) * 0.5 ? null : false, note: `${cnt(target.reviews)}개 / 상위 10개 중간값 ${cnt(medTop)}개` });
+    if (target.quality) checklist.push({ label: '적합도(상품명·카테고리)', ok: target.quality >= ax('qualityStarScore') - 0.5, note: `${target.quality} / 상위 평균 ${ax('qualityStarScore').toFixed(1)}` });
+    checklist.push({ label: '클릭·유입(인기도)', ok: target.hit ? target.hit >= hitTop - 0.3 : false, note: target.hit ? `${target.hit} / 상위 평균 ${hitTop}` : '현재 순위에서는 유입 자체가 적음 — 리워드로 채우는 항목' });
+  }
   return {
     keyword: r.keyword, date: `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}`, brand, target,
     n: ps.length, avgPrice: avg(prices), avgPrice10, avgReview: avg(reviews), avgReview10, newRate, adCount10,
     minPrice10: p10.length ? Math.min(...p10) : 0, maxPrice10: p10.length ? Math.max(...p10) : 0, medianReview10: med(r10),
     related, top, priceBands, axes, strongAxis, competition, barrier, timing, facts, targetFacts,
     entry: { price: p10.length ? `${won(Math.min(...p10))} ~ ${won(avgPrice10)}` : '-', review: cnt(avgReview10) + '개' },
-    offer, natural10: top.length - adCount10, gapTop10: target ? Math.max(0, target.rank - 10) : null,
+    offer, natural10: top.length - adCount10, traffic: { verdict, why, inversions, lowReviewTop, hitTop, hitMid, saleTop, saleMid, midN: mid.length }, checklist, gapTop10: target ? Math.max(0, target.rank - 10) : null,
     meetsPrice: !!target && target.price > 0 && p10.length > 0 && target.price <= Math.max(...p10) * 1.1,
     meetsReview: !!target && target.reviews >= avgReview10 * 0.7,
   };
