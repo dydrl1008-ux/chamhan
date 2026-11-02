@@ -68,9 +68,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/rank-watch">순위 체크</NavLink>
         </NavGroup>
 
-        <NavGroup title="영업 · 리드" hrefs={['/calls', '/leads', '/renewals', '/notifications']}>
+        <NavGroup title="영업 · 리드" hrefs={['/calls', '/leads', '/proposals', '/renewals', '/notifications']}>
           {!p.is_mgmt && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
           {lead && <NavLink href="/leads">콜 리스트 관리</NavLink>}
+          <NavLink href="/proposals">키워드 제안서</NavLink>
           <NavLink href="/renewals">이탈 고객</NavLink>
           <NavLink href="/notifications">알림{notiBadge}</NavLink>
         </NavGroup>
