@@ -92,12 +92,12 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
         <div style={{ fontSize: 30, fontWeight: 800, margin: '18px 0 6px', letterSpacing: '-.02em' }}>'{d.keyword}' 검색 결과,</div>
         {tgt ? <>
           <div className="pd-huge">{tgt.rank}<small>위</small></div>
-          <div style={{ fontSize: 22, fontWeight: 700, margin: '14px 0 0', lineHeight: 1.4 }}>1페이지 상위 10개 상품과 귀사 사이,<br /><mark>{d.gapTop10}계단</mark>의 거리입니다.</div>
+          <div style={{ fontSize: 22, fontWeight: 700, margin: '14px 0 0', lineHeight: 1.4 }}>{tgt.rank > 100 ? <>검색 결과 <mark>100위 안에 없음</mark></> : <>상위 10위까지 <mark>{d.gapTop10}계단</mark></>}</div>
         </> : <>
           <div className="pd-huge">{d.n}<small>개</small></div>
-          <div style={{ fontSize: 22, fontWeight: 700, margin: '14px 0 0', lineHeight: 1.4 }}>상위 상품의 실제 데이터로 본<br /><mark>1페이지에 올라가는 순서</mark>입니다.</div>
+          <div style={{ fontSize: 22, fontWeight: 700, margin: '14px 0 0', lineHeight: 1.4 }}>상위 상품 데이터와<br /><mark>상위노출 진행 방식</mark> 정리</div>
         </>}
-        <p style={{ fontSize: 14, color: '#A9B1C6', margin: '26px 0 0', lineHeight: 1.7, maxWidth: 520 }}>{tgt ? '가격도 리뷰도 상위권과 다르지 않은데 순위만 뒤에 있다면, 문제는 상품이 아니라 검색 결과에서 보이는 위치입니다. 이 자료는 그 거리를 어떻게 줄이는지 숫자로 보여드립니다.' : '이 시장 1페이지 상품들이 어떤 가격·리뷰·지수로 그 자리에 있는지, 신규 상품이 어떤 순서로 올라가는지 숫자로 정리했습니다.'}</p>
+        <p style={{ fontSize: 14, color: '#A9B1C6', margin: '26px 0 0', lineHeight: 1.7, maxWidth: 520 }}>{tgt ? `'${d.keyword}' 검색 결과에서 귀사 상품의 현재 위치, 1페이지 상품들과의 비교, 상위노출 진행 방식을 정리한 자료입니다.` : `'${d.keyword}' 1페이지 상품들의 가격·리뷰·지수와 상위노출 진행 방식을 정리한 자료입니다.`}</p>
       </div>
       <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '1px solid rgba(255,255,255,.14)', paddingTop: 18, marginBottom: 20 }}>
         <div><div style={{ fontSize: 24, fontWeight: 900 }}>{d.n}<span style={{ fontSize: 12, color: '#8E97AD' }}> 개</span></div><div style={{ fontSize: 11, color: '#8E97AD' }}>분석한 상위 상품</div></div>
@@ -113,11 +113,11 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
   pages.push(<div className="pd-page" key="problem">
     <div className="pd-in">
       {tgt ? <>
-        <Sec n="01 — 문제" t="검색한 고객이 귀사 상품을 보지 못하고 있습니다" k="YOUR POSITION" lead={`'${d.keyword}'를 검색한 고객은 첫 화면의 상위 상품을 먼저 봅니다. 귀사 상품은 지금 ${tgt.rank}위 — ${tgt.rank > 40 ? '첫 화면(40위) 밖' : '첫 화면 안이지만 상위 10위 밖'}입니다.`} />
+        <Sec n="01" t="현재 위치" k="YOUR POSITION" lead={`'${d.keyword}' 검색 결과 기준 ${tgt.rank > 100 ? '100위 안에 없음' : `${tgt.rank}위`}. ${tgt.rank > 40 ? '첫 화면(40위) 밖입니다.' : '첫 화면 안, 상위 10위 밖입니다.'}`} />
         <div style={{ display: 'grid', gridTemplateColumns: '96px 1fr 170px', gap: 16, alignItems: 'center', border: '1px solid var(--line)', borderRadius: 14, padding: 16 }}>
           {tgt.image ? <img src={img(tgt.image)} alt="" style={{ width: 96, height: 96, borderRadius: 10, objectFit: 'cover', border: '1px solid var(--line)' }} /> : <div style={{ width: 96, height: 96, borderRadius: 10, background: 'var(--soft)' }} />}
           <div style={{ minWidth: 0 }}><div style={{ fontWeight: 800, fontSize: 14, lineHeight: 1.4 }}>{tgt.title}</div><div style={{ display: 'flex', gap: 14, marginTop: 6, fontSize: 12.5, color: 'var(--ink2)' }}><span>가격 <b>{tgt.price ? fmtWon(tgt.price) : '-'}</b></span><span>리뷰 <b>{fmtCnt(tgt.reviews)}개</b></span><span>스토어 <b>{tgt.mallName}</b></span></div></div>
-          <div style={{ textAlign: 'right', borderLeft: '1px solid var(--line)', paddingLeft: 16 }}><div className="pd-muted" style={{ fontSize: 11 }}>현재 순위</div><div style={{ fontSize: 46, fontWeight: 900, lineHeight: 1, letterSpacing: '-.03em' }}>{tgt.rank}<span style={{ fontSize: 14, color: 'var(--muted)' }}>위</span></div><div style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>상위 10위까지 {d.gapTop10}계단</div></div>
+          <div style={{ textAlign: 'right', borderLeft: '1px solid var(--line)', paddingLeft: 16 }}><div className="pd-muted" style={{ fontSize: 11 }}>현재 순위</div><div style={{ fontSize: 46, fontWeight: 900, lineHeight: 1, letterSpacing: '-.03em' }}>{tgt.rank}<span style={{ fontSize: 14, color: 'var(--muted)' }}>위</span></div><div style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>{tgt.rank > 100 ? '100위 밖' : `상위 10위까지 ${d.gapTop10}계단`}</div></div>
         </div>
         <div className="pd-two">
           {[{ l: '가격', a: tgt.price, b: d.avgPrice10, f: fmtWon, ok: d.meetsPrice, okT: '상위권과 같은 구간', noT: '상위권보다 높음' }, { l: '리뷰', a: tgt.reviews, b: d.avgReview10, f: (n: number) => fmtCnt(n) + '개', ok: d.meetsReview, okT: '상위권과 같은 구간', noT: '상위권보다 적음' }].map(c => { const m = Math.max(c.a, c.b, 1); return <div className="pd-box" key={c.l}><h4>{c.l} — 귀사 vs 상위 10개 평균</h4>
@@ -127,12 +127,12 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
         </div>
         <div style={{ display: 'grid', gap: 8 }}>{d.targetFacts.map((f, i) => <div className={'pd-fact ' + (i === 0 ? (d.meetsPrice ? 'ok' : 'no') : i === 1 ? (d.meetsReview ? 'ok' : 'no') : '')} key={i}><i>{i + 1}</i><span><Hl t={f} /></span></div>)}</div>
         <div className="pd-two">
-          <div className="pd-box"><h4>1페이지 10개 구성</h4><div className="pd-big">{d.natural10}<small>자연</small>· {d.adCount10}<small>광고</small></div><div style={{ fontSize: 12, color: 'var(--ink2)', marginTop: 6 }}><Hl t={`1페이지 ${d.natural10}개는 광고비 없이 「자연 검색 순위」로 그 자리에 있습니다.`} /></div></div>
-          <div className="pd-box"><h4>같이 검색되는 키워드</h4>{d.related.length ? <div>{d.related.slice(0, 8).map(t => <span key={t} style={{ display: 'inline-block', background: 'var(--soft)', border: '1px solid var(--line)', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 999, margin: '0 5px 5px 0' }}>{t}</span>)}</div> : <div className="pd-muted" style={{ fontSize: 12 }}>상담 시 확인</div>}<div className="pd-muted" style={{ fontSize: 11, marginTop: 2 }}>귀사 상품이 같이 노출돼야 할 자리</div></div>
+          <div className="pd-box"><h4>1페이지 10개 구성</h4><div className="pd-big">{d.natural10}<small>자연</small>· {d.adCount10}<small>광고</small></div><div style={{ fontSize: 12, color: 'var(--ink2)', marginTop: 6 }}><Hl t={`${d.natural10}개는 「자연 검색 순위」, ${d.adCount10}개는 광고입니다.`} /></div></div>
+          <div className="pd-box"><h4>같이 검색되는 키워드</h4>{d.related.length ? <div>{d.related.slice(0, 8).map(t => <span key={t} style={{ display: 'inline-block', background: 'var(--soft)', border: '1px solid var(--line)', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 999, margin: '0 5px 5px 0' }}>{t}</span>)}</div> : <div className="pd-muted" style={{ fontSize: 12 }}>상담 시 확인</div>}<div className="pd-muted" style={{ fontSize: 11, marginTop: 2 }}>상위 상품이 함께 노출되는 검색어</div></div>
         </div>
-        <div className="pd-navy"><div className="t">결론</div>{d.meetsPrice && d.meetsReview ? <>상품 조건은 이미 1페이지 수준입니다. 부족한 건 하나, <mark>검색 결과에서 보이는 위치</mark>입니다. 위치가 그대로면 같은 조건의 상위 상품이 귀사 고객을 계속 가져갑니다.</> : <>상위권과 차이가 있는 항목은 <mark>노출이 생겨야 채워지는 지표</mark>입니다. 리뷰·판매는 노출 없이는 쌓이지 않습니다 — 순서가 먼저 노출, 그다음 리뷰입니다.</>}</div>
+        <div className="pd-navy"><div className="t">요약</div>{d.meetsPrice && d.meetsReview ? <>가격·리뷰는 상위 10개와 같은 구간입니다. 차이는 <mark>검색 결과 순위</mark>입니다.</> : <>상위 10개와 차이 나는 항목은 리뷰·판매처럼 <mark>노출이 있어야 쌓이는 지표</mark>입니다. 노출을 먼저 만들고 리뷰를 쌓는 순서가 맞습니다.</>}</div>
       </> : <>
-        <Sec n="01 — 시장" t={`'${d.keyword}' 1페이지는 누가 차지하고 있나`} k="MARKET" lead={`상위 ${d.n}개 상품 실측. 1페이지 10개 중 광고는 ${d.adCount10}개, ${d.natural10}개는 자연 검색 순위로 그 자리에 있습니다.`} />
+        <Sec n="01" t={`'${d.keyword}' 시장`} k="MARKET" lead={`상위 ${d.n}개 상품 기준. 1페이지 10개 중 광고 ${d.adCount10}개, 자연 노출 ${d.natural10}개.`} />
         <div className="pd-stats">
           <div className="pd-stat"><div className="l">상위 10개 평균가</div><div className="v">{fmtCnt(d.avgPrice10)}<small>원</small></div><div className="d">{fmtWon(d.minPrice10)} ~ {fmtWon(d.maxPrice10)}</div></div>
           <div className="pd-stat"><div className="l">상위 10개 평균 리뷰</div><div className="v">{fmtCnt(d.avgReview10)}<small>개</small></div><div className="d">중간값 {fmtCnt(d.medianReview10)}개</div></div>
@@ -143,7 +143,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
           {[['경쟁 강도', d.competition], ['진입 장벽', d.barrier], ['진입 타이밍', d.timing]].map(([l, x]: any) => <div className="pd-box" key={l}><h4>{l}</h4><div className="pd-big">{x.level}</div><div style={{ fontSize: 12, color: 'var(--ink2)', marginTop: 6, lineHeight: 1.55 }}><Hl t={x.why} /></div></div>)}
         </div>
         {d.related.length > 0 && <div className="pd-box"><h4>함께 노출되는 연관 키워드</h4><div>{d.related.map(t => <span key={t} style={{ display: 'inline-block', background: 'var(--ink)', color: '#fff', fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 999, margin: '0 6px 6px 0' }}>{t}</span>)}</div></div>}
-        <div className="pd-navy"><div className="t">결론</div>1페이지 {d.natural10}개는 광고비가 아니라 <mark>자연 검색 순위</mark>로 자리를 지키고 있습니다. 이 시장에서 매출이 나는 위치는 광고가 아니라 자연 순위입니다.</div>
+        <div className="pd-navy"><div className="t">요약</div>1페이지 10개 중 {d.natural10}개가 <mark>자연 검색 순위</mark>로 노출되고 있습니다.</div>
       </>}
     </div>{foot(pn)}
   </div>);
@@ -153,7 +153,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
   const R = 80, cx = 120, cy = 108; const pt = (i: number, v: number) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / 6; const r = (v / 5) * R; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
   pages.push(<div className="pd-page" key="evidence">
     <div className="pd-in">
-      <Sec n={tgt ? '02 — 증거' : '02 — 상위 상품'} t="1페이지 상품은 이렇게 생겼습니다" k="TOP 10" lead={`상위 10개 중 ${d.natural10}개가 자연 노출. 가격·리뷰가 특별해서가 아니라 「노출 → 클릭 → 구매 → 리뷰」가 돌고 있어서 그 자리에 있습니다.`} />
+      <Sec n="02" t="1페이지 상품 10개" k="TOP 10" lead={`가격·리뷰·광고 여부와 상품 지수. 상위 10개 중 자연 노출 ${d.natural10}개, 광고 ${d.adCount10}개.`} />
       <table><thead><tr><th style={{ width: 40 }}>순위</th><th style={{ width: 44 }}></th><th>상품</th><th className="r">가격</th><th className="r">리뷰</th><th style={{ width: 46 }}>구분</th></tr></thead><tbody>
         {d.top.map(p => <tr key={p.rank} className={tgt && p.rank === tgt.rank ? 'me' : ''}><td style={{ fontWeight: 900, fontSize: 13 }}>{p.rank}</td><td>{p.imageUrl ? <img className="pd-th" src={img(p.imageUrl)} alt="" /> : <div className="pd-th" />}</td><td><div style={{ maxWidth: 390, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{p.productTitle}</div><div className="pd-muted" style={{ fontSize: 10.5 }}>{p.mallName}</div></td><td className="r">{fmtWon(p.lowPrice)}</td><td className="r">{fmtCnt(p.reviewCount)}</td><td style={{ fontSize: 11, fontWeight: 700, color: ad(p) ? 'var(--red)' : 'var(--green)' }}>{ad(p) ? '광고' : '자연'}</td></tr>)}
         {tgt && tgt.rank > 10 && <tr className="me"><td style={{ fontWeight: 900, fontSize: 13 }}>{tgt.rank}</td><td>{tgt.image ? <img className="pd-th" src={img(tgt.image)} alt="" /> : <div className="pd-th" />}</td><td><div style={{ maxWidth: 390, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 800 }}>{tgt.title}</div><div style={{ fontSize: 10.5 }}>{tgt.mallName} · 귀사</div></td><td className="r">{tgt.price ? fmtWon(tgt.price) : '-'}</td><td className="r">{fmtCnt(tgt.reviews)}</td><td></td></tr>}
@@ -167,7 +167,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
         </svg>
         <div><h4 style={{ margin: '0 0 8px', fontSize: 11, letterSpacing: '.1em', color: 'var(--muted)', fontWeight: 800 }}>상위 10개 상품 지수 (5점 만점)</h4><div className="pd-idx">{d.axes.map(a => <div className="c" key={a.key}><div className="v">{a.v}<small> /5</small></div><div className="bar"><i style={{ width: `${(a.v / 5) * 100}%` }} /></div><div className="l">{a.label}</div><div className="d">{a.desc}</div></div>)}</div></div>
       </div>
-      <div className="pd-navy"><div className="t">읽는 법</div>상위 상품은 <mark>{d.strongAxis}</mark>가 가장 높습니다. 이 지표는 광고비로 사는 게 아니라 <mark>검색 유입과 클릭이 쌓여야</mark> 올라갑니다 — 신규 상품이 가장 먼저 채워야 할 칸입니다.</div>
+      <div className="pd-navy"><div className="t">요약</div>상위 10개는 <mark>{d.strongAxis}</mark> 지수가 가장 높습니다. 이 지수는 검색 유입과 클릭이 쌓이면서 올라갑니다.</div>
     </div>{foot(pn)}
   </div>);
 
@@ -175,18 +175,18 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
   pn++; const mx = Math.max(...d.priceBands.map(b => b.count), 1);
   pages.push(<div className="pd-page" key="condition">
     <div className="pd-in">
-      <Sec n={tgt ? '03 — 조건' : '03 — 진입 조건'} t="1페이지에 들어가는 조건은 세 가지입니다" k="HOW RANKING WORKS" lead="네이버쇼핑 순위는 적합도·인기도·신뢰도로 정해집니다. 가격과 리뷰는 그중 두 가지의 재료일 뿐, 세 가지가 같이 움직여야 순위가 오릅니다." />
+      <Sec n="03" t="순위가 정해지는 기준" k="HOW RANKING WORKS" lead="네이버쇼핑 순위는 적합도·인기도·신뢰도 세 가지로 정해집니다." />
       <div className="pd-g3">
         {[['적합도', '검색어와 상품이 맞는가', '상품명 키워드 · 카테고리 · 속성', '상품 등록으로 해결'], ['인기도', '사람들이 찾는가', '클릭 · 찜 · 판매 · 리뷰 수', '노출이 있어야 쌓임'], ['신뢰도', '믿고 사는가', '평점 · 스토어 지수 · 페널티', '구매 후 리뷰로 쌓임']].map(([h, d1, d2, d3]) => <div className="pd-box" key={h}><div style={{ fontSize: 16, fontWeight: 900, color: 'var(--blue)' }}>{h}</div><div className="pd-muted" style={{ fontSize: 11.5 }}>{d1}</div><div style={{ fontSize: 12.5, margin: '8px 0 6px', color: 'var(--ink2)' }}>{d2}</div><div style={{ fontSize: 11.5, fontWeight: 800 }}>→ {d3}</div></div>)}
       </div>
       <div className="pd-two">
         <div className="pd-box"><h4>가격 분포 — 상위 {d.n}개, 구간별 상품 수</h4><div className="pd-bars">{d.priceBands.map((b, i) => <div className="b" key={i}><div className="n">{b.count}</div><i style={{ height: `${Math.max(4, (b.count / mx) * 62)}px` }} /><div className="l">{b.label}</div></div>)}</div><div style={{ fontSize: 12, marginTop: 10 }}><Hl t={`진입 가격대 「${d.entry.price}」 — 상위 10개 최저가~평균가 사이`} /></div></div>
-        <div className="pd-box"><h4>리뷰 — 상위권 기준선</h4><div className="pd-big">{fmtCnt(d.avgReview10)}개<small>상위 10개 평균</small></div><div style={{ fontSize: 12, color: 'var(--ink2)', margin: '8px 0 0', lineHeight: 1.6 }}>중간값 {fmtCnt(d.medianReview10)}개. {tgt ? (d.meetsReview ? <Hl t="귀사는 「이미 이 구간」 — 리뷰가 아니라 노출이 병목입니다." /> : <Hl t="리뷰는 「노출 → 구매」 뒤에 따라오는 지표. 먼저 노출을 만들어야 쌓입니다." />) : <Hl t="리뷰는 「노출 → 구매」 뒤에 따라오는 지표. 먼저 노출을 만들어야 쌓입니다." />}</div></div>
+        <div className="pd-box"><h4>리뷰 — 상위권 기준선</h4><div className="pd-big">{fmtCnt(d.avgReview10)}개<small>상위 10개 평균</small></div><div style={{ fontSize: 12, color: 'var(--ink2)', margin: '8px 0 0', lineHeight: 1.6 }}>중간값 {fmtCnt(d.medianReview10)}개. {tgt ? (d.meetsReview ? <Hl t="귀사 리뷰는 「이 구간 안」입니다." /> : <Hl t="리뷰는 「노출 → 구매」 뒤에 쌓이는 지표입니다." />) : <Hl t="리뷰는 「노출 → 구매」 뒤에 쌓이는 지표입니다." />}</div></div>
       </div>
       <div className="pd-box" style={{ padding: '16px 20px 10px' }}><h4>신규 진입 3단계</h4>
-        {[['진입기', `가격을 진입 가격대에 맞추고, 상위노출로 「첫 화면」에 올려 첫 구매를 만든다`], ['성장기', `구매를 리뷰로 쌓아 상위 평균 ${fmtCnt(d.avgReview10)}개 방향으로 — 신뢰도가 붙으면 자연 순위가 안정`], ['안정기', `자연 순위가 자리 잡으면 「연관 키워드」로 노출 범위를 넓힌다`]].map(([k, t]) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 12, padding: '9px 0', borderTop: '1px solid var(--line)', fontSize: 12.5, alignItems: 'center' }}><b style={{ color: 'var(--blue)', fontSize: 12 }}>{k}</b><span><Hl t={t} /></span></div>)}
+        {[['진입기', `가격을 진입 가격대에 맞추고, 상위노출로 「첫 화면」에 올려 구매를 만듦`], ['성장기', `구매를 리뷰로 쌓음 (상위 평균 ${fmtCnt(d.avgReview10)}개 기준) — 자연 순위 안정`], ['안정기', `「연관 키워드」로 노출 범위 확장`]].map(([k, t]) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 12, padding: '9px 0', borderTop: '1px solid var(--line)', fontSize: 12.5, alignItems: 'center' }}><b style={{ color: 'var(--blue)', fontSize: 12 }}>{k}</b><span><Hl t={t} /></span></div>)}
       </div>
-      <div className="pd-navy"><div className="t">정리</div>세 조건 중 <mark>인기도는 노출 없이는 만들어지지 않습니다.</mark> 그래서 순서는 노출이 먼저이고, 리뷰·판매는 그 뒤에 따라옵니다.</div>
+      <div className="pd-navy"><div className="t">요약</div>인기도(클릭·판매·리뷰)는 <mark>노출이 있어야 쌓입니다.</mark> 그래서 노출을 먼저 만들고, 리뷰는 그 뒤에 쌓는 순서로 진행합니다.</div>
     </div>{foot(pn)}
   </div>);
 
@@ -194,7 +194,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
   pn++;
   pages.push(<div className="pd-page" key="solution">
     <div className="pd-in">
-      <Sec n={tgt ? '04 — 해결' : '04 — 진행 방안'} t="상위노출, 이렇게 진행합니다" k="HOW IT WORKS" lead={`실제 사용자가 '${d.keyword}'를 검색해 ${tgt ? '귀사' : '해당'} 상품으로 들어가는 유입을 매일 일정량 만들어, 네이버가 보는 인기도 신호를 채우는 방식입니다. 광고 영역이 아니라 「자연 검색 순위」에 반영됩니다.`} />
+      <Sec n="04" t="진행 방식" k="HOW IT WORKS" lead={`실제 사용자가 '${d.keyword}'를 검색해 ${tgt ? '귀사' : '해당'} 상품으로 들어가는 유입을 매일 일정량 만듭니다. 광고 영역이 아니라 「자연 검색 순위」에 반영됩니다.`} />
       <div className="pd-tl">
         <div className="s"><i>1</i><div className="t">시작</div><div className="d">상품·키워드 등록<br />시작 순위 기록</div></div>
         <div className="s"><i>2</i><div className="t">매일</div><div className="d">검색 유입 진행<br />아침 순위 확인</div></div>
@@ -208,7 +208,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
             <polyline fill="none" stroke="#2857FF" strokeWidth="2.2" points="40,84 68,78 96,68 124,54 152,40 180,32 208,26 236,24 264,22 288,22" /><circle cx="288" cy="22" r="3" fill="#2857FF" />
             <text x="40" y="96" fontSize="9" fill="#6B7280">시작</text><text x="288" y="96" fontSize="9" fill="#6B7280" textAnchor="end">종료</text>
           </svg>
-          <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6 }}>시작 → 현재 순위 · 기간 최고 순위 · 날짜별 순위표. <b>숫자로 확인하고 연장을 결정</b>하시면 됩니다.</div></div>
+          <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6 }}>시작 → 현재 순위 · 기간 최고 순위 · 날짜별 순위표. 연장은 리포트를 보고 결정하시면 됩니다.</div></div>
         <div className="pd-box"><h4>자주 묻는 것</h4><div className="pd-faq">
           <div><b>Q</b><span>광고처럼 '광고' 표시가 붙나요? — <b style={{ color: 'var(--ink)' }}>아니요.</b> 자연 검색 순위에 반영됩니다.</span></div>
           <div><b>Q</b><span>스토어 계정 접근이 필요한가요? — <b style={{ color: 'var(--ink)' }}>아니요.</b> 상품 URL과 키워드만 있으면 됩니다.</span></div>
@@ -216,7 +216,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
           <div><b>Q</b><span>얼마나 해봐야 아나요? — <b style={{ color: 'var(--ink)' }}>10일 단위</b>로 시작하고 리포트를 보고 판단하시면 됩니다.</span></div>
         </div></div>
       </div>
-      <div className="pd-box" style={{ padding: '14px 20px' }}><h4>시작까지 — 회신부터 첫 순위 확인까지 2일</h4>
+      <div className="pd-box" style={{ padding: '14px 20px' }}><h4>진행 순서</h4>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, fontSize: 12 }}>
           {[['회신', '전화·문자·카톡 한 줄'], ['키워드·옵션 확정', '연관 키워드 순위 무료 확인 후'], ['입금 · 세금계산서', '사업자 기준 계산서 발행'], ['다음 날 시작', '시작 순위 기록 → 매일 확인']].map(([t, d1], i) => <div key={t} style={{ display: 'grid', gridTemplateColumns: '22px 1fr', gap: 8, alignItems: 'start' }}><span style={{ width: 20, height: 20, borderRadius: 6, background: 'var(--blue)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span><span><b>{t}</b><br /><span className="pd-muted" style={{ fontSize: 11 }}>{d1}</span></span></div>)}
         </div></div>
@@ -233,12 +233,12 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
     <div className="pd-in" style={{ gap: 0 }}>
       <div className="pd-logo"><i />{d.brand.nameEn}</div>
       <div style={{ marginTop: 200 }}>
-        <div style={{ fontSize: 12, letterSpacing: '.2em', color: 'var(--lime)', fontWeight: 800 }}>NEXT STEP</div>
-        <div style={{ fontSize: 38, fontWeight: 900, letterSpacing: '-.02em', lineHeight: 1.2, margin: '14px 0 16px' }}>{tgt ? <>{tgt.rank}위에서 첫 화면까지,<br />순서만 정하면 됩니다.</> : <>'{d.keyword}' 첫 화면까지,<br />순서만 정하면 됩니다.</>}</div>
-        <p style={{ fontSize: 15, color: '#A9B1C6', lineHeight: 1.7, margin: 0, maxWidth: 540 }}>회신 한 줄이면 <mark>연관 키워드 현재 순위</mark>까지 무료로 확인해서 보내드립니다. 확인 후 진행 여부를 정하셔도 됩니다.</p>
+        <div style={{ fontSize: 12, letterSpacing: '.2em', color: 'var(--lime)', fontWeight: 800 }}>CONTACT</div>
+        <div style={{ fontSize: 38, fontWeight: 900, letterSpacing: '-.02em', lineHeight: 1.2, margin: '14px 0 16px' }}>문의</div>
+        <p style={{ fontSize: 15, color: '#A9B1C6', lineHeight: 1.7, margin: 0, maxWidth: 540 }}>회신 주시면 <mark>연관 키워드 현재 순위</mark>를 확인해서 같이 보내드립니다. 진행 여부는 확인 후 결정하셔도 됩니다.</p>
         <div className="pd-cta">
-          <div className="c"><div className="l">담당</div><div className="v">{d.brand.owner || d.brand.name}</div><div className="d">{d.brand.phone && <div style={{ fontSize: 18, color: '#fff', fontWeight: 800 }}>{d.brand.phone}</div>}{d.brand.email}<br />전화 · 문자 · 카톡 어느 쪽이든 됩니다</div></div>
-          <div className="c"><div className="l">회신하면</div><div className="v">연관 키워드 순위 무료 확인</div><div className="d">{d.related.length ? d.related.slice(0, 4).join(' · ') : `'${d.keyword}' 연관 키워드`}<br />10분 통화로 진행 순서 정리</div></div>
+          <div className="c"><div className="l">담당</div><div className="v">{d.brand.owner || d.brand.name}</div><div className="d">{d.brand.phone && <div style={{ fontSize: 18, color: '#fff', fontWeight: 800 }}>{d.brand.phone}</div>}{d.brand.email}</div></div>
+          <div className="c"><div className="l">회신 시</div><div className="v">연관 키워드 순위 확인</div><div className="d">{d.related.length ? d.related.slice(0, 4).join(' · ') : `'${d.keyword}' 연관 키워드`}<br />진행 방식 안내</div></div>
         </div>
       </div>
       <div style={{ marginTop: 'auto', marginBottom: 20, fontSize: 11, color: '#8E97AD', lineHeight: 1.6 }}>{d.brand.name} · 본 자료는 네이버쇼핑 검색 결과의 공개 데이터({d.date} 기준)로 작성되었습니다. 상품·키워드 정보를 함께 확인하면 더 정확한 안을 드릴 수 있습니다.</div>

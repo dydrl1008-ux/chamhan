@@ -52,21 +52,21 @@ export function buildDoc(r: NscResult, brand: Brand, target: Target | null, offe
   const strongAxis = [...axes].sort((a, b) => b.v - a.v)[0]?.label ?? '적합도';
   const avgReview10 = avg(r10), avgPrice10 = avg(p10);
   const diffScore = Number((r.summary as any)?.difficulty?.score ?? NaN);
-  const competition = { level: !isNaN(diffScore) ? (diffScore >= 70 ? '높음' : diffScore >= 40 ? '보통' : '낮음') : (avgReview10 >= 3000 ? '높음' : avgReview10 >= 500 ? '보통' : '낮음'), why: `상위 100개 분석 기준. 상위 10개 평균 리뷰 ${cnt(avgReview10)}개${adCount10 ? `, 광고 상품 ${adCount10}개` : ''}.` };
-  const barrier = { level: avgReview10 >= 2000 ? '높음' : avgReview10 >= 300 ? '보통' : '낮음', why: `평균 리뷰 ${cnt(avgReview10)}개. 리뷰 격차가 ${avgReview10 >= 2000 ? '커 초기 노출·리뷰 확보가 필수' : '크지 않아 노출만 확보되면 진입 가능'}.` };
-  const timing = { level: newRate >= 20 ? '활발' : newRate >= 8 ? '보통' : '안정', why: `신상품 비율 ${newRate}%. ${newRate >= 20 ? '신규 상품이 계속 진입하는 시장으로 노출 속도가 중요' : '기존 상품이 자리 잡은 시장으로, 차별화와 노출 확보가 필요'}.` };
+  const competition = { level: !isNaN(diffScore) ? (diffScore >= 70 ? '높음' : diffScore >= 40 ? '보통' : '낮음') : (avgReview10 >= 3000 ? '높음' : avgReview10 >= 500 ? '보통' : '낮음'), why: `상위 ${ps.length}개 기준. 1페이지 광고 ${adCount10}개.` };
+  const barrier = { level: avgReview10 >= 2000 ? '높음' : avgReview10 >= 300 ? '보통' : '낮음', why: `상위 10개 평균 리뷰 ${cnt(avgReview10)}개 기준.` };
+  const timing = { level: newRate >= 20 ? '활발' : newRate >= 8 ? '보통' : '안정', why: `최근 90일 등록 상품 비율 ${newRate}%.` };
   const related = (r.trend ?? []).filter(t => typeof t === 'string' && t.trim() && t.trim() !== r.keyword).slice(0, 8);
   const facts = [
-    `상위 상품 평균가 ${won(avgPrice10)}, 평균 리뷰 ${cnt(avgReview10)}개. ${avgReview10 >= 1000 ? '신규 진입이라면 가격 경쟁보다 노출·리뷰를 빠르게 쌓아 상위 조건을 맞추는 것이 우선입니다.' : '리뷰 장벽이 높지 않아 노출 위치만 확보되면 판매로 이어지기 쉬운 시장입니다.'}`,
-    `상위 10개 중 광고 상품은 ${adCount10}개 — ${10 - adCount10}개는 자연 검색 순위로 1페이지에 있습니다.`,
-    `상위 상품은 특히 ${strongAxis} 지표가 두드러집니다. 이 시장에 진입하려면 ${strongAxis}부터 끌어올려 상위 노출 조건을 맞춰야 합니다.`,
+    `상위 상품 평균가 ${won(avgPrice10)}, 평균 리뷰 ${cnt(avgReview10)}개.`,
+    `상위 10개 중 광고 ${adCount10}개, 자연 노출 ${10 - adCount10}개.`,
+    `상위 상품은 ${strongAxis} 지수가 가장 높습니다.`,
   ];
   const targetFacts: string[] = [];
   if (target) {
     const pr = target.price, rv = target.reviews;
-    if (pr > 0 && p10.length) targetFacts.push(pr >= Math.min(...p10) * 0.9 && pr <= Math.max(...p10) * 1.1 ? `가격 ${won(pr)}은 상위 10개 가격대(${won(Math.min(...p10))}~${won(Math.max(...p10))}) 안에 있습니다.` : pr < Math.min(...p10) ? `가격 ${won(pr)}은 상위 10개 최저가(${won(Math.min(...p10))})보다 낮아 가격 경쟁력은 충분합니다.` : `가격 ${won(pr)}은 상위 10개 최고가(${won(Math.max(...p10))})보다 높습니다. 노출 후 전환을 위해 가격·혜택 점검이 필요합니다.`);
-    targetFacts.push(rv >= avgReview10 * 0.7 ? `리뷰 ${cnt(rv)}개로 상위 평균(${cnt(avgReview10)}개)과 같은 구간입니다. 차이는 검색 결과에서 보이는 위치입니다.` : rv >= med(r10) * 0.3 ? `리뷰 ${cnt(rv)}개. 상위 평균(${cnt(avgReview10)}개)보다 적지만 상위 10개 중에도 이 수준의 상품이 있습니다.` : `리뷰 ${cnt(rv)}개로 상위 평균(${cnt(avgReview10)}개)과 차이가 있습니다. 노출을 먼저 만들고 리뷰를 쌓는 순서가 필요합니다.`);
-    targetFacts.push(`현재 '${r.keyword}' 검색 결과 ${target.rank}위${target.rank > 40 ? ` — 상위 40위(1페이지) 밖` : target.rank > 10 ? ' — 1페이지 안이지만 상위 10위 밖' : ' — 상위 10위 안'}.`);
+    if (pr > 0 && p10.length) targetFacts.push(pr >= Math.min(...p10) * 0.9 && pr <= Math.max(...p10) * 1.1 ? `가격 ${won(pr)}은 상위 10개 가격대(${won(Math.min(...p10))}~${won(Math.max(...p10))}) 안에 있습니다.` : pr < Math.min(...p10) ? `가격 ${won(pr)}은 상위 10개 최저가(${won(Math.min(...p10))})보다 낮아 가격 경쟁력은 충분합니다.` : `가격 ${won(pr)}은 상위 10개 최고가(${won(Math.max(...p10))})보다 높습니다.`);
+    targetFacts.push(rv >= avgReview10 * 0.7 ? `리뷰 ${cnt(rv)}개, 상위 평균(${cnt(avgReview10)}개)과 같은 구간입니다.` : rv >= med(r10) * 0.3 ? `리뷰 ${cnt(rv)}개. 상위 평균(${cnt(avgReview10)}개)보다 적지만 상위 10개 중에도 이 수준의 상품이 있습니다.` : `리뷰 ${cnt(rv)}개, 상위 평균(${cnt(avgReview10)}개)과 차이가 있습니다.`);
+    targetFacts.push(target.rank > 100 ? `'${r.keyword}' 검색 결과 100위 안에 없습니다.` : `'${r.keyword}' 검색 결과 ${target.rank}위${target.rank > 40 ? ' — 첫 화면(40위) 밖' : target.rank > 10 ? ' — 첫 화면 안, 상위 10위 밖' : ' — 상위 10위 안'}.`);
   }
   return {
     keyword: r.keyword, date: `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}`, brand, target,
