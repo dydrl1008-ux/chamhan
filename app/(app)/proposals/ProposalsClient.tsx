@@ -8,11 +8,16 @@ import ProposalDoc, { PD_CSS, docPageCount } from '@/components/ProposalDoc';
 import type { Doc, Target } from '@/lib/proposalDoc';
 import { loadKeyword, withTarget, makeNativeLink, logProposal } from './actions';
 
-export default function ProposalsClient({ initialKw, phone: phone0, owner: owner0, recent, usage, mine = [], base = '', team = [] }: { initialKw: string; base?: string; team?: { name: string; keyword: string; target: string | null; action: string; code: string | null; views: number | null; created_at: string }[]; phone: string; owner: string; recent: string[]; usage: { used: number; limit: number }; mine?: { code: string; title: string; views: number; first_view_at: string | null; last_view_at: string | null; created_at: string }[] }) {
+export default function ProposalsClient({ initialKw, phone: phone0, owner: owner0, recent, usage, mine = [], base = '', team = [], lead = null }: { initialKw: string; base?: string; lead?: { id: number; store: string; rank: number } | null; team?: { name: string; keyword: string; target: string | null; action: string; code: string | null; views: number | null; created_at: string }[]; phone: string; owner: string; recent: string[]; usage: { used: number; limit: number }; mine?: { code: string; title: string; views: number; first_view_at: string | null; last_view_at: string | null; created_at: string }[] }) {
   const [kw, setKw] = useState(initialKw); const [phone, setPhone] = useState(phone0); const [owner, setOwner] = useState(owner0); const [basic, setBasic] = useState(''); const [rec, setRec] = useState('');
   const [doc, setDoc] = useState<Doc | null>(null); const [cands, setCands] = useState<Target[]>([]); const [tgt, setTgt] = useState<number | '' | 'manual'>(''); const [man, setMan] = useState({ mallName: '', title: '', rank: '', price: '', reviews: '' });
   const [busy, setBusy] = useState(''); const [link, setLink] = useState(''); const wrap = useRef<HTMLDivElement>(null);
-  const load = async (k = kw) => { const q = k.trim(); if (!q) return; setBusy('load'); setLink(''); setTgt(''); const x = await loadKeyword(q); setBusy(''); if (!x.ok || !x.doc) { notify(x.msg, 'bad'); return; } setDoc(x.doc); setCands(x.candidates ?? []); notify(x.msg, 'ok'); };
+  const load = async (k = kw) => { const q = k.trim(); if (!q) return; setBusy('load'); setLink(''); setTgt(''); const x = await loadKeyword(q); setBusy(''); if (!x.ok || !x.doc) { notify(x.msg, 'bad'); return; } setDoc(x.doc); setCands(x.candidates ?? []); notify(x.msg, 'ok');
+    if (lead?.store) {   // 콜 리스트에서 넘어온 업체: 목록에 있으면 그걸로, 없으면 직접 입력으로 자동 반영
+      const norm = (t: string) => t.replace(/\s+/g, '').toLowerCase(); const hit = (x.candidates ?? []).find(c => norm(c.mallName) === norm(lead.store) || norm(c.mallName).includes(norm(lead.store)));
+      if (hit) { setTgt(hit.rank); const y = await withTarget(x.doc.keyword, hit, owner, phone, { basic, rec }); if (y.ok && y.doc) setDoc(y.doc); }
+      else { const m = { mallName: lead.store, title: '', rank: lead.rank ? String(lead.rank) : '', price: '', reviews: '' }; setMan(m); setTgt('manual'); const t: Target = { rank: Math.max(1, lead.rank || 101), mallName: lead.store, title: lead.store, price: 0, reviews: 0, image: null }; const y = await withTarget(x.doc.keyword, t, owner, phone, { basic, rec }); if (y.ok && y.doc) setDoc(y.doc); }
+    } };
   useEffect(() => { if (initialKw) load(initialKw); /* eslint-disable-next-line */ }, []);
   const pick = async (rank: number | '' | 'manual') => { setTgt(rank); if (!doc) return; const t: Target | null = rank === '' ? null : rank === 'manual' ? (man.mallName.trim() ? { rank: Math.max(1, Number(man.rank) || 101), mallName: man.mallName.trim(), title: man.title.trim() || man.mallName.trim(), price: Number(String(man.price).replace(/[^\d]/g, '')) || 0, reviews: Number(String(man.reviews).replace(/[^\d]/g, '')) || 0, image: null } : null) : cands.find(c => c.rank === rank) ?? null; setBusy('tgt'); const x = await withTarget(doc.keyword, t, owner, phone, { basic, rec }); setBusy(''); if (x.ok && x.doc) setDoc(x.doc); else notify(x.msg, 'bad'); setLink(''); };
   const pages = () => Array.from(wrap.current?.querySelectorAll<HTMLElement>('.pd-page') ?? []);
@@ -32,12 +37,12 @@ export default function ProposalsClient({ initialKw, phone: phone0, owner: owner
   const toPng1 = async (i: number) => {
     setBusy('png'); try { const { toPng } = await import('html-to-image'); const el = pages()[i]; const u = await toPng(el, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true }); const a = document.createElement('a'); a.href = u; a.download = `${fname()}_${i + 1}.png`; a.click(); logProposal('png', doc!.keyword, doc!.target?.mallName ?? null); } catch (e: any) { notify('PNG 실패: ' + (e?.message ?? e), 'bad'); } finally { setBusy(''); }
   };
-  const mkLink = async () => { if (!doc) return; setBusy('link'); const x = await makeNativeLink(doc); setBusy(''); if (!x.ok || !x.url) { notify(x.msg, 'bad'); return; } setLink(x.url); try { await navigator.clipboard.writeText(x.url); notify('링크 복사됨 — ' + x.msg, 'ok'); } catch { notify(x.msg, 'ok'); } };
+  const mkLink = async () => { if (!doc) return; setBusy('link'); const x = await makeNativeLink(doc, lead?.id ?? null); setBusy(''); if (!x.ok || !x.url) { notify(x.msg, 'bad'); return; } setLink(x.url); try { await navigator.clipboard.writeText(x.url); notify('링크 복사됨 — ' + x.msg, 'ok'); } catch { notify(x.msg, 'ok'); } };
 
   return <div style={{ display: 'grid', gap: 14 }}>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     <style dangerouslySetInnerHTML={{ __html: PD_CSS }} />
-    <PageHeader title="키워드 제안서" desc="시크릿 지수 조회 데이터만으로 제안서를 만듭니다 (AI 토큰 사용 없음). 같은 키워드는 24시간 캐시라 조회 한도를 안 씁니다." badge={<span className="cell-sub">오늘 조회 {usage.used}/{usage.limit}</span>} />
+    <PageHeader title={lead ? `키워드 제안서 · ${lead.store}` : '키워드 제안서'} desc="시크릿 지수 조회 데이터만으로 제안서를 만듭니다 (AI 토큰 사용 없음). 같은 키워드는 24시간 캐시라 조회 한도를 안 씁니다." badge={<span className="cell-sub">오늘 조회 {usage.used}/{usage.limit}</span>} />
     <div className="card" style={{ padding: '12px 14px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
       <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>키워드<input list="pp-recent" value={kw} onChange={e => setKw(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') load(); }} placeholder="예: 아기베개" style={{ width: 200 }} /><datalist id="pp-recent">{recent.map(r => <option key={r} value={r} />)}</datalist></label>
       <button type="button" className="btn" disabled={busy === 'load'} onClick={() => load()}>{busy === 'load' ? '조회 중…' : '제안서 만들기'}</button>

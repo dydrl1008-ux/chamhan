@@ -55,11 +55,12 @@ export default function CallsClient({ rows, props, origin, history = {}, indexes
             {l.status !== 'assigned' && <div className="cell-sub" style={{ marginTop: 4 }}>오늘 다른 버튼을 누르면 차수 안 올라가고 결과만 바뀜 · <button type="button" className="help" style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }} disabled={busy} onClick={() => { if (confirm('오늘 남긴 결과를 지우고 미기록 상태로 되돌릴까요?')) start(async () => { const x = await undoResult(l.id); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }); }}>↩ 되돌리기</button></div>}
             <input style={{ marginTop: 6, width: '100%' }} placeholder="메모 (통화 내용·다음 연락일)" defaultValue={l.note} onChange={e => setNote(s => ({ ...s, [l.id]: e.target.value }))} />
             <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <a className="btn xs" href={`/proposals?kw=${encodeURIComponent(l.keyword)}&lead=${l.id}&store=${encodeURIComponent(l.store_name)}&rank=${l.rank_now ?? ''}`} title="이 업체 키워드로 제안서 자동 생성">제안서 만들기</a>
               {ps.map(p => <button key={p.code} className="btn ghost xs" onClick={() => copyLink(p.code)}>링크 복사 · {p.views}회</button>)}
               {linkFor === l.id ? <>
                 <input style={{ flex: 1, minWidth: 180 }} placeholder="제안서 주소 https://…" value={url[l.id] ?? ''} onChange={e => setUrl(s => ({ ...s, [l.id]: e.target.value }))} />
                 <button className="btn xs" disabled={busy} onClick={() => start(async () => { const x = await makeTrackLink(l.id, l.store_name, url[l.id] ?? ''); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok && x.code) { await copyLink(x.code); setLinkFor(null); r.refresh(); } })}>만들고 복사</button>
-              </> : <button className="help" style={{ background: 'none', border: 0, padding: 0 }} onClick={() => setLinkFor(l.id)}>+ 제안서 추적 링크</button>}
+              </> : <button className="help" style={{ background: 'none', border: 0, padding: 0 }} onClick={() => setLinkFor(l.id)}>+ 외부 제안서 링크</button>}
             </div>
           </td>
         </tr>;
