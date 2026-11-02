@@ -34,7 +34,7 @@ export async function withTarget(keyword: string, target: Target | null, owner: 
 export async function makeNativeLink(doc: Doc, leadId: number | null = null): Promise<R<{ code: string; url: string }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const code = randomBytes(6).toString('base64url').slice(0, 8);
-  const title = `${doc.target ? doc.target.mallName + ' · ' : ''}${doc.keyword} 상위노출 제안서`;
+  const title = `${doc.target?.mallName?.trim() ? doc.target.mallName.trim() + ' · ' : ''}${doc.keyword} 상위노출 제안서`;
   const { error } = await supabaseServer().from('proposals').insert({ code, lead_id: leadId, title, target_url: '', kind: 'native', data: doc, owner_id: me.id });
   if (error) return { ok: false, msg: error.message };
   await supabaseServer().from('proposal_logs').insert({ user_id: me.id, keyword: doc.keyword, target: doc.target?.mallName ?? null, action: 'link', code });
