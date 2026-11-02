@@ -2,7 +2,7 @@
 import { randomBytes } from 'crypto';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
-import { search } from '@/lib/nsc';
+import { search, searchFresh } from '@/lib/nsc';
 import { buildDoc, BRAND, type Doc, type Target, type Brand } from '@/lib/proposalDoc';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 /** 내 연락처: profiles.phone 우선, 없으면 리포트 화면에서 저장한 번호 */
@@ -28,12 +28,12 @@ export async function logProposal(action: 'make' | 'pdf' | 'png' | 'link', keywo
 export async function loadKeyword(keyword: string): Promise<R<{ doc: Doc; candidates: Target[]; cached: boolean }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   try {
-    const r = await search(keyword, me.id, false);
+    const r = await searchFresh(keyword, me.id);
     const brand: Brand = { ...BRAND, owner: me.name, phone: await myPhone(me.id) };
     const doc = buildDoc(r, brand, null);
     await supabaseServer().from('proposal_logs').insert({ user_id: me.id, keyword: r.keyword, target: null, action: 'make' });
     const candidates: Target[] = r.products.filter(p => p.rank > 0).sort((a, b) => a.rank - b.rank).map(p => ({ rank: p.rank, mallName: p.mallName, title: p.productTitle, price: p.lowPrice, reviews: p.reviewCount, image: p.imageUrl ?? null, link: p.link, hit: p.hitStarScore || undefined, sale: p.saleStarScore || undefined, quality: p.qualityStarScore || undefined }));
-    return { ok: true, msg: r.cached ? '캐시된 결과 (조회 한도 안 씀)' : '새로 조회함', doc, candidates, cached: r.cached };
+    return { ok: true, msg: r.cached ? '오늘 조회한 결과 사용 (한도 안 씀)' : '새로 조회함 (오늘 순위·지수)', doc, candidates, cached: r.cached };
   } catch (e: any) { return { ok: false, msg: e.message }; }
 }
 /** 대상 업체를 넣어 문서 다시 계산 (조회 없음 — 캐시에서) */
@@ -61,7 +61,7 @@ export async function quickLeadLink(leadId: number): Promise<R<{ code: string; u
   if (!lead) return { ok: false, msg: '리드를 찾을 수 없음' };
   if (!lead.keyword?.trim()) return { ok: false, msg: '키워드가 없는 리드' };
   try {
-    const [r, phone] = await Promise.all([search(lead.keyword, me.id, false), myPhone(me.id)]);
+    const [r, phone] = await Promise.all([searchFresh(lead.keyword, me.id), myPhone(me.id)]);
     const norm = (t: string) => (t || '').replace(/[\s()\[\]·._-]/g, '').toLowerCase(); const sn = norm(lead.store_name);
     const ps = r.products.filter(p => p.rank > 0);
     // 1) 스토어명 정확히 일치  2) 리드 순위(rank_now)와 같은 순위 + 이름 일부 일치  3) 이름 포함 (빈 스토어명·2자 미만은 제외)

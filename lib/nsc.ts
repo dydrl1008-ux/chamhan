@@ -25,6 +25,14 @@ function slim(data: any): Omit<NscResult, 'keyword' | 'fetched_at' | 'cached'> {
   return { products, summary: r.summary ?? null, entry_bar: r.entry_bar ?? null, opportunities: r.opportunities ?? null, brief: ins['셀러브리프'] ?? null, trend: ins['트렌드'] ?? [], insights1st: ins['1등분석'] ?? null };
 }
 /** 키워드 조회: 캐시(기본 24h) 우선, 없으면 사이트 호출(과금). 1인 하루 한도 초과 시 거부 */
+/** 제안서용: 오늘(KST) 조회한 캐시만 쓰고, 아니면 새로 조회 (순위·지수는 매일 바뀜) */
+export async function searchFresh(keyword: string, userId: string): Promise<NscResult> {
+  const kw = keyword.trim().replace(/\s+/g, ' ');
+  const { data: hit } = await admin().from('nsc_searches').select('fetched_at').eq('keyword', kw).maybeSingle();
+  const kstDay = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const today = !!hit && new Date(new Date(hit.fetched_at).getTime() + 9 * 3600e3).toISOString().slice(0, 10) === kstDay;
+  return search(kw, userId, !today);
+}
 export async function search(keyword: string, userId: string, force = false): Promise<NscResult> {
   const kw = keyword.trim().replace(/\s+/g, ' '); if (!kw) throw new Error('키워드를 입력하세요'); if (kw.length > 40) throw new Error('키워드가 너무 깁니다');
   const sb = admin();
