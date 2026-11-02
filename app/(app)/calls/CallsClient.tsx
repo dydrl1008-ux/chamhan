@@ -22,7 +22,7 @@ export default function CallsClient({ rows, props, origin, history = {}, indexes
   const r = useRouter(); const [busy, start] = useTransition();
   // 버튼 눌러도 화면이 위아래로 튀지 않게: 누른 시점 스크롤 위치를 기억했다가 재렌더 뒤 복원
   const keepY = () => { const y = window.scrollY; const put = () => window.scrollTo({ top: y }); requestAnimationFrame(put); setTimeout(put, 60); setTimeout(put, 250); setTimeout(put, 600); };
-  useEffect(() => { try { history.scrollRestoration = 'manual'; } catch {} }, []);
+  useEffect(() => { try { window.history.scrollRestoration = 'manual'; } catch {} }, []);
   const [note, setNote] = useState<Record<number, string>>({}); const [nextD, setNextD] = useState<Record<number, string>>({}); const [askNext, setAskNext] = useState<number | null>(null);
   const todayS = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); const plusDays = (d: number) => new Date(Date.now() + 9 * 3600e3 + d * 864e5).toISOString().slice(0, 10); const [url, setUrl] = useState<Record<number, string>>({}); const [linkFor, setLinkFor] = useState<number | null>(null);
   const byLead: Record<number, Prop[]> = {}; props.forEach(p => { if (p.lead_id) (byLead[p.lead_id] ??= []).push(p); });
