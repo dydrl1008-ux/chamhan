@@ -3,6 +3,7 @@ import type { NscResult, Product } from '@/lib/nsc';
 
 export type Target = { rank: number; mallName: string; title: string; price: number; reviews: number; image?: string | null; link?: string };
 export type Brand = { name: string; nameEn: string; email: string; owner?: string; phone?: string };
+export type Offer = { basic: string; rec: string };   // 옵션 가격 표기 (비우면 '담당자 안내')
 export type Doc = {
   keyword: string; date: string; brand: Brand; target: Target | null;
   n: number; avgPrice: number; avgPrice10: number; avgReview: number; avgReview10: number; newRate: number; adCount10: number;
@@ -16,6 +17,10 @@ export type Doc = {
   facts: string[];                // 데이터 문장
   targetFacts: string[];          // 귀사 비교 문장 (target 있을 때)
   entry: { price: string; review: string };
+  offer: Offer;
+  natural10: number;            // 상위 10 중 자연 노출 수
+  gapTop10: number | null;      // 귀사 → 10위 계단 수
+  meetsPrice: boolean; meetsReview: boolean;
 };
 const won = (n: number) => Math.round(n).toLocaleString('ko-KR') + '원';
 const cnt = (n: number) => Math.round(n).toLocaleString('ko-KR');
@@ -24,7 +29,7 @@ const med = (a: number[]) => { if (!a.length) return 0; const s = [...a].sort((x
 const isAd = (p: Product) => /광고|ad/i.test(String(p.상품유형 ?? ''));
 const days = (d?: string) => d ? (Date.now() - new Date(d).getTime()) / 864e5 : NaN;
 
-export function buildDoc(r: NscResult, brand: Brand, target: Target | null, date = new Date()): Doc {
+export function buildDoc(r: NscResult, brand: Brand, target: Target | null, offer: Offer = { basic: '', rec: '' }, date = new Date()): Doc {
   const ps = (r.products ?? []).filter(p => p.rank > 0).sort((a, b) => a.rank - b.rank);
   const top = ps.slice(0, 10); const prices = ps.map(p => p.lowPrice).filter(p => p > 0); const p10 = top.map(p => p.lowPrice).filter(p => p > 0);
   const reviews = ps.map(p => p.reviewCount); const r10 = top.map(p => p.reviewCount);
@@ -69,6 +74,9 @@ export function buildDoc(r: NscResult, brand: Brand, target: Target | null, date
     minPrice10: p10.length ? Math.min(...p10) : 0, maxPrice10: p10.length ? Math.max(...p10) : 0, medianReview10: med(r10),
     related, top, priceBands, axes, strongAxis, competition, barrier, timing, facts, targetFacts,
     entry: { price: p10.length ? `${won(Math.min(...p10))} ~ ${won(avgPrice10)}` : '-', review: cnt(avgReview10) + '개' },
+    offer, natural10: top.length - adCount10, gapTop10: target ? Math.max(0, target.rank - 10) : null,
+    meetsPrice: !!target && target.price > 0 && p10.length > 0 && target.price <= Math.max(...p10) * 1.1,
+    meetsReview: !!target && target.reviews >= avgReview10 * 0.7,
   };
 }
 export const fmtWon = won; export const fmtCnt = cnt;
