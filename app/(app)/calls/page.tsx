@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { todayKST } from '@/lib/date/kst';
 import Link from 'next/link';
 import { PageHeader, Section, Empty } from '@/components/ui';
@@ -48,7 +49,7 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   const ids = [...t, ...((follow ?? []) as Lead[])].map(x => x.id);
   const { data: hist } = ids.length ? await sb.from('lead_contacts').select('lead_id,user_id,round,status,note,created_at').in('lead_id', ids).order('created_at', { ascending: false }).limit(2000) : { data: [] as any[] };
   const uids = [...new Set((hist ?? []).map((h: any) => h.user_id).filter(Boolean))];
-  const { data: names } = uids.length ? await sb.from('profiles').select('id,name').in('id', uids) : { data: [] as any[] };
+  const { data: names } = uids.length ? await supabaseAdmin().from('profiles').select('id,name').in('id', uids) : { data: [] as any[] };   // 다른 팀 사람 이름도 보이게 (RLS 우회, 이름만)
   const nm = Object.fromEntries((names ?? []).map((x: any) => [x.id, x.name]));
   const idx = await leadIndexes([...t, ...((follow ?? []) as Lead[])].map(x => ({ id: x.id, keyword: x.keyword, product_url: x.product_url, store_name: x.store_name, category: x.category })));
   const history: Record<number, Hist[]> = {}; (hist ?? []).forEach((h: any) => { (history[h.lead_id] ??= []).push({ round: h.round, status: h.status, note: h.note, at: h.created_at, who: nm[h.user_id] ?? '' }); });
