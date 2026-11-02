@@ -52,21 +52,21 @@ export function buildDoc(r: NscResult, brand: Brand, target: Target | null, offe
   const strongAxis = [...axes].sort((a, b) => b.v - a.v)[0]?.label ?? '적합도';
   const avgReview10 = avg(r10), avgPrice10 = avg(p10);
   const diffScore = Number((r.summary as any)?.difficulty?.score ?? NaN);
-  const competition = { level: !isNaN(diffScore) ? (diffScore >= 70 ? '높음' : diffScore >= 40 ? '보통' : '낮음') : (avgReview10 >= 3000 ? '높음' : avgReview10 >= 500 ? '보통' : '낮음'), why: `상위 ${ps.length}개 기준. 1페이지 광고 ${adCount10}개.` };
-  const barrier = { level: avgReview10 >= 2000 ? '높음' : avgReview10 >= 300 ? '보통' : '낮음', why: `상위 10개 평균 리뷰 ${cnt(avgReview10)}개 기준.` };
-  const timing = { level: newRate >= 20 ? '활발' : newRate >= 8 ? '보통' : '안정', why: `최근 90일 등록 상품 비율 ${newRate}%.` };
+  const competition = { level: !isNaN(diffScore) ? (diffScore >= 70 ? '높음' : diffScore >= 40 ? '보통' : '낮음') : (avgReview10 >= 3000 ? '높음' : avgReview10 >= 500 ? '보통' : '낮음'), why: `상위 ${ps.length}개 기준 · 1페이지 광고 ${adCount10}개` };
+  const barrier = { level: avgReview10 >= 2000 ? '높음' : avgReview10 >= 300 ? '보통' : '낮음', why: `상위 10개 평균 리뷰 ${cnt(avgReview10)}개` };
+  const timing = { level: newRate >= 20 ? '활발' : newRate >= 8 ? '보통' : '안정', why: `최근 90일 등록 ${newRate}%` };
   const related = (r.trend ?? []).filter(t => typeof t === 'string' && t.trim() && t.trim() !== r.keyword).slice(0, 8);
   const facts = [
-    `상위 상품 평균가 ${won(avgPrice10)}, 평균 리뷰 ${cnt(avgReview10)}개.`,
-    `상위 10개 중 광고 ${adCount10}개, 자연 노출 ${10 - adCount10}개.`,
-    `상위 상품은 ${strongAxis} 지수가 가장 높습니다.`,
+    `상위 평균가 ${won(avgPrice10)} · 평균 리뷰 ${cnt(avgReview10)}개`,
+    `상위 10개 — 광고 ${adCount10} / 자연 ${10 - adCount10}`,
+    `상위 상품 최고 지수 — ${strongAxis}`,
   ];
   const targetFacts: string[] = [];
   if (target) {
     const pr = target.price, rv = target.reviews;
-    if (pr > 0 && p10.length) targetFacts.push(pr >= Math.min(...p10) * 0.9 && pr <= Math.max(...p10) * 1.1 ? `가격 ${won(pr)}은 상위 10개 가격대(${won(Math.min(...p10))}~${won(Math.max(...p10))}) 안에 있습니다.` : pr < Math.min(...p10) ? `가격 ${won(pr)}은 상위 10개 최저가(${won(Math.min(...p10))})보다 낮아 가격 경쟁력은 충분합니다.` : `가격 ${won(pr)}은 상위 10개 최고가(${won(Math.max(...p10))})보다 높습니다.`);
-    targetFacts.push(rv >= avgReview10 * 0.7 ? `리뷰 ${cnt(rv)}개, 상위 평균(${cnt(avgReview10)}개)과 같은 구간입니다.` : rv >= med(r10) * 0.3 ? `리뷰 ${cnt(rv)}개. 상위 평균(${cnt(avgReview10)}개)보다 적지만 상위 10개 중에도 이 수준의 상품이 있습니다.` : `리뷰 ${cnt(rv)}개, 상위 평균(${cnt(avgReview10)}개)과 차이가 있습니다.`);
-    targetFacts.push(target.rank > 100 ? `'${r.keyword}' 검색 결과 100위 안에 없습니다.` : `'${r.keyword}' 검색 결과 ${target.rank}위${target.rank > 40 ? ' — 첫 화면(40위) 밖' : target.rank > 10 ? ' — 첫 화면 안, 상위 10위 밖' : ' — 상위 10위 안'}.`);
+    if (pr > 0 && p10.length) targetFacts.push(pr >= Math.min(...p10) * 0.9 && pr <= Math.max(...p10) * 1.1 ? `가격 ${won(pr)} — 상위 10개 가격대(${won(Math.min(...p10))}~${won(Math.max(...p10))}) 안` : pr < Math.min(...p10) ? `가격 ${won(pr)} — 상위 10개 최저가(${won(Math.min(...p10))})보다 낮음` : `가격 ${won(pr)} — 상위 10개 최고가(${won(Math.max(...p10))})보다 높음`);
+    targetFacts.push(rv >= avgReview10 * 0.7 ? `리뷰 ${cnt(rv)}개 — 상위 평균 ${cnt(avgReview10)}개와 같은 구간` : rv >= med(r10) * 0.3 ? `리뷰 ${cnt(rv)}개 — 상위 평균 ${cnt(avgReview10)}개보다 적음, 상위 10개 중 같은 수준 상품 있음` : `리뷰 ${cnt(rv)}개 — 상위 평균 ${cnt(avgReview10)}개와 차이`);
+    targetFacts.push(target.rank > 100 ? `'${r.keyword}' 100위 밖` : `'${r.keyword}' ${target.rank}위${target.rank > 40 ? ' — 첫 화면(40위) 밖' : target.rank > 10 ? ' — 첫 화면 안 · 10위 밖' : ' — 상위 10위'}`);
   }
   return {
     keyword: r.keyword, date: `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}`, brand, target,
