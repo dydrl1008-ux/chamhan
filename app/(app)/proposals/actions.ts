@@ -62,10 +62,16 @@ export async function quickLeadLink(leadId: number): Promise<R<{ code: string; u
   if (!lead.keyword?.trim()) return { ok: false, msg: '키워드가 없는 리드' };
   try {
     const [r, phone] = await Promise.all([search(lead.keyword, me.id, false), myPhone(me.id)]);
-    const norm = (t: string) => (t || '').replace(/\s+/g, '').toLowerCase(); const sn = norm(lead.store_name);
-    const hit = r.products.find(p => p.rank > 0 && sn && (norm(p.mallName) === sn || norm(p.mallName).includes(sn) || sn.includes(norm(p.mallName))));
+    const norm = (t: string) => (t || '').replace(/[\s()\[\]·._-]/g, '').toLowerCase(); const sn = norm(lead.store_name);
+    const ps = r.products.filter(p => p.rank > 0);
+    // 1) 스토어명 정확히 일치  2) 리드 순위(rank_now)와 같은 순위 + 이름 일부 일치  3) 이름 포함 (빈 스토어명·2자 미만은 제외)
+    const same = (m: string) => { const n = norm(m); return n.length >= 2 && (n === sn || (sn.length >= 2 && (n.includes(sn) || sn.includes(n)))); };
+    const hit = ps.find(p => sn.length >= 2 && norm(p.mallName) === sn)
+      ?? (lead.rank_now ? ps.find(p => p.rank === lead.rank_now && same(p.mallName)) : undefined)
+      ?? ps.find(p => same(p.mallName));
     const target: Target = hit ? { rank: hit.rank, mallName: hit.mallName, title: hit.productTitle, price: hit.lowPrice, reviews: hit.reviewCount, image: hit.imageUrl ?? null, link: hit.link, hit: hit.hitStarScore || undefined, sale: hit.saleStarScore || undefined, quality: hit.qualityStarScore || undefined }
       : { rank: lead.rank_now && lead.rank_now > 0 ? lead.rank_now : 101, mallName: lead.store_name, title: lead.store_name, price: 0, reviews: 0, image: null };
+    if (!target.mallName?.trim()) target.mallName = lead.store_name;
     const doc = buildDoc(r, { ...BRAND, owner: me.name, phone }, target);
     const x = await makeNativeLink(doc, leadId);
     if (!x.ok) return x;
