@@ -3,19 +3,19 @@ import type { Doc } from '@/lib/proposalDoc';
 import { fmtWon, fmtCnt } from '@/lib/proposalDoc';
 
 export const PD_CSS = `
-.pd{word-break:keep-all;--ink:#0B0F19;--ink2:#2A3142;--muted:#6B7280;--line:#E6E8EE;--soft:#F4F5F9;--blue:#2857FF;--blue-soft:#EAEFFF;--navy:#0F1526;--lime:#D7FF3F;--mark:#FFF07A;--red:#E5484D;--red-soft:#FDECEC;--green:#1F9D55;--green-soft:#E6F6EC;color:var(--ink);font-family:Pretendard,'Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.pd{word-break:keep-all;--ink:#111111;--ink2:#333333;--muted:#777777;--line:#E8E8E8;--soft:#F5F6F7;--blue:#03C75A;--blue-soft:#E8F8EE;--navy:#141414;--lime:#03C75A;--mark:#03C75A;--red:#E5484D;--red-soft:#FDECEC;--green:#03C75A;--green-soft:#E8F8EE;color:var(--ink);font-family:Pretendard,'Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
 .pd *{box-sizing:border-box}
 .pd-page{width:827px;height:1170px;background:#fff;margin:0 auto 18px;padding:0;position:relative;box-shadow:0 2px 14px rgba(0,0,0,.12);page-break-after:always;break-after:page;overflow:hidden;display:flex;flex-direction:column}
-.pd-page.dark{background:var(--navy);color:#fff}
+.pd-page.dark{background:#111;color:#fff}
 .pd-in{padding:52px 60px 16px;display:flex;flex-direction:column;gap:18px;flex:1;justify-content:space-between}
 .pd-foot{margin-top:auto;padding:14px 60px 22px;display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);border-top:1px solid var(--line)}
 .pd-page.dark .pd-foot{border-color:rgba(255,255,255,.12);color:#8E97AD}
-.pd mark{background:var(--mark);color:inherit;padding:0 4px;border-radius:2px;font-weight:700;white-space:nowrap}
-.pd-navy mark,.pd-page.dark mark{background:transparent;color:var(--lime);padding:0}
-.pd-fact mark{background:var(--blue-soft);color:var(--blue)}
+.pd mark{background:var(--mark);color:#fff;padding:1px 6px;border-radius:3px;font-weight:800;white-space:nowrap}
+.pd-navy mark,.pd-page.dark mark{background:var(--lime);color:#fff}
+.pd-fact mark{background:var(--blue-soft);color:#027A38}
 /* 섹션 헤더 */
-.pd-sec{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:end;border-bottom:2px solid var(--ink);padding-bottom:10px}
-.pd-sec .n{font-size:11px;letter-spacing:.2em;color:var(--blue);font-weight:800}
+.pd-sec{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:end;border-bottom:3px solid var(--ink);padding-bottom:10px}
+.pd-sec .n{font-size:11px;letter-spacing:.14em;color:#fff;background:var(--blue);font-weight:800;padding:4px 10px;border-radius:4px;align-self:center}
 .pd-sec h2{font-size:24px;margin:0;font-weight:800;letter-spacing:-.02em;line-height:1.2}
 .pd-sec .k{font-size:11px;color:var(--muted)}
 .pd-lead{font-size:13.5px;color:var(--ink2);margin:-6px 0 0;line-height:1.6}
@@ -33,6 +33,17 @@ export const PD_CSS = `
 .pd-stat .l{font-size:11px;color:var(--muted);font-weight:700}.pd-stat .v{font-size:28px;font-weight:900;margin:2px 0;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15}.pd-stat .v small{font-size:12px;color:var(--muted);margin-left:2px;font-weight:700}.pd-stat .d{font-size:11px;color:var(--muted)}
 .pd-navy{background:var(--navy);color:#fff;border-radius:14px;padding:18px 22px;font-size:13.5px;line-height:1.65}
 .pd-navy .t{font-size:11px;letter-spacing:.14em;color:var(--lime);font-weight:800;margin-bottom:6px}
+.pd-phone{width:300px;background:#111;border-radius:34px;padding:12px;box-shadow:0 20px 50px rgba(0,0,0,.5);border:3px solid #2a2a2a}
+.pd-phone .scr{background:#fff;border-radius:24px;overflow:hidden;color:#111}
+.pd-phone .q{margin:16px 14px 8px;border:2px solid #03C75A;border-radius:10px;padding:9px 12px;font-size:14px;font-weight:700}
+.pd-phone .tabs{display:flex;gap:12px;padding:0 14px 8px;font-size:11px;color:#999;border-bottom:1px solid #eee}.pd-phone .tabs b{color:#111;border-bottom:2px solid #111;padding-bottom:6px}
+.pd-phone .hd{display:flex;justify-content:space-between;padding:10px 14px 4px;font-size:12px;font-weight:800}.pd-phone .hd span{color:#03C75A;font-size:10px}
+.pd-phone .row{display:grid;grid-template-columns:22px 40px 1fr;gap:8px;align-items:center;padding:7px 14px;border-bottom:1px solid #F0F0F0;font-size:10.5px}
+.pd-phone .row .rk{font-weight:900;color:#999;font-size:11px}.pd-phone .row .th{width:40px;height:40px;border-radius:6px;background:#EEE;object-fit:cover}
+.pd-phone .row .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}.pd-phone .row .m{color:#888;font-size:9.5px}
+.pd-phone .row.me{background:#E8F8EE;outline:2px solid #03C75A;outline-offset:-2px}.pd-phone .row.me .rk{color:#03C75A}
+.pd-phone .gap{text-align:center;color:#BBB;font-size:10px;letter-spacing:.3em;padding:6px}
+.pd-phone .tag{margin:10px auto 14px;width:max-content;background:#111;color:#fff;font-size:11px;font-weight:800;padding:7px 14px;border-radius:6px}
 .pd-fact{background:var(--soft);border-radius:10px;padding:11px 14px;font-size:12.5px;display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start}
 .pd-fact i{width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;font-style:normal;margin-top:1px}
 .pd-fact.ok i{background:var(--green)}.pd-fact.no i{background:var(--red)}
@@ -62,14 +73,15 @@ export const PD_CSS = `
 .pd-tl .s i{width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;font-style:normal;position:relative}
 .pd-tl .s .t{font-weight:800;font-size:12.5px;margin-top:8px}.pd-tl .s .d{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45}
 .pd-opt{border:1.5px solid var(--line);border-radius:14px;padding:16px 18px;position:relative}
-.pd-opt.rec{border-color:var(--ink);background:var(--ink);color:#fff}
-.pd-opt .tag{position:absolute;top:-10px;left:16px;background:var(--lime);color:var(--ink);font-size:10.5px;font-weight:800;padding:2px 10px;border-radius:999px}
+.pd-opt.rec{border-color:#111;background:#111;color:#fff}
+.pd-opt .tag{position:absolute;top:-10px;left:16px;background:var(--lime);color:#fff;font-size:10.5px;font-weight:800;padding:2px 10px;border-radius:999px}
 .pd-opt .t{font-weight:800;font-size:13px;letter-spacing:.04em}.pd-opt .p{font-size:22px;font-weight:900;margin:4px 0 6px;letter-spacing:-.02em}
 .pd-opt ul{margin:0;padding-left:16px;font-size:12px;line-height:1.7}.pd-opt.rec ul{color:#C9D0E3}.pd-opt .pd-muted{color:#8E97AD}
 .pd-faq{display:grid;gap:6px}.pd-faq div{display:grid;grid-template-columns:18px 1fr;gap:8px;font-size:12px;align-items:start}.pd-faq b{color:var(--blue)}
 .pd-cta{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;margin-top:26px}
 .pd-cta .c{border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:22px 24px}
-.pd-cta .l{font-size:11px;letter-spacing:.14em;color:var(--lime);font-weight:800;margin-bottom:8px}.pd-cta .v{font-size:20px;font-weight:800;line-height:1.3}.pd-cta .d{font-size:12.5px;color:#A9B1C6;margin-top:8px;line-height:1.6}
+.pd-cta .l{font-size:11px;letter-spacing:.14em;color:var(--lime);font-weight:800;margin-bottom:8px}
+.pd-cta .c.g{background:var(--lime);border-color:var(--lime)}.pd-cta .c.g .l{color:#fff;opacity:.85}.pd-cta .c.g .d{color:#F0FFF5}.pd-cta .v{font-size:20px;font-weight:800;line-height:1.3}.pd-cta .d{font-size:12.5px;color:#A9B1C6;margin-top:8px;line-height:1.6}
 @media print{.pd-page{box-shadow:none;margin:0;height:297mm;width:210mm}body{background:#fff}}
 `;
 
@@ -83,33 +95,33 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
   const pages: JSX.Element[] = []; let pn = 1;
   const price = (v: string) => v || '담당자 안내';
 
-  // 1 표지 — 훅: 격차 숫자
+  // 1 표지 — 검정 + 초록, 헤드라인 + 폰 목업
+  const phone = <div className="pd-phone"><div className="scr">
+    <div className="q">{d.keyword}</div>
+    <div className="tabs"><b>통합</b><span>쇼핑</span><span>블로그</span><span>카페</span><span>이미지</span></div>
+    <div className="hd">쇼핑 <span>{tgt ? '현재 순위' : '상위 상품'}</span></div>
+    {d.top.slice(0, 4).map(p => <div className="row" key={p.rank}><span className="rk">{p.rank}</span>{p.imageUrl ? <img className="th" src={img(p.imageUrl)} alt="" /> : <div className="th" />}<div style={{ minWidth: 0 }}><div className="t">{p.productTitle}</div><div className="m">{fmtWon(p.lowPrice)} · 리뷰 {fmtCnt(p.reviewCount)}</div></div></div>)}
+    {tgt ? <><div className="gap">· · ·</div><div className="row me"><span className="rk">{tgt.rank > 100 ? '100+' : tgt.rank}</span>{tgt.image ? <img className="th" src={img(tgt.image)} alt="" /> : <div className="th" />}<div style={{ minWidth: 0 }}><div className="t">{tgt.title}</div><div className="m">{tgt.price ? fmtWon(tgt.price) + ' · ' : ''}리뷰 {fmtCnt(tgt.reviews)} · 귀사</div></div></div></> : <div className="row"><span className="rk">5</span><div className="th" /><div style={{ minWidth: 0 }}><div className="t">{d.top[4]?.productTitle ?? ''}</div><div className="m">{d.top[4] ? fmtWon(d.top[4].lowPrice) + ' · 리뷰 ' + fmtCnt(d.top[4].reviewCount) : ''}</div></div></div>}
+    <div className="tag">{tgt ? `${tgt.rank > 100 ? '100위 밖' : tgt.rank + '위'} → 첫 화면` : '첫 화면 진입 조건'}</div>
+  </div></div>;
   pages.push(<div className="pd-page dark" key="cover">
-    <div className="pd-in" style={{ gap: 0 }}>
+    <div className="pd-in" style={{ gap: 0, justifyContent: 'flex-start' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div className="pd-logo"><i />{d.brand.nameEn}</div><span style={{ fontSize: 12, color: '#8E97AD' }}>{d.date}</span></div>
-      <div style={{ marginTop: 120 }}>
-        <div style={{ fontSize: 12, letterSpacing: '.2em', color: 'var(--lime)', fontWeight: 800 }}>{tgt ? `${tgt.mallName} 귀중` : '네이버쇼핑 상위노출 제안'}</div>
-        <div style={{ fontSize: 30, fontWeight: 800, margin: '18px 0 6px', letterSpacing: '-.02em' }}>'{d.keyword}' 검색 결과,</div>
-        {tgt ? <>
-          <div className="pd-huge">{tgt.rank}<small>위</small></div>
-          <div style={{ fontSize: 22, fontWeight: 700, margin: '14px 0 0', lineHeight: 1.4 }}>{tgt.rank > 100 ? <>검색 결과 <mark>100위 안에 없음</mark></> : <>상위 10위까지 <mark>{d.gapTop10}계단</mark></>}</div>
-        </> : <>
-          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', marginTop: -6 }}>1페이지 진입 조건</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 1fr', gap: 12, marginTop: 26 }}>
-            <div style={{ background: 'var(--lime)', color: 'var(--ink)', borderRadius: 14, padding: '18px 20px' }}><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em' }}>유입 반영도</div><div style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-.03em', lineHeight: 1.05, margin: '6px 0 4px' }}>{d.traffic.verdict}</div><div style={{ fontSize: 11.5, fontWeight: 600 }}>{d.traffic.verdict === '높음' ? '클릭·유입이 순위를 가르는 시장' : d.traffic.verdict === '보통' ? '유입 + 리뷰가 같이 작용' : '리뷰 비중 큰 시장'}</div></div>
-            <div style={{ border: '1px solid rgba(255,255,255,.18)', borderRadius: 14, padding: '18px 20px' }}><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', color: '#8E97AD' }}>상위 10개 리뷰 중간값</div><div style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-.02em', margin: '10px 0 4px' }}>{fmtCnt(d.medianReview10)}<span style={{ fontSize: 13, color: '#8E97AD' }}> 개</span></div><div style={{ fontSize: 11.5, color: '#A9B1C6' }}>리뷰 적은데 상위권 {d.traffic.lowReviewTop}개</div></div>
-            <div style={{ border: '1px solid rgba(255,255,255,.18)', borderRadius: 14, padding: '18px 20px' }}><div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', color: '#8E97AD' }}>클릭지수 상위 10 / 11~40</div><div style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-.02em', margin: '10px 0 4px' }}>{d.traffic.hitTop}<span style={{ fontSize: 13, color: '#8E97AD' }}> / {d.traffic.hitMid}</span></div><div style={{ fontSize: 11.5, color: '#A9B1C6' }}>차이 {(d.traffic.hitTop - d.traffic.hitMid).toFixed(1)}</div></div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 30, alignItems: 'center', margin: 'auto 0' }}>
+        <div>
+          <div style={{ display: 'inline-block', background: 'var(--lime)', color: '#fff', fontSize: 11, letterSpacing: '.14em', fontWeight: 800, padding: '6px 12px', borderRadius: 4 }}>{tgt ? `${tgt.mallName} 귀중` : '네이버쇼핑 상위노출'}</div>
+          <div style={{ fontSize: 44, fontWeight: 900, lineHeight: 1.18, letterSpacing: '-.03em', margin: '22px 0 18px' }}>{tgt ? <>'{d.keyword}' {tgt.rank > 100 ? '100위 밖' : `${tgt.rank}위`},<br /><span style={{ color: 'var(--lime)' }}>{d.meetsPrice && d.meetsReview ? '조건은 됐고 순위만 뒤' : '유입부터 채울 차례'}</span></> : <>'{d.keyword}'<br /><span style={{ color: 'var(--lime)' }}>첫 화면 진입 조건</span></>}</div>
+          <div style={{ fontSize: 15, color: '#D0D0D0', lineHeight: 1.75 }}>
+            {tgt ? <><mark>가격 {tgt.price ? fmtWon(tgt.price) : '-'} · 리뷰 {fmtCnt(tgt.reviews)}개</mark> vs 상위 10개 평균 {fmtWon(d.avgPrice10)} · {fmtCnt(d.avgReview10)}개<br />유입 반영도 <b style={{ color: '#fff' }}>{d.traffic.verdict}</b> — 클릭·유입이 순위를 가르는 정도</> : <>상위 10개 평균 {fmtWon(d.avgPrice10)} · 리뷰 {fmtCnt(d.avgReview10)}개<br />유입 반영도 <b style={{ color: '#fff' }}>{d.traffic.verdict}</b> — 클릭·유입이 순위를 가르는 정도</>}
           </div>
-        </>}
-        <p style={{ fontSize: 14, color: '#A9B1C6', margin: '26px 0 0', lineHeight: 1.7, maxWidth: 520 }}>{tgt ? '현재 위치 · 유입 반영도 · 진행 방식' : `상위 ${d.n}개 데이터 · 유입 반영도 · 진행 방식`}</p>
-      </div>
-      <div style={{ marginTop: 'auto', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: '1px solid rgba(255,255,255,.14)', paddingTop: 18, marginBottom: 20 }}>
-        <div><div style={{ fontSize: 24, fontWeight: 900 }}>{d.n}<span style={{ fontSize: 12, color: '#8E97AD' }}> 개</span></div><div style={{ fontSize: 11, color: '#8E97AD' }}>분석한 상위 상품</div></div>
-        <div><div style={{ fontSize: 24, fontWeight: 900 }}>{fmtWon(d.avgPrice10)}</div><div style={{ fontSize: 11, color: '#8E97AD' }}>상위 10개 평균가</div></div>
-        <div><div style={{ fontSize: 24, fontWeight: 900 }}>{fmtCnt(d.avgReview10)}<span style={{ fontSize: 12, color: '#8E97AD' }}> 개</span></div><div style={{ fontSize: 11, color: '#8E97AD' }}>상위 10개 평균 리뷰</div></div>
+          <div style={{ marginTop: 26, display: 'grid', gap: 6, fontSize: 13, color: '#BBB' }}>
+            <div><span style={{ color: 'var(--lime)' }}>■</span> 현재 위치 · 조건 체크</div><div><span style={{ color: 'var(--lime)' }}>■</span> 유입으로 올릴 수 있는 시장인지 — 데이터 근거</div><div><span style={{ color: 'var(--lime)' }}>■</span> 진행 방식 · 10일 단위 · 종료 리포트</div>
+          </div>
+        </div>
+        {phone}
       </div>
     </div>
-    <div className="pd-foot"><span>{d.brand.name} · {d.brand.owner ? `담당 ${d.brand.owner}` : ''}{d.brand.phone ? ` · ${d.brand.phone}` : ''}</span><span>네이버쇼핑 공개 데이터 기준</span></div>
+    <div className="pd-foot"><span style={{ color: '#fff', fontWeight: 700 }}>{d.brand.name}{d.brand.owner ? ` · ${d.brand.owner}` : ''}{d.brand.phone ? ` · ${d.brand.phone}` : ''}</span><span>상위 {d.n}개 상품 데이터 기준</span></div>
   </div>);
 
   // 2 현재 위치 / 시장
@@ -224,11 +236,11 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
     <div className="pd-in" style={{ gap: 0, justifyContent: 'flex-start' }}>
       <div className="pd-logo"><i />{d.brand.nameEn}</div>
       <div style={{ margin: 'auto 0', paddingBottom: 40 }}>
-        <div style={{ fontSize: 12, letterSpacing: '.2em', color: 'var(--lime)', fontWeight: 800 }}>CONTACT</div>
-        <div style={{ fontSize: 38, fontWeight: 900, letterSpacing: '-.02em', lineHeight: 1.2, margin: '14px 0 16px' }}>문의</div>
+        <div style={{ display: 'inline-block', background: 'var(--lime)', color: '#fff', fontSize: 11, letterSpacing: '.14em', fontWeight: 800, padding: '6px 12px', borderRadius: 4 }}>CONTACT</div>
+        <div style={{ fontSize: 44, fontWeight: 900, letterSpacing: '-.03em', lineHeight: 1.18, margin: '18px 0 16px' }}>{tgt ? <>{tgt.rank > 100 ? '100위 밖' : `${tgt.rank}위`}에서 <span style={{ color: 'var(--lime)' }}>첫 화면</span>까지</> : <>'{d.keyword}' <span style={{ color: 'var(--lime)' }}>첫 화면</span>까지</>}</div>
         <p style={{ fontSize: 15, color: '#A9B1C6', lineHeight: 1.7, margin: 0, maxWidth: 540 }}>회신 시 <mark>연관 키워드 현재 순위</mark> 확인 → 전달 → 진행 여부 결정</p>
         <div className="pd-cta">
-          <div className="c"><div className="l">담당</div><div className="v">{d.brand.owner || d.brand.name}</div><div className="d">{d.brand.phone && <div style={{ fontSize: 18, color: '#fff', fontWeight: 800 }}>{d.brand.phone}</div>}{d.brand.email}</div></div>
+          <div className="c g"><div className="l">담당</div><div className="v">{d.brand.owner || d.brand.name}</div><div className="d">{d.brand.phone && <div style={{ fontSize: 18, color: '#fff', fontWeight: 800 }}>{d.brand.phone}</div>}{d.brand.email}</div></div>
           <div className="c"><div className="l">회신 시</div><div className="v">연관 키워드 순위 확인</div><div className="d">{d.related.length ? d.related.slice(0, 4).join(' · ') : `'${d.keyword}' 연관 키워드`}<br />진행 방식 · 옵션 안내</div></div>
         </div>
       </div>
