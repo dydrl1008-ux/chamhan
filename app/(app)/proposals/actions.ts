@@ -20,9 +20,9 @@ export async function loadKeyword(keyword: string): Promise<R<{ doc: Doc; candid
   } catch (e: any) { return { ok: false, msg: e.message }; }
 }
 /** 대상 업체를 넣어 문서 다시 계산 (조회 없음 — 캐시에서) */
-export async function withTarget(keyword: string, target: Target | null, phone: string): Promise<R<{ doc: Doc }>> {
+export async function withTarget(keyword: string, target: Target | null, owner: string, phone: string): Promise<R<{ doc: Doc }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
-  try { const r = await search(keyword, me.id, false); return { ok: true, msg: '', doc: buildDoc(r, { ...BRAND, owner: me.name, phone }, target) }; } catch (e: any) { return { ok: false, msg: e.message }; }
+  try { const r = await search(keyword, me.id, false); return { ok: true, msg: '', doc: buildDoc(r, { ...BRAND, owner: owner.trim() || me.name, phone: phone.trim() }, target) }; } catch (e: any) { return { ok: false, msg: e.message }; }
 }
 /** /p/코드 — 워크허브 안에서 그려지는 제안서 링크 (goat 주소 없음) */
 export async function makeNativeLink(doc: Doc, leadId: number | null = null): Promise<R<{ code: string; url: string }>> {

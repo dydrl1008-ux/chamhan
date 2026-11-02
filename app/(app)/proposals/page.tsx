@@ -7,5 +7,5 @@ export const dynamic = 'force-dynamic';
 export default async function ProposalsPage({ searchParams }: { searchParams: { kw?: string } }) {
   const me = (await getProfile())!;
   const [{ data: link }, list, usage] = await Promise.all([supabaseServer().from('reward_watch_links').select('phone').eq('user_id', me.id).maybeSingle(), recent(20).catch(() => []), myUsage(me.id).catch(() => ({ used: 0, limit: 0 }))]);
-  return <ProposalsClient initialKw={searchParams.kw ?? ''} phone={link?.phone ?? ''} recent={(list as any[]).map(x => x.keyword)} usage={usage} />;
+  return <ProposalsClient initialKw={searchParams.kw ?? ''} phone={link?.phone ?? ''} owner={me.name} recent={(list as any[]).map(x => x.keyword)} usage={usage} />;
 }

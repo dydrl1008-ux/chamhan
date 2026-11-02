@@ -7,13 +7,13 @@ import ProposalDoc, { PD_CSS, docPageCount } from '@/components/ProposalDoc';
 import type { Doc, Target } from '@/lib/proposalDoc';
 import { loadKeyword, withTarget, makeNativeLink } from './actions';
 
-export default function ProposalsClient({ initialKw, phone: phone0, recent, usage }: { initialKw: string; phone: string; recent: string[]; usage: { used: number; limit: number } }) {
-  const [kw, setKw] = useState(initialKw); const [phone, setPhone] = useState(phone0);
+export default function ProposalsClient({ initialKw, phone: phone0, owner: owner0, recent, usage }: { initialKw: string; phone: string; owner: string; recent: string[]; usage: { used: number; limit: number } }) {
+  const [kw, setKw] = useState(initialKw); const [phone, setPhone] = useState(phone0); const [owner, setOwner] = useState(owner0);
   const [doc, setDoc] = useState<Doc | null>(null); const [cands, setCands] = useState<Target[]>([]); const [tgt, setTgt] = useState<number | ''>('');
   const [busy, setBusy] = useState(''); const [link, setLink] = useState(''); const wrap = useRef<HTMLDivElement>(null);
   const load = async (k = kw) => { const q = k.trim(); if (!q) return; setBusy('load'); setLink(''); setTgt(''); const x = await loadKeyword(q); setBusy(''); if (!x.ok || !x.doc) { notify(x.msg, 'bad'); return; } setDoc(x.doc); setCands(x.candidates ?? []); notify(x.msg, 'ok'); };
   useEffect(() => { if (initialKw) load(initialKw); /* eslint-disable-next-line */ }, []);
-  const pick = async (rank: number | '') => { setTgt(rank); if (!doc) return; const t = rank === '' ? null : cands.find(c => c.rank === rank) ?? null; setBusy('tgt'); const x = await withTarget(doc.keyword, t, phone); setBusy(''); if (x.ok && x.doc) setDoc(x.doc); else notify(x.msg, 'bad'); setLink(''); };
+  const pick = async (rank: number | '') => { setTgt(rank); if (!doc) return; const t = rank === '' ? null : cands.find(c => c.rank === rank) ?? null; setBusy('tgt'); const x = await withTarget(doc.keyword, t, owner, phone); setBusy(''); if (x.ok && x.doc) setDoc(x.doc); else notify(x.msg, 'bad'); setLink(''); };
   const pages = () => Array.from(wrap.current?.querySelectorAll<HTMLElement>('.pd-page') ?? []);
   const fname = () => `${doc?.target ? doc.target.mallName + '_' : ''}${doc?.keyword}_제안서`;
   const toPdf = async () => {
@@ -34,6 +34,7 @@ export default function ProposalsClient({ initialKw, phone: phone0, recent, usag
   const mkLink = async () => { if (!doc) return; setBusy('link'); const x = await makeNativeLink(doc); setBusy(''); if (!x.ok || !x.url) { notify(x.msg, 'bad'); return; } setLink(x.url); try { await navigator.clipboard.writeText(x.url); notify('링크 복사됨 — ' + x.msg, 'ok'); } catch { notify(x.msg, 'ok'); } };
 
   return <div style={{ display: 'grid', gap: 14 }}>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     <style dangerouslySetInnerHTML={{ __html: PD_CSS }} />
     <PageHeader title="키워드 제안서" desc="시크릿 지수 조회 데이터만으로 제안서를 만듭니다 (AI 토큰 사용 없음). 같은 키워드는 24시간 캐시라 조회 한도를 안 씁니다." badge={<span className="cell-sub">오늘 조회 {usage.used}/{usage.limit}</span>} />
     <div className="card" style={{ padding: '12px 14px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -41,7 +42,8 @@ export default function ProposalsClient({ initialKw, phone: phone0, recent, usag
       <button type="button" className="btn" disabled={busy === 'load'} onClick={() => load()}>{busy === 'load' ? '조회 중…' : '제안서 만들기'}</button>
       {doc && <>
         <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>대상 업체 (선택)<select value={tgt} onChange={e => pick(e.target.value === '' ? '' : Number(e.target.value))} style={{ maxWidth: 360 }}><option value="">— 시장 분석용 (업체 없음)</option>{cands.map(c => <option key={c.rank} value={c.rank}>{c.rank}위 · {c.mallName} · {c.title.slice(0, 30)}</option>)}</select></label>
-        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>담당자 연락처<input value={phone} onChange={e => setPhone(e.target.value)} onBlur={() => pick(tgt)} placeholder="010-0000-0000" style={{ width: 140 }} /></label>
+        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>담당자<input value={owner} onChange={e => setOwner(e.target.value)} onBlur={() => pick(tgt)} placeholder="이름" style={{ width: 90 }} /></label>
+        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>연락처<input value={phone} onChange={e => setPhone(e.target.value)} onBlur={() => pick(tgt)} placeholder="010-0000-0000" style={{ width: 140 }} /></label>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button type="button" className="btn" disabled={!!busy} onClick={toPdf}>{busy === 'pdf' ? '만드는 중…' : `PDF 저장 (${docPageCount(doc)}장)`}</button>
           <button type="button" className="btn ghost" disabled={!!busy} onClick={() => toPng1(0)}>표지 PNG</button>
