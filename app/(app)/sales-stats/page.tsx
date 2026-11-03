@@ -22,10 +22,12 @@ export default async function SalesStatsPage({ searchParams }: { searchParams: {
   const { data: profs } = await sb.from('profiles').select('id,name,team_id,is_active,role').eq('is_active', true);
   const people = (profs ?? []).filter(p => all || p.team_id === me.team_id).filter(p => p.role !== 'admin');
   const ids = new Set(people.map(p => p.id)); const nm = new Map(people.map(p => [p.id, p.name]));
-  const [{ data: contacts }, { data: props }, { data: assigned }] = await Promise.all([
-    sb.from('lead_contacts').select('lead_id,user_id,status,created_at, leads!inner(keyword,status)').gte('created_at', since).limit(50000),
-    sb.from('proposals').select('code,lead_id,owner_id,views,created_at, leads(status)').gte('created_at', since).limit(20000),
-    sb.from('leads').select('assigned_to').eq('assigned_date', today).not('assigned_to', 'is', null),
+  // PostgREST 는 한 번에 1,000행까지만 → 1,000행씩 끝까지 페이지로
+  const fetchAll = async (mk: (from: number, to: number) => any) => { const out: any[] = []; for (let off = 0; ; off += 1000) { const { data } = await mk(off, off + 999); out.push(...(data ?? [])); if (!data || data.length < 1000) break; } return out; };
+  const [contacts, props, assigned] = await Promise.all([
+    fetchAll((a, b) => sb.from('lead_contacts').select('lead_id,user_id,status,created_at, leads!inner(keyword,status)').gte('created_at', since).order('id').range(a, b)),
+    fetchAll((a, b) => sb.from('proposals').select('code,lead_id,owner_id,views,created_at, leads(status)').gte('created_at', since).order('created_at').range(a, b)),
+    fetchAll((a, b) => sb.from('leads').select('id,assigned_to').eq('assigned_date', today).not('assigned_to', 'is', null).order('id').range(a, b)),
   ]);
   const cs = (contacts ?? []).filter((c: any) => c.user_id && ids.has(c.user_id)) as any[];
   const ps = (props ?? []).filter((p: any) => p.owner_id && ids.has(p.owner_id)) as any[];
