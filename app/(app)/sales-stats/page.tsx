@@ -4,9 +4,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader, Section, Empty, Status } from '@/components/ui';
 import { todayKST, addDays, fmtMD } from '@/lib/date/kst';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 const ST: Record<string, string> = { called: '부재', interested: '관심', rejected: '거절', won: '계약', excluded: '대상 아님' };
-const kstDay = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
 /** 회사월(21일~20일) 시작일 */
 function companyMonthStart(d: string) { const [y, m, day] = d.split('-').map(Number); const dt = new Date(Date.UTC(y, m - 1, 21)); if (day < 21) dt.setUTCMonth(dt.getUTCMonth() - 1); return dt.toISOString().slice(0, 10); }
 const pct = (a: number, b: number) => b ? `${Math.round((a / b) * 100)}%` : '-';
@@ -22,33 +22,29 @@ export default async function SalesStatsPage({ searchParams }: { searchParams: {
   const { data: profs } = await sb.from('profiles').select('id,name,team_id,is_active,role').eq('is_active', true);
   const people = (profs ?? []).filter(p => all || p.team_id === me.team_id).filter(p => p.role !== 'admin');
   const ids = new Set(people.map(p => p.id)); const nm = new Map(people.map(p => [p.id, p.name]));
-  // PostgREST 는 한 번에 1,000행까지만 → 1,000행씩 끝까지 페이지로
-  const fetchAll = async (mk: (from: number, to: number) => any) => { const out: any[] = []; for (let off = 0; ; off += 1000) { const { data } = await mk(off, off + 999); out.push(...(data ?? [])); if (!data || data.length < 1000) break; } return out; };
-  const [contacts, props, assigned] = await Promise.all([
-    fetchAll((a, b) => sb.from('lead_contacts').select('lead_id,user_id,status,created_at, leads!inner(keyword,status)').gte('created_at', since).order('id').range(a, b)),
-    fetchAll((a, b) => sb.from('proposals').select('code,lead_id,owner_id,views,created_at, leads(status)').gte('created_at', since).order('created_at').range(a, b)),
-    fetchAll((a, b) => sb.from('leads').select('id,assigned_to').eq('assigned_date', today).not('assigned_to', 'is', null).order('id').range(a, b)),
-  ]);
-  const cs = (contacts ?? []).filter((c: any) => c.user_id && ids.has(c.user_id)) as any[];
-  const ps = (props ?? []).filter((p: any) => p.owner_id && ids.has(p.owner_id)) as any[];
-  const asg = new Map<string, number>(); (assigned ?? []).forEach((a: any) => asg.set(a.assigned_to, (asg.get(a.assigned_to) ?? 0) + 1));
+  const { data: agg, error } = await sb.rpc('sales_stats', { p_since: since });
+  if (error) return <div style={{ display: 'grid', gap: 14 }}><PageHeader title="콜 성과" /><div className="card" style={{ padding: 16, color: 'var(--bad-ink)' }}>집계 함수 없음 — supabase/migrations/0068_sales_stats.sql 실행 필요 ({error.message})</div></div>;
+  const A = (agg ?? {}) as { by_user: { user_id: string; status: string; n: number }[]; by_kw: { keyword: string; status: string; n: number }[]; by_day: { d: string; status: string; n: number }[]; props: { owner_id: string; links: number; viewed: number; viewed_won: number }[]; assigned: { assigned_to: string; n: number }[] };
+  const asg = new Map<string, number>(); (A.assigned ?? []).forEach(a => asg.set(a.assigned_to, a.n));
 
   // 직원별
   const byUser = new Map<string, { calls: number; called: number; rejected: number; interested: number; won: number; links: number; viewed: number; viewedWon: number }>();
   const u = (id: string) => { let x = byUser.get(id); if (!x) { x = { calls: 0, called: 0, rejected: 0, interested: 0, won: 0, links: 0, viewed: 0, viewedWon: 0 }; byUser.set(id, x); } return x; };
-  for (const c of cs) { const x = u(c.user_id); x.calls++; if (c.status in x) (x as any)[c.status]++; }
-  for (const p of ps) { const x = u(p.owner_id); x.links++; if (p.views > 0) { x.viewed++; if (p.leads?.status === 'won') x.viewedWon++; } }
+  for (const c of A.by_user ?? []) { if (!ids.has(c.user_id)) continue; const x = u(c.user_id); x.calls += c.n; if (c.status in x) (x as any)[c.status] += c.n; }
+  for (const p of A.props ?? []) { if (!ids.has(p.owner_id)) continue; const x = u(p.owner_id); x.links += p.links; x.viewed += p.viewed; x.viewedWon += p.viewed_won; }
   const rows = people.map(p => ({ id: p.id, name: p.name, today: asg.get(p.id) ?? 0, ...u(p.id) })).sort((a, b) => b.calls - a.calls || a.name.localeCompare(b.name));
   const tot = rows.reduce((t, r) => ({ calls: t.calls + r.calls, called: t.called + r.called, rejected: t.rejected + r.rejected, interested: t.interested + r.interested, won: t.won + r.won, links: t.links + r.links, viewed: t.viewed + r.viewed, viewedWon: t.viewedWon + r.viewedWon, today: t.today + r.today }), { calls: 0, called: 0, rejected: 0, interested: 0, won: 0, links: 0, viewed: 0, viewedWon: 0, today: 0 });
 
-  // 키워드별
+  // 키워드별 (전체 기준 — 팀 필터 없음)
   const byKw = new Map<string, { calls: number; interested: number; won: number; rejected: number }>();
-  for (const c of cs) { const k = c.leads?.keyword || '(없음)'; let x = byKw.get(k); if (!x) { x = { calls: 0, interested: 0, won: 0, rejected: 0 }; byKw.set(k, x); } x.calls++; if (c.status === 'interested') x.interested++; if (c.status === 'won') x.won++; if (c.status === 'rejected') x.rejected++; }
-  const kws = [...byKw.entries()].map(([k, v]) => ({ k, ...v, rate: v.calls ? (v.won + v.interested * 0.3) / v.calls : 0 })).sort((a, b) => b.won - a.won || b.interested - a.interested || b.calls - a.calls).slice(0, 30);
+  for (const c of A.by_kw ?? []) { const k = c.keyword || '(없음)'; let x = byKw.get(k); if (!x) { x = { calls: 0, interested: 0, won: 0, rejected: 0 }; byKw.set(k, x); } x.calls += c.n; if (c.status === 'interested') x.interested += c.n; if (c.status === 'won') x.won += c.n; if (c.status === 'rejected') x.rejected += c.n; }
+  const kws = [...byKw.entries()].map(([k, v]) => ({ k, ...v })).sort((a, b) => b.won - a.won || b.interested - a.interested || b.calls - a.calls).slice(0, 30);
 
   // 일별
   const days: string[] = []; for (let d = from; d <= today; d = addDays(d, 1)) days.push(d);
-  const daily = days.map(d => ({ d, calls: cs.filter(c => kstDay(c.created_at) === d).length, won: cs.filter(c => c.status === 'won' && kstDay(c.created_at) === d).length, interested: cs.filter(c => c.status === 'interested' && kstDay(c.created_at) === d).length }));
+  const dayMap = new Map<string, { calls: number; won: number; interested: number }>();
+  for (const x of A.by_day ?? []) { let v = dayMap.get(x.d); if (!v) { v = { calls: 0, won: 0, interested: 0 }; dayMap.set(x.d, v); } v.calls += x.n; if (x.status === 'won') v.won += x.n; if (x.status === 'interested') v.interested += x.n; }
+  const daily = days.map(d => ({ d, ...(dayMap.get(d) ?? { calls: 0, won: 0, interested: 0 }) }));
   const mx = Math.max(...daily.map(x => x.calls), 1);
 
   const tab = (k: string, label: string) => <a href={`/sales-stats?p=${k}`} className={`btn ${period === k ? '' : 'ghost'}`} style={{ padding: '4px 12px' }}>{label}</a>;
