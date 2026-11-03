@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { randomBytes } from 'crypto';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
+import { addWatch, ykrReady } from '@/lib/ykreward';
 
 type R = { ok: boolean; msg: string; code?: string };
 const RESULTS = ['called', 'interested', 'rejected', 'won', 'excluded'];
@@ -44,4 +45,28 @@ export async function undoResult(id: number): Promise<R> {
   if (error) return { ok: false, msg: error.message.replace(/^.*?: /, '') };
   revalidatePath('/calls'); revalidatePath('/leads');
   return { ok: true, msg: '되돌림 — 다시 오늘 리스트에 있음' };
+}
+
+/** 계약 후 확인 폼에서 → 순위 체크 업체(그룹) + 상품·키워드 + 계약 기간 등록. 상품 URL 비우면 업체·기간만 */
+export async function registerWatchFromLead(p: { leadId: number; group: string; url: string; keywords: string; start: string; end: string }): Promise<R> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const sb = supabaseServer();
+  const group = p.group.trim(); if (!group) return { ok: false, msg: '업체명을 입력하세요' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(p.start) || !/^\d{4}-\d{2}-\d{2}$/.test(p.end) || p.start > p.end) return { ok: false, msg: '계약 기간을 확인하세요' };
+  const { data: link } = await sb.from('reward_watch_links').select('login_id').eq('user_id', me.id).maybeSingle();
+  if (!link?.login_id) return { ok: false, msg: '순위 체크 메뉴에서 내 ykreward 계정을 먼저 연결하세요' };
+  const kws = p.keywords.split(/[\n,，]/).map(k => k.trim()).filter(Boolean);
+  let msg = '';
+  if (p.url.trim()) {
+    if (!ykrReady()) return { ok: false, msg: 'ykreward 연동 설정이 없습니다' };
+    if (!kws.length) return { ok: false, msg: '키워드를 입력하세요' };
+    const r = await addWatch({ ownerLogin: link.login_id, url: p.url.trim(), keywords: kws, group, memo: '콜 리스트 계약' });
+    if (!r.ok) return { ok: false, msg: r.msg };
+    msg = r.msg;
+  }
+  await sb.from('reward_watch_groups').upsert({ user_id: me.id, name: group, memo: '' }, { onConflict: 'user_id,name' });
+  const { error } = await sb.from('reward_watch_reports').upsert({ user_id: me.id, group_key: group, start_on: p.start, end_on: p.end, note: '', updated_at: new Date().toISOString() }, { onConflict: 'user_id,group_key' });
+  if (error) return { ok: false, msg: '계약 기간 저장 실패: ' + error.message };
+  revalidatePath('/rank-watch'); revalidatePath('/calls');
+  return { ok: true, msg: `순위 체크에 「${group}」 등록 · 계약 ${p.start.slice(5).replace('-', '/')}~${p.end.slice(5).replace('-', '/')}${msg ? ' · ' + msg : ''}` };
 }

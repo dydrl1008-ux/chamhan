@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
-import { setResult, makeTrackLink, undoResult, setNext } from './actions';
+import { setResult, makeTrackLink, undoResult, setNext, registerWatchFromLead } from './actions';
 import { quickLeadLink } from '../proposals/actions';
 import { nscSearch } from '../secret-index/actions';
 import { nameQuery, type LeadIndex } from '@/lib/leadIndex';
@@ -27,6 +27,7 @@ export default function CallsClient({ rows, props, origin, history = {}, indexes
   const keepY = keepRow;   // 하위 호환
   useEffect(() => { try { window.history.scrollRestoration = 'manual'; } catch {} }, []);
   const [note, setNote] = useState<Record<number, string>>({}); const [nextD, setNextD] = useState<Record<number, string>>({}); const [askNext, setAskNext] = useState<number | null>(null);
+  const [won, setWon] = useState<{ id: number; group: string; url: string; keywords: string; start: string; end: string } | null>(null);   // 계약 후 순위 체크 등록 폼
   const todayS = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); const plusDays = (d: number) => new Date(Date.now() + 9 * 3600e3 + d * 864e5).toISOString().slice(0, 10); const [url, setUrl] = useState<Record<number, string>>({}); const [linkFor, setLinkFor] = useState<number | null>(null);
   const byLead: Record<number, Prop[]> = {}; props.forEach(p => { if (p.lead_id) (byLead[p.lead_id] ??= []).push(p); });
   const copyLink = async (code: string) => { await navigator.clipboard.writeText(`${origin}/p/${code}`); notify('추적 링크 복사됨 — 고객에게 이 링크로 보내세요'); };
@@ -56,8 +57,19 @@ export default function CallsClient({ rows, props, origin, history = {}, indexes
           <td style={{ minWidth: 330 }}>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {BTN.map(([k, label]) => <button key={k} className={'btn xs ' + (l.status === k ? '' : 'ghost')} disabled={busy}
-                onClick={() => { if (k === 'interested') { keepRow(l.id); setAskNext(l.id); setNextD(s => ({ ...s, [l.id]: s[l.id] ?? l.next_contact_on ?? plusDays(3) })); return; } start(async () => { const x = await setResult(l.id, k, note[l.id] ?? l.note); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) { keepRow(l.id); r.refresh(); } }); }}>{label}</button>)}
+                onClick={() => { if (k === 'interested') { keepRow(l.id); setAskNext(l.id); setNextD(s => ({ ...s, [l.id]: s[l.id] ?? l.next_contact_on ?? plusDays(3) })); return; } start(async () => { const x = await setResult(l.id, k, note[l.id] ?? l.note); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) { keepRow(l.id); if (k === 'won') setWon({ id: l.id, group: l.store_name, url: l.product_url || '', keywords: l.keyword, start: todayS, end: plusDays(9) }); r.refresh(); } }); }}>{label}</button>)}
             </div>
+            {won?.id === l.id && <div style={{ marginTop: 6, padding: '8px 10px', background: 'var(--ok-soft)', borderRadius: 8, display: 'grid', gap: 6 }}>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>계약 — 순위 체크에 등록 <span className="cell-sub" style={{ display: 'inline' }}>(맡긴 상품이 다르면 URL·키워드 고쳐서)</span></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <input value={won.group} onChange={e => setWon({ ...won, group: e.target.value })} placeholder="업체명" />
+                <input value={won.url} onChange={e => setWon({ ...won, url: e.target.value })} placeholder="상품 URL (비우면 업체·기간만 등록)" />
+                <textarea value={won.keywords} onChange={e => setWon({ ...won, keywords: e.target.value })} placeholder="키워드 (여러 개면 줄바꿈)" rows={2} style={{ gridColumn: '1 / -1' }} />
+                <span style={{ display: 'flex', gap: 6, alignItems: 'center', gridColumn: '1 / -1' }}><span className="cell-sub">계약 기간</span><input type="date" value={won.start} onChange={e => setWon({ ...won, start: e.target.value })} style={{ padding: '3px 6px' }} /> ~ <input type="date" value={won.end} onChange={e => setWon({ ...won, end: e.target.value })} style={{ padding: '3px 6px' }} />
+                  <button type="button" className="btn xs" disabled={busy} onClick={() => start(async () => { const x = await registerWatchFromLead({ leadId: l.id, group: won.group, url: won.url, keywords: won.keywords, start: won.start, end: won.end }); notify(x.msg, x.ok ? 'ok' : 'bad', 6000); if (x.ok) { keepRow(l.id); setWon(null); r.refresh(); } })}>순위 체크에 등록</button>
+                  <button type="button" className="btn ghost xs" onClick={() => setWon(null)}>나중에</button></span>
+              </div>
+            </div>}
             {askNext === l.id && <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, padding: '6px 8px', background: 'var(--wait-soft)', borderRadius: 8 }}><span className="cell-sub">다음 연락일</span><input type="date" min={todayS} value={nextD[l.id] ?? ''} onChange={e => setNextD(s => ({ ...s, [l.id]: e.target.value }))} style={{ padding: '3px 6px' }} />{[1, 3, 7].map(d => <button key={d} type="button" className="btn ghost xs" onClick={() => { keepRow(l.id); setNextD(s => ({ ...s, [l.id]: plusDays(d) })); }}>+{d}일</button>)}{l.status === 'interested' && l.next_contact_on ? <button type="button" className="btn xs" disabled={busy} onClick={() => start(async () => { const x = await setNext(l.id, nextD[l.id] ?? ''); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) { setAskNext(null); { keepRow(l.id); r.refresh(); } } })}>날짜 저장</button> : <button type="button" className="btn xs" disabled={busy} onClick={() => start(async () => { const x = await setResult(l.id, 'interested', note[l.id] ?? l.note, nextD[l.id]); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) { setAskNext(null); { keepRow(l.id); r.refresh(); } } })}>관심 저장</button>}<button type="button" className="btn ghost xs" onClick={() => setAskNext(null)}>취소</button></div>}
             {l.next_contact_on && askNext !== l.id && <div className="cell-sub" style={{ marginTop: 4 }}>📅 다음 연락 <b style={{ color: l.next_contact_on <= todayS ? 'var(--bad-ink)' : undefined }}>{l.next_contact_on.slice(5).replace('-', '/')}</b>{l.next_contact_on <= todayS ? ' (오늘)' : ''} · <button type="button" className="help" style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }} onClick={() => { setAskNext(l.id); setNextD(s => ({ ...s, [l.id]: l.next_contact_on! })); }}>날짜 변경</button></div>}
             {l.status !== 'assigned' && <div className="cell-sub" style={{ marginTop: 4 }}>오늘 다른 버튼을 누르면 차수 안 올라가고 결과만 바뀜 · <button type="button" className="help" style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }} disabled={busy} onClick={() => { if (confirm('오늘 남긴 결과를 지우고 미기록 상태로 되돌릴까요?')) start(async () => { const x = await undoResult(l.id); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) { keepRow(l.id); r.refresh(); } }); }}>↩ 되돌리기</button></div>}
