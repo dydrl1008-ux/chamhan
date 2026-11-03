@@ -57,7 +57,7 @@ export default function CallsClient({ rows, props, origin, history = {}, indexes
           <td style={{ minWidth: 330 }}>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {BTN.map(([k, label]) => <button key={k} className={'btn xs ' + (l.status === k ? '' : 'ghost')} disabled={busy}
-                onClick={() => { if (k === 'interested') { keepRow(l.id); setAskNext(l.id); setNextD(s => ({ ...s, [l.id]: s[l.id] ?? l.next_contact_on ?? plusDays(3) })); return; } start(async () => { const x = await setResult(l.id, k, note[l.id] ?? l.note); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) { keepRow(l.id); if (k === 'won') setWon({ id: l.id, group: l.store_name, url: l.product_url || '', keywords: l.keyword, start: todayS, end: plusDays(9) }); r.refresh(); } }); }}>{label}</button>)}
+                onClick={() => { if (k === 'interested') { keepRow(l.id); setAskNext(l.id); setNextD(s => ({ ...s, [l.id]: s[l.id] ?? l.next_contact_on ?? plusDays(3) })); return; } start(async () => { const x = await setResult(l.id, k, note[l.id] ?? l.note); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) { keepRow(l.id); if (k === 'won') setWon({ id: l.id, group: l.store_name, url: l.product_url || '', keywords: l.keyword, start: plusDays(1), end: plusDays(10) }); r.refresh(); } }); }}>{label}</button>)}
             </div>
             {won?.id === l.id && <div style={{ marginTop: 6, padding: '8px 10px', background: 'var(--ok-soft)', borderRadius: 8, display: 'grid', gap: 6 }}>
               <div style={{ fontWeight: 700, fontSize: 13 }}>계약 — 순위 체크에 등록 <span className="cell-sub" style={{ display: 'inline' }}>(맡긴 상품이 다르면 URL·키워드 고쳐서)</span></div>
