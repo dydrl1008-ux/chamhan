@@ -101,7 +101,7 @@ export default function MailClient({ me, accounts, tpl, hist, days, initialKw }:
   const stop = async () => { try { await agentPost('/mail/wh-stop', {}); notify('중단 요청', 'ok'); } catch { notify('SNS_Manager 연결 실패', 'bad'); } };
 
   const sample = rows.find(c => sel.has(c.id)) ?? rows[0];
-  const vars = sample ? { 업체명: sample.store_name || '담당자', 키워드: loadedKw, 순위: sample.rank_now ? `${sample.rank_now}위` : '-', 담당자: owner || me.name, 연락처: phone, 제안서링크: 'https://r.inquirydesk.bid/p/xxxxxxxx?m=1', 수신거부링크: 'https://r.inquirydesk.bid/p/xxxxxxxx?unsub=1&m=1' } : null;
+  const vars = sample ? { 업체명: sample.store_name || '담당자', 키워드: loadedKw, 순위: sample.rank_now ? `${sample.rank_now}위` : '-', 담당자: owner || me.name, 연락처: phone, 제안서링크: '(발송 시 수신자마다 다른 제안서 링크)', 수신거부링크: '(수신자별 수신거부 링크)' } : null;
   const nSel = sel.size, nElig = rows.filter(eligible).length;
 
   return <div style={{ display: 'grid', gap: 14 }}>

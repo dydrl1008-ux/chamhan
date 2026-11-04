@@ -15,5 +15,10 @@ export default async function ProposalsPage({ searchParams }: { searchParams: { 
     const nm = new Map((profs ?? []).map(p => [p.id, p.name])); const vw = new Map((links ?? []).map(l => [l.code, l.views]));
     team = (logs ?? []).map(l => ({ name: nm.get(l.user_id) ?? '', keyword: l.keyword, target: l.target, action: l.action, code: l.code, views: l.code ? vw.get(l.code) ?? 0 : null, created_at: l.created_at }));
   }
-  return <ProposalsClient initialKw={searchParams.kw ?? ''} lead={searchParams.lead ? { id: Number(searchParams.lead), store: searchParams.store ?? '', rank: Number(searchParams.rank) || 0 } : null} phone={(prof as any)?.phone || link?.phone || ''} owner={me.name} recent={(list as any[]).map(x => x.keyword)} usage={usage} mine={(mine ?? []) as any} team={team} base={(process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '')} />;
+  // 메일로 보낸 링크: 수신자별 열람·회신
+  const codes = (mine ?? []).map(m => m.code);
+  const { data: mq } = codes.length ? await sb.from('mail_queue').select('proposal_code,store_name,to_email,status,opened_at,open_cnt,replied_at').in('proposal_code', codes).order('opened_at', { ascending: false, nullsFirst: false }).limit(1000) : { data: [] as any[] };
+  const mailByCode: Record<string, { store: string; email: string; status: string; opened_at: string | null; open_cnt: number; replied_at: string | null }[]> = {};
+  for (const q of (mq ?? []) as any[]) (mailByCode[q.proposal_code] ??= []).push({ store: q.store_name, email: q.to_email, status: q.status, opened_at: q.opened_at, open_cnt: q.open_cnt, replied_at: q.replied_at });
+  return <ProposalsClient mailByCode={mailByCode} initialKw={searchParams.kw ?? ''} lead={searchParams.lead ? { id: Number(searchParams.lead), store: searchParams.store ?? '', rank: Number(searchParams.rank) || 0 } : null} phone={(prof as any)?.phone || link?.phone || ''} owner={me.name} recent={(list as any[]).map(x => x.keyword)} usage={usage} mine={(mine ?? []) as any} team={team} base={(process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '')} />;
 }
