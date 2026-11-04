@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
 type R = { ok: boolean; msg: string };
 const lead = async () => { const me = await getProfile(); return me && ['admin', 'head'].includes(me.role) ? me : null; };
@@ -53,7 +54,7 @@ export async function recallToday(): Promise<R> {
 /** 배분 대상 영업사원 저장 (비우면 전원) */
 export async function saveRecipients(ids: string[]): Promise<R> {
   if (!(await lead())) return { ok: false, msg: '권한 없음' };
-  const { error } = await supabaseServer().from('app_settings').upsert({ key: 'lead_recipients', value: JSON.stringify(ids) }, { onConflict: 'key' });
+  const { error } = await supabaseAdmin().from('app_settings').upsert({ key: 'lead_recipients', value: JSON.stringify(ids) }, { onConflict: 'key' });   // 총괄도 저장 (RLS는 어드민만이라 admin 클라이언트)
   if (error) return { ok: false, msg: error.message };
   revalidatePath('/leads');
   return { ok: true, msg: ids.length ? `배분 대상 ${ids.length}명 저장` : '배분 대상: 영업사원 전원' };

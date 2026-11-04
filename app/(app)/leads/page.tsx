@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { todayKST } from '@/lib/date/kst';
 import { PageHeader, Section, Cell, Empty } from '@/components/ui';
 import { AiStats, kst } from '../ai/shared';
@@ -14,7 +15,7 @@ export default async function LeadsAdminPage() {
   const sb = supabaseServer(); const today = todayKST();
   const [{ data: st }, { data: settings }, { data: todayRows }, { data: people }, { data: imports }, { data: hot }] = await Promise.all([
     sb.from('leads').select('status'),
-    sb.from('app_settings').select('key,value').in('key', ['lead_score_weights', 'lead_daily_per_person', 'lead_recontact_days', 'lead_recipients']),
+    supabaseAdmin().from('app_settings').select('key,value').in('key', ['lead_score_weights', 'lead_daily_per_person', 'lead_recontact_days', 'lead_recipients']),   // 총괄은 RLS로 못 읽어 0으로 보이던 문제 → 화면 권한은 위에서 확인됨
     sb.rpc('leads_today_summary', { p_date: today }),
     sb.from('v_sales_people').select('id,name,team_id').order('name'),
     sb.from('lead_imports').select('id,file_name,rows_in,added,updated,skipped,created_at').order('id', { ascending: false }).limit(5),
