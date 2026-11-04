@@ -15,8 +15,17 @@ export default async function MailPage({ searchParams }: { searchParams: { kw?: 
   ]);
   const g = (k: string, d: number) => { const v = Number(String((cfg ?? []).find(x => x.key === k)?.value ?? '').replace(/"/g, '')); return v > 0 ? v : d; };
   const limit = g('mail_daily_limit', 200); const todayMap = new Map<number, number>(); for (const t of ((todayRows ?? []) as any[])) todayMap.set(Number(t.account_id), Number(t.n));
+  // 팀장·총괄·대표·관리팀: 직원 발송 현황 (팀장은 팀만)
+  let teamHist: any[] = [];
+  if (me.role !== 'staff') {
+    const all = me.role === 'admin' || me.role === 'head' || me.is_mgmt;
+    const { data: profs } = await sb.from('profiles').select('id,name,team_id').eq('is_active', true);
+    const ids = (profs ?? []).filter(p => all || p.team_id === me.team_id).map(p => p.id); const nm = new Map((profs ?? []).map(p => [p.id, p.name]));
+    const { data: th } = ids.length ? await sb.from('mail_queue').select('id,sender_id,to_email,store_name,keyword,subject,status,error,queued_at,sent_at,opened_at,open_cnt,replied_at,proposal_code').in('sender_id', ids).order('queued_at', { ascending: false }).limit(500) : { data: [] as any[] };
+    teamHist = (th ?? []).map(x => ({ ...x, sender: nm.get(x.sender_id) ?? '?' }));
+  }
   const acct = (accts ?? [])[0];
   const accounts = (accts ?? []).map(a => ({ id: a.id, email: a.email, provider: a.provider, today: todayMap.get(a.id) ?? 0, limit: Math.min(a.daily_limit || limit, limit) }));
   return <MailClient me={{ name: me.name, phone: (prof as any)?.phone ?? '' }} accounts={accounts}
-    tpl={{ subject: acct?.tpl_subject || DEFAULT_SUBJECT, body: acct?.tpl_body || DEFAULT_BODY }} hist={(hist ?? []) as any[]} days={g('mail_recontact_days', 3)} initialKw={searchParams.kw ?? ''} />;
+    tpl={{ subject: acct?.tpl_subject || DEFAULT_SUBJECT, body: acct?.tpl_body || DEFAULT_BODY }} hist={(hist ?? []) as any[]} teamHist={teamHist} base={(process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '')} days={g('mail_recontact_days', 3)} initialKw={searchParams.kw ?? ''} />;
 }

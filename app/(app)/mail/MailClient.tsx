@@ -16,7 +16,8 @@ type Acct = { id: number; email: string; provider: string; today: number; limit:
 type Prog = { running: boolean; total: number; done: number; ok: number; fail: number; current: string; log: string[] };
 const ST: Record<string, [string, 'ok' | 'wait' | 'bad' | 'off']> = { queued: ['대기', 'wait'], sending: ['발송 중', 'wait'], sent: ['완료', 'ok'], failed: ['실패', 'bad'], skipped: ['취소', 'off'] };
 
-export default function MailClient({ me, accounts, tpl, hist, days, initialKw }: { me: { name: string; phone: string }; accounts: Acct[]; tpl: { subject: string; body: string }; hist: Hist[]; days: number; initialKw: string }) {
+export default function MailClient({ me, accounts, tpl, hist, teamHist = [], base = '', days, initialKw }: { me: { name: string; phone: string }; accounts: Acct[]; tpl: { subject: string; body: string }; hist: Hist[]; teamHist?: (Hist & { sender: string; subject: string })[]; base?: string; days: number; initialKw: string }) {
+  const [who, setWho] = useState('');
   const [acctId, setAcctId] = useState<number>(accounts.find(a => a.today < a.limit)?.id ?? accounts[0]?.id ?? 0);
   const account = accounts.find(a => a.id === acctId) ?? null;
   const r = useRouter();
@@ -189,5 +190,17 @@ export default function MailClient({ me, accounts, tpl, hist, days, initialKw }:
           <td>{h.status === 'queued' && <button type="button" className="btn ghost xs" onClick={async () => { const x = await cancelQueued(h.id); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }}>취소</button>}</td></tr>; })}
       </tbody></table>}
     </Section>
+
+    {teamHist.length > 0 && <Section title="직원 발송 현황" sub="팀장: 우리 팀 · 총괄·대표·관리팀: 전체 · 최근 500건" flush
+      right={<select value={who} onChange={e => setWho(e.target.value)} style={{ padding: '4px 8px', fontSize: 13 }}><option value="">담당자 전체</option>{[...new Set(teamHist.map(h => h.sender))].sort().map(n => <option key={n} value={n}>{n} ({teamHist.filter(h => h.sender === n).length})</option>)}</select>}>
+      <div style={{ maxHeight: 560, overflow: 'auto' }}><table><thead><tr><th>시각</th><th>담당자</th><th>업체</th><th>이메일</th><th>키워드</th><th>제목</th><th>상태</th><th>열람</th><th>회신</th></tr></thead><tbody>
+        {teamHist.filter(h => !who || h.sender === who).map(h => { const [l, k] = ST[h.status] ?? [h.status, 'off']; return <tr key={h.id} style={{ background: h.replied_at ? 'var(--ok-soft)' : undefined }}>
+          <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{fmtKST(h.sent_at ?? h.queued_at)}</td><td><b>{h.sender}</b></td><td>{h.store_name}</td><td style={{ fontSize: 12.5 }}>{h.to_email}</td><td>{h.keyword}</td>
+          <td style={{ fontSize: 12.5, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h.subject}>{h.proposal_code ? <a href={`${base}/p/${h.proposal_code}`} target="_blank" rel="noreferrer">{h.subject || '(제목 없음)'}</a> : h.subject}</td>
+          <td><Status kind={k}>{l}</Status></td>
+          <td>{h.opened_at ? <span style={{ color: 'var(--ok-ink)', fontWeight: 700 }}>{fmtKST(h.opened_at)} ({h.open_cnt})</span> : <span className="cell-sub">-</span>}</td>
+          <td>{h.replied_at ? <b style={{ color: 'var(--ok-ink)' }}>📩 {fmtKST(h.replied_at)}</b> : <span className="cell-sub">-</span>}</td></tr>; })}
+      </tbody></table></div>
+    </Section>}
   </div>;
 }
