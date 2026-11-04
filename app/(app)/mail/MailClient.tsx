@@ -12,11 +12,13 @@ import type { Doc } from '@/lib/proposalDoc';
 import { loadKeywords, loadCandidates, makeDoc, prepareSend, failQueued, saveTemplate, cancelQueued, replyPayload, ingestReplies, type Candidate, type AgentJob } from './actions';
 
 type Hist = { id: number; to_email: string; store_name: string; keyword: string; status: string; error: string | null; queued_at: string; sent_at: string | null; opened_at: string | null; open_cnt: number; replied_at: string | null; proposal_code: string | null };
-type Acct = { email: string; fromName: string; verifiedAt: string | null; imapCheckedAt: string | null } | null;
+type Acct = { id: number; email: string; provider: string; today: number; limit: number };
 type Prog = { running: boolean; total: number; done: number; ok: number; fail: number; current: string; log: string[] };
 const ST: Record<string, [string, 'ok' | 'wait' | 'bad' | 'off']> = { queued: ['대기', 'wait'], sending: ['발송 중', 'wait'], sent: ['완료', 'ok'], failed: ['실패', 'bad'], skipped: ['취소', 'off'] };
 
-export default function MailClient({ me, account, tpl, hist, today, limit, days, initialKw }: { me: { name: string; phone: string }; account: Acct; tpl: { subject: string; body: string }; hist: Hist[]; today: number; limit: number; days: number; initialKw: string }) {
+export default function MailClient({ me, accounts, tpl, hist, days, initialKw }: { me: { name: string; phone: string }; accounts: Acct[]; tpl: { subject: string; body: string }; hist: Hist[]; days: number; initialKw: string }) {
+  const [acctId, setAcctId] = useState<number>(accounts.find(a => a.today < a.limit)?.id ?? accounts[0]?.id ?? 0);
+  const account = accounts.find(a => a.id === acctId) ?? null;
   const r = useRouter();
   const [agent, setAgent] = useState<AgentHealth | null>(null);
   const [kws, setKws] = useState<{ keyword: string; n: number }[]>([]);
@@ -42,14 +44,17 @@ export default function MailClient({ me, account, tpl, hist, today, limit, days,
   }, []);
 
   const checkReplies = async (force: boolean) => {
-    if (!account?.verifiedAt) { if (force) notify('메일 계정을 먼저 연결하세요', 'bad'); return; }
-    const p = await replyPayload(force); if (!p.ok) { if (force && p.msg !== 'recent') notify(p.msg, 'bad'); return; }
-    try {
-      const res = await agentPost('/mail/wh-replies', { email: p.email, password: p.password, last_uid: p.last_uid, since_days: 30, known_emails: p.known_emails }, 120_000);
-      if (!res?.ok) { if (force) notify('회신 확인 실패: ' + (res?.error || 'SNS_Manager 응답 없음'), 'bad'); return; }
-      const x = await ingestReplies(res.replies ?? [], res.last_uid ?? p.last_uid);
-      if (x.matched) { notify(x.msg, 'ok'); r.refresh(); } else if (force) notify(`새 회신 없음 (확인 ${res.scanned ?? 0}통)`, 'ok');
-    } catch { if (force) notify('SNS_Manager 에 연결할 수 없음 — 켜져 있는지 확인', 'bad'); }
+    if (!accounts.length) { if (force) notify('메일 계정을 먼저 연결하세요', 'bad'); return; }
+    const p = await replyPayload(force); if (!p.ok || !p.accounts) { if (force && p.msg !== 'recent') notify(p.msg, 'bad'); return; }
+    let matched = 0, scanned = 0;
+    for (const a of p.accounts) {
+      try {
+        const res = await agentPost('/mail/wh-replies', { email: a.email, password: a.password, last_uid: a.last_uid, since_days: 30, known_emails: a.known_emails }, 120_000);
+        if (!res?.ok) { if (force) notify(`${a.email} 회신 확인 실패: ` + (res?.error || 'SNS_Manager 응답 없음'), 'bad'); continue; }
+        const x = await ingestReplies(a.id, res.replies ?? [], res.last_uid ?? a.last_uid); matched += x.matched ?? 0; scanned += res.scanned ?? 0;
+      } catch { if (force) notify('SNS_Manager 에 연결할 수 없음 — 켜져 있는지 확인', 'bad'); return; }
+    }
+    if (matched) { notify(`회신 ${matched}건 — 콜 리스트에 올렸습니다`, 'ok'); r.refresh(); } else if (force) notify(`새 회신 없음 (확인 ${scanned}통)`, 'ok');
   };
 
   const load = async (k = kw) => {
@@ -78,9 +83,10 @@ export default function MailClient({ me, account, tpl, hist, today, limit, days,
     const h = await agentHealth(); setAgent(h);
     if (!h.up) { notify('SNS_Manager 가 꺼져 있습니다 — 켜고 다시 누르세요', 'bad'); return; }
     if (!h.mailWh) { notify('SNS_Manager 구버전 — 메일 기능이 있는 새 exe 로 교체 필요', 'bad'); return; }
-    if (!confirm(`${ids.length}곳에 '${loadedKw}' 제안서 메일을 보냅니다. 본인 PC·본인 네이버 계정으로 나갑니다.`)) return;
+    if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
+    if (!confirm(`${ids.length}곳에 '${loadedKw}' 제안서 메일을 보냅니다. 본인 PC · ${account.email} 으로 나갑니다.`)) return;
     setBusy('send'); setSkipped([]);
-    const p = await prepareSend({ keyword: loadedKw, ids, subject, body, doc, owner, phone });
+    const p = await prepareSend({ keyword: loadedKw, ids, subject, body, doc, owner, phone, accountId: account.id });
     if (!p.ok || !p.job) { setBusy(''); notify(p.msg, 'bad'); setSkipped(p.skipped ?? []); return; }
     setSkipped(p.skipped ?? []);
     const job: AgentJob = p.job;
@@ -101,11 +107,10 @@ export default function MailClient({ me, account, tpl, hist, today, limit, days,
   return <div style={{ display: 'grid', gap: 14 }}>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     <style dangerouslySetInnerHTML={{ __html: PD_CSS }} />
-    <PageHeader title="메일 발송" desc={`키워드 업체 중 이메일 있는 곳에 제안서 링크 발송 · 본인 PC(SNS_Manager)에서 본인 네이버 계정으로 · 하루 ${limit}건 · 누가 보냈든 ${days}일 내 발송 제외`}
+    <PageHeader title="메일 발송" desc={`키워드 업체 중 이메일 있는 곳에 제안서 링크 발송 · 본인 PC(SNS_Manager)에서 본인 네이버/지메일 계정으로 · 계정당 하루 ${accounts[0]?.limit ?? 200}건 · 누가 보냈든 ${days}일 내 발송 제외`}
       actions={<span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        {account?.verifiedAt ? <Status kind="ok">메일 {account.email}</Status> : <a href="/me" className="btn ghost" style={{ padding: '4px 10px' }}>내 정보에서 네이버 메일 연결 →</a>}
+        {accounts.length ? <select value={acctId} onChange={e => setAcctId(Number(e.target.value))} style={{ padding: '4px 8px', fontSize: 13 }}>{accounts.map(a => <option key={a.id} value={a.id}>{a.email} · 오늘 {a.today}/{a.limit}{a.today >= a.limit ? ' (상한)' : ''}</option>)}</select> : <a href="/me" className="btn ghost" style={{ padding: '4px 10px' }}>내 정보에서 메일 계정 연결 →</a>}
         {agent === null ? <Status kind="off">SNS_Manager 확인 중</Status> : !agent.up ? <Status kind="bad">SNS_Manager 꺼짐</Status> : !agent.mailWh ? <Status kind="bad">SNS_Manager 구버전 (교체 필요)</Status> : <Status kind="ok">SNS_Manager 켜짐</Status>}
-        <span className="cell-sub">오늘 {today}/{limit}</span>
         <button type="button" className="btn ghost" style={{ padding: '4px 10px' }} onClick={() => checkReplies(true)}>회신 확인</button>
       </span>} />
 
@@ -159,7 +164,7 @@ export default function MailClient({ me, account, tpl, hist, today, limit, days,
         <b style={{ fontSize: 13 }}>받는 사람이 보는 예시 {sample && <span className="cell-sub" style={{ fontWeight: 400 }}>· {sample.store_name}</span>}</b>
         {vars ? <div style={{ fontSize: 13, background: 'var(--bg)', borderRadius: 8, padding: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, maxHeight: 330, overflow: 'auto' }}><b>{fillVars(subject, vars)}</b>{'\n\n'}{fillVars(body, vars)}</div> : <Empty>대상 없음</Empty>}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button type="button" className="btn" disabled={!!busy || !doc || !nSel} onClick={send} style={{ background: '#03C75A', borderColor: '#03C75A' }}>{busy === 'send' ? '발송 중…' : `${nSel}건 발송`}</button>
+          <button type="button" className="btn" disabled={!!busy || !doc || !nSel || !account || account.today >= account.limit} onClick={send} style={{ background: '#03C75A', borderColor: '#03C75A' }}>{busy === 'send' ? '발송 중…' : `${nSel}건 발송`}</button>{account && <span className="cell-sub">{account.email} · 오늘 {account.today}/{account.limit}</span>}
           {prog?.running && <button type="button" className="btn ghost" onClick={stop}>중단</button>}
           {!doc && <span className="cell-sub">③ 제안서를 만들어 확인해야 발송 가능</span>}
         </div>

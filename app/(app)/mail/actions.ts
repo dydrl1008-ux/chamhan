@@ -22,17 +22,26 @@ const kstDayStart = () => { const d = new Date(Date.now() + 9 * 3600_000); d.set
 const siteBase = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');
 const linkBase = () => (process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');
 
-/** 내 정보: 네이버 메일 계정 저장 (브라우저가 SNS_Manager 로 로그인 확인한 뒤 호출) */
+/** 내 정보: 메일 계정 추가/갱신 (네이버·지메일, 브라우저가 SNS_Manager 로 로그인 확인한 뒤 호출) */
 export async function saveMailAccount(email: string, appPw: string, fromName: string): Promise<R> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   email = email.trim().toLowerCase(); const pw = appPw.replace(/\s+/g, '');
-  if (!/^[a-z0-9._-]+@naver\.com$/.test(email)) return { ok: false, msg: '네이버 메일 주소(@naver.com)만 등록할 수 있습니다' };
+  if (!/^[a-z0-9._+-]+@(naver|gmail)\.com$/.test(email)) return { ok: false, msg: '네이버(@naver.com) 또는 지메일(@gmail.com)만 등록할 수 있습니다' };
   if (pw.length < 8) return { ok: false, msg: '앱 비밀번호가 짧습니다' };
   let enc: string; try { enc = encrypt(pw); } catch (e: any) { return { ok: false, msg: e.message }; }
-  const { error } = await supabaseAdmin().from('mail_accounts').upsert({ user_id: me.id, email, app_pw_enc: enc, from_name: fromName.trim() || `참한기획 ${me.name}`, verified_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  const sb = supabaseAdmin(); const provider = email.endsWith('@gmail.com') ? 'gmail' : 'naver';
+  const { data: ex } = await sb.from('mail_accounts').select('id').eq('user_id', me.id).ilike('email', email).maybeSingle();
+  const row = { user_id: me.id, email, provider, app_pw_enc: enc, from_name: fromName.trim() || `참한기획 ${me.name}`, verified_at: new Date().toISOString() };
+  const { error } = ex ? await sb.from('mail_accounts').update(row).eq('id', ex.id) : await sb.from('mail_accounts').insert(row);
   if (error) return { ok: false, msg: error.message };
   revalidatePath('/me'); revalidatePath('/mail');
   return { ok: true, msg: `${email} 연결 완료` };
+}
+export async function deleteMailAccount(id: number): Promise<R> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const { error } = await supabaseAdmin().from('mail_accounts').delete().eq('id', id).eq('user_id', me.id);
+  if (error) return { ok: false, msg: error.message };
+  revalidatePath('/me'); revalidatePath('/mail'); return { ok: true, msg: '계정 삭제' };
 }
 
 export async function saveTemplate(subject: string, body: string): Promise<R> {
@@ -63,18 +72,18 @@ export async function makeDoc(keyword: string, owner: string, phone: string, off
 }
 
 /** 발송 준비: 제외 규칙 재검사 → 제안서 링크 1개 → 큐 등록 → SNS_Manager 에 넘길 작업(본인 계정 포함) 반환 */
-export async function prepareSend(i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
+export async function prepareSend(i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string; accountId: number }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const kw = i.keyword.trim(); if (!kw || !i.ids.length) return { ok: false, msg: '대상을 선택하세요' };
   if (!i.subject.trim() || !i.body.trim()) return { ok: false, msg: '제목·본문을 입력하세요' };
   if (!i.doc || i.doc.keyword !== kw) return { ok: false, msg: '제안서를 먼저 만들어 확인하세요' };
   const sb = supabaseAdmin();
-  const { data: acct } = await sb.from('mail_accounts').select('email,app_pw_enc,from_name,verified_at,daily_limit').eq('user_id', me.id).maybeSingle();
-  if (!acct?.verified_at) return { ok: false, msg: '내 정보에서 네이버 메일 계정을 먼저 연결하세요' };
+  const { data: acct } = await sb.from('mail_accounts').select('id,email,app_pw_enc,from_name,verified_at,daily_limit').eq('user_id', me.id).eq('id', i.accountId).maybeSingle();
+  if (!acct?.verified_at) return { ok: false, msg: '내 정보에서 메일 계정을 먼저 연결하세요' };
   let pw: string; try { pw = decrypt(acct.app_pw_enc); } catch { return { ok: false, msg: '계정 복호화 실패 — 내 정보에서 다시 연결하세요' }; }
   const { days, limit } = await settings(); const lim = Math.min(acct.daily_limit || limit, limit);
-  const { count: usedToday } = await sb.from('mail_queue').select('id', { count: 'exact', head: true }).eq('sender_id', me.id).in('status', ['queued', 'sending', 'sent']).gte('queued_at', kstDayStart());
-  const remain = lim - (usedToday ?? 0); if (remain <= 0) return { ok: false, msg: `오늘 발송 상한(${lim}건) 도달` };
+  const { count: usedToday } = await sb.from('mail_queue').select('id', { count: 'exact', head: true }).eq('account_id', acct.id).in('status', ['queued', 'sending', 'sent']).gte('queued_at', kstDayStart());
+  const remain = lim - (usedToday ?? 0); if (remain <= 0) return { ok: false, msg: `${acct.email} 오늘 발송 상한(${lim}건) 도달 — 다른 계정으로` };
   const { data: cand, error } = await sb.rpc('mail_candidates', { p_keyword: kw, p_days: days }); if (error) return { ok: false, msg: error.message };
   const want = new Set(i.ids); const skipped: string[] = []; const picks: Candidate[] = [];
   for (const c of (cand ?? []) as Candidate[]) {
@@ -95,7 +104,7 @@ export async function prepareSend(i: { keyword: string; ids: number[]; subject: 
   if (pe) return { ok: false, msg: '제안서 저장 실패: ' + pe.message };
   await sb.from('proposal_logs').insert({ user_id: me.id, keyword: kw, target: null, action: 'link', code });
   const token = randomBytes(16).toString('base64url'); const jobId = `${Date.now().toString(36)}${randomBytes(3).toString('hex')}`;
-  const { data: ins, error: qe } = await sb.from('mail_queue').insert(picks.map(c => ({ sender_id: me.id, target_id: c.id, to_email: c.email.toLowerCase(), store_name: c.store_name, keyword: kw, proposal_code: code, job_token: token, status: 'queued' }))).select('id,target_id');
+  const { data: ins, error: qe } = await sb.from('mail_queue').insert(picks.map(c => ({ sender_id: me.id, account_id: acct.id, target_id: c.id, to_email: c.email.toLowerCase(), store_name: c.store_name, keyword: kw, proposal_code: code, job_token: token, status: 'queued' }))).select('id,target_id');
   if (qe) return { ok: false, msg: qe.message };
   const byT = new Map(picks.map(c => [c.id, c])); const base = linkBase(); const items: AgentItem[] = [];
   await Promise.all((ins ?? []).map(q => {
@@ -118,22 +127,26 @@ export async function failQueued(ids: number[], reason: string): Promise<R> {
   revalidatePath('/mail'); return { ok: true, msg: '' };
 }
 
-/** 회신 확인용: 내 계정 + 최근 60일 발송 주소 (브라우저 → SNS_Manager /mail/wh-replies) */
-export async function replyPayload(force = false): Promise<R<{ email: string; password: string; last_uid: number; known_emails: string[] }>> {
+export type ReplyAcct = { id: number; email: string; password: string; last_uid: number; known_emails: string[] };
+/** 회신 확인용: 내 계정 전부 + 계정별 최근 60일 발송 주소 (브라우저 → SNS_Manager /mail/wh-replies) */
+export async function replyPayload(force = false): Promise<R<{ accounts: ReplyAcct[] }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const sb = supabaseAdmin();
-  const { data: acct } = await sb.from('mail_accounts').select('email,app_pw_enc,verified_at,imap_last_uid,imap_checked_at').eq('user_id', me.id).maybeSingle();
-  if (!acct?.verified_at) return { ok: false, msg: '메일 계정 없음' };
-  if (!force && acct.imap_checked_at && Date.now() - new Date(acct.imap_checked_at).getTime() < 8 * 60_000) return { ok: false, msg: 'recent' };
-  let pw: string; try { pw = decrypt(acct.app_pw_enc); } catch { return { ok: false, msg: '복호화 실패' }; }
-  const since = new Date(Date.now() - 60 * 86400_000).toISOString();
-  const { data: sent } = await sb.from('mail_queue').select('to_email').eq('sender_id', me.id).eq('status', 'sent').gte('queued_at', since).limit(3000);
-  return { ok: true, msg: '', email: acct.email, password: pw, last_uid: Number(acct.imap_last_uid ?? 0), known_emails: [...new Set((sent ?? []).map(s => s.to_email.toLowerCase()))] };
+  const { data: accts } = await sb.from('mail_accounts').select('id,email,app_pw_enc,verified_at,imap_last_uid,imap_checked_at').eq('user_id', me.id).not('verified_at', 'is', null);
+  if (!accts?.length) return { ok: false, msg: '메일 계정 없음' };
+  const since = new Date(Date.now() - 60 * 86400_000).toISOString(); const out: ReplyAcct[] = [];
+  for (const a of accts) {
+    if (!force && a.imap_checked_at && Date.now() - new Date(a.imap_checked_at).getTime() < 8 * 60_000) continue;
+    let pw: string; try { pw = decrypt(a.app_pw_enc); } catch { continue; }
+    const { data: sent } = await sb.from('mail_queue').select('to_email').eq('account_id', a.id).eq('status', 'sent').gte('queued_at', since).limit(3000);
+    out.push({ id: a.id, email: a.email, password: pw, last_uid: Number(a.imap_last_uid ?? 0), known_emails: [...new Set((sent ?? []).map(s => s.to_email.toLowerCase()))] });
+  }
+  return out.length ? { ok: true, msg: '', accounts: out } : { ok: false, msg: 'recent' };
 }
 
 export type AgentReply = { uid: number; from_email: string; from_name: string; subject: string; received_at: string | null; in_reply_to: string; references: string; snippet: string };
 /** SNS_Manager 가 찾은 답장 → 큐 매칭 → 리드 관심·알림 (SQL mail_reply_lead) */
-export async function ingestReplies(replies: AgentReply[], lastUid: number): Promise<R<{ matched: number }>> {
+export async function ingestReplies(accountId: number, replies: AgentReply[], lastUid: number): Promise<R<{ matched: number }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const sb = supabaseAdmin(); let matched = 0;
   for (const r of (replies ?? []).slice(0, 200)) {
@@ -141,7 +154,7 @@ export async function ingestReplies(replies: AgentReply[], lastUid: number): Pro
     const refs = `${r.in_reply_to || ''} ${r.references || ''}`; const m = refs.match(/wh\.(\d+)\./);
     let q: { id: number } | null = null;
     if (m) q = (await sb.from('mail_queue').select('id').eq('id', Number(m[1])).eq('sender_id', me.id).maybeSingle()).data;
-    if (!q) q = (await sb.from('mail_queue').select('id').eq('sender_id', me.id).eq('status', 'sent').ilike('to_email', from).order('queued_at', { ascending: false }).limit(1).maybeSingle()).data;
+    if (!q) q = (await sb.from('mail_queue').select('id').eq('account_id', accountId).eq('status', 'sent').ilike('to_email', from).order('queued_at', { ascending: false }).limit(1).maybeSingle()).data;
     if (!q) continue;
     const { data: dup } = await sb.from('mail_replies').select('id').eq('queue_id', q.id).eq('from_email', from).eq('subject', r.subject || '').limit(1);
     if (dup?.length) continue;
@@ -149,7 +162,7 @@ export async function ingestReplies(replies: AgentReply[], lastUid: number): Pro
     await sb.from('mail_replies').insert({ queue_id: q.id, sender_id: me.id, from_email: from, subject: r.subject || '', snippet: r.snippet || '', received_at: r.received_at, lead_id: lid ?? null });
     matched++;
   }
-  await sb.from('mail_accounts').update({ imap_last_uid: Math.max(0, Number(lastUid) || 0), imap_checked_at: new Date().toISOString() }).eq('user_id', me.id);
+  await sb.from('mail_accounts').update({ imap_last_uid: Math.max(0, Number(lastUid) || 0), imap_checked_at: new Date().toISOString() }).eq('id', accountId).eq('user_id', me.id);
   if (matched) { revalidatePath('/mail'); revalidatePath('/calls'); revalidatePath('/notifications'); }
   return { ok: true, msg: matched ? `회신 ${matched}건 — 콜 리스트에 올렸습니다` : '', matched };
 }

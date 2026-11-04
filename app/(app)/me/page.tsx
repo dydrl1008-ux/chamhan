@@ -20,7 +20,7 @@ export default async function MePage() {
   ]);
   const p = people[0]; const { data: prof } = await sb.from('profiles').select('annual_leave_granted').eq('id', me.id).single();
   const { data: cred } = await sb.from('settlement_credentials').select('settle_user_id,verified_at,last_error').eq('user_id', me.id).maybeSingle();
-  const { data: mailAcct } = await sb.from('mail_accounts').select('email,from_name,verified_at').eq('user_id', me.id).maybeSingle();
+  const { data: mailAccts } = await sb.from('mail_accounts').select('id,email,provider,from_name,verified_at').eq('user_id', me.id).order('id');
   const granted = Number(prof?.annual_leave_granted ?? 0), used = Number(yl?.annual_used ?? 0);
   const tg = Number(tgt?.margin ?? 0);
   const bar = (v: number, c?: string) => <div style={{ height: 8, background: 'var(--line)', borderRadius: 6 }}><div style={{ width: `${Math.min(100, Math.max(0, v))}%`, height: '100%', background: c ?? 'var(--accent)', borderRadius: 6 }} /></div>;
@@ -55,7 +55,7 @@ export default async function MePage() {
           </>}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}><PasswordChange /><SettleLink linked={!!cred} settleId={cred?.settle_user_id ?? ''} verifiedAt={cred?.verified_at ?? null} lastError={cred?.last_error ?? null} /></div>
-      <MailLink linked={!!mailAcct?.verified_at} email={mailAcct?.email ?? ''} fromName={mailAcct?.from_name ?? ''} verifiedAt={mailAcct?.verified_at ?? null} />
+      <MailLink accounts={(mailAccts ?? []) as any[]} />
       {me.role === 'staff' && <Section title="팀장 지시사항 · 피드백" sub="제출된 주간보고 기준 · 최근 4주" flush>
         {(dir ?? []).length ? <table><thead><tr><th>주</th><th>공통 지시</th><th>개인 지시</th><th>피드백</th></tr></thead><tbody>{(dir ?? []).map((d: any, i: number) => <tr key={i}><td style={{ whiteSpace: 'nowrap' }}>{fmtMD(d.week_start)} 주</td><td>{d.common_directive || <span className="cell-sub">-</span>}</td><td>{d.directive || <span className="cell-sub">-</span>}</td><td style={{ color: 'var(--muted)' }}>{d.feedback || '-'}</td></tr>)}</tbody></table> : <div style={{ padding: 22 }}><Empty>아직 제출된 주간보고가 없습니다.</Empty></div>}
       </Section>}
