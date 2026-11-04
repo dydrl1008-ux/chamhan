@@ -197,7 +197,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
         {teamHist.filter(h => !who || h.sender === who).map(h => { const [l, k] = ST[h.status] ?? [h.status, 'off']; return <tr key={h.id} style={{ background: h.replied_at ? 'var(--ok-soft)' : undefined }}>
           <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{fmtKST(h.sent_at ?? h.queued_at)}</td><td><b>{h.sender}</b></td><td>{h.store_name}</td><td style={{ fontSize: 12.5 }}>{h.to_email}</td><td>{h.keyword}</td>
           <td style={{ fontSize: 12.5, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h.subject}>{h.proposal_code ? <a href={`${base}/p/${h.proposal_code}`} target="_blank" rel="noreferrer">{h.subject || '(제목 없음)'}</a> : h.subject}</td>
-          <td><Status kind={k}>{l}</Status></td>
+          <td><Status kind={k}>{l}</Status>{h.error && <div className="cell-sub" style={{ maxWidth: 260, whiteSpace: 'normal' }} title={h.error}>{h.error}</div>}</td>
           <td>{h.opened_at ? <span style={{ color: 'var(--ok-ink)', fontWeight: 700 }}>{fmtKST(h.opened_at)} ({h.open_cnt})</span> : <span className="cell-sub">-</span>}</td>
           <td>{h.replied_at ? <b style={{ color: 'var(--ok-ink)' }}>📩 {fmtKST(h.replied_at)}</b> : <span className="cell-sub">-</span>}</td></tr>; })}
       </tbody></table></div>
