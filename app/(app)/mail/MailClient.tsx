@@ -11,12 +11,12 @@ import { agentHealth, agentPost, type AgentHealth } from '@/lib/snsAgent';
 import type { Doc } from '@/lib/proposalDoc';
 import { loadKeywords, loadCandidates, makeDoc, prepareSend, failQueued, saveTemplate, cancelQueued, replyPayload, ingestReplies, type Candidate, type AgentJob } from './actions';
 
-type Hist = { id: number; to_email: string; store_name: string; keyword: string; status: string; error: string | null; queued_at: string; sent_at: string | null; opened_at: string | null; open_cnt: number; replied_at: string | null; proposal_code: string | null };
+type Hist = { id: number; target?: { phone: string; store_url: string } | null; to_email: string; store_name: string; keyword: string; status: string; error: string | null; queued_at: string; sent_at: string | null; opened_at: string | null; open_cnt: number; replied_at: string | null; proposal_code: string | null };
 type Acct = { id: number; email: string; provider: string; today: number; limit: number };
 type Prog = { running: boolean; total: number; done: number; ok: number; fail: number; current: string; log: string[] };
 const ST: Record<string, [string, 'ok' | 'wait' | 'bad' | 'off']> = { queued: ['대기', 'wait'], sending: ['발송 중', 'wait'], sent: ['완료', 'ok'], failed: ['실패', 'bad'], skipped: ['취소', 'off'] };
 
-export default function MailClient({ me, accounts, tpl, hist, teamHist = [], base = '', days, initialKw }: { me: { name: string; phone: string }; accounts: Acct[]; tpl: { subject: string; body: string }; hist: Hist[]; teamHist?: (Hist & { sender: string; subject: string })[]; base?: string; days: number; initialKw: string }) {
+export default function MailClient({ me, accounts, tpl, hist, teamHist = [], base = '', days, initialKw, highlight = 0 }: { highlight?: number; me: { name: string; phone: string }; accounts: Acct[]; tpl: { subject: string; body: string }; hist: Hist[]; teamHist?: (Hist & { sender: string; subject: string })[]; base?: string; days: number; initialKw: string }) {
   const [who, setWho] = useState('');
   const [acctId, setAcctId] = useState<number>(accounts.find(a => a.today < a.limit)?.id ?? accounts[0]?.id ?? 0);
   const account = accounts.find(a => a.id === acctId) ?? null;
@@ -38,6 +38,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   useEffect(() => {
     agentHealth().then(setAgent); loadKeywords().then(x => { if (x.ok) setKws(x.rows!); });
     if (initialKw) load(initialKw);
+    if (highlight) setTimeout(() => document.getElementById('mq-' + highlight)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
     const t = setInterval(() => agentHealth().then(setAgent), 60_000);
     checkReplies(false); const t2 = setInterval(() => checkReplies(false), 10 * 60_000);
     return () => { clearInterval(t); clearInterval(t2); if (pollRef.current) clearInterval(pollRef.current); };
@@ -182,8 +183,8 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
 
     <Section title="내 발송 기록" sub="최근 300건 · 열람 = 제안서 링크 열람 · 회신 = 답장 (콜 리스트 관심으로 자동 등록)" flush>
       {hist.length === 0 ? <div style={{ padding: 16 }}><Empty>아직 발송 없음</Empty></div> : <table><thead><tr><th>시각</th><th>업체</th><th>이메일</th><th>키워드</th><th>상태</th><th>열람</th><th>회신</th><th></th></tr></thead><tbody>
-        {hist.map(h => { const [l, k] = ST[h.status] ?? [h.status, 'off']; return <tr key={h.id} style={{ background: h.replied_at ? 'var(--ok-soft)' : undefined }}>
-          <td className="cell-sub">{fmtKST(h.sent_at ?? h.queued_at)}</td><td><b>{h.store_name}</b></td><td style={{ fontSize: 12.5 }}>{h.to_email}</td><td>{h.keyword}</td>
+        {hist.map(h => { const [l, k] = ST[h.status] ?? [h.status, 'off']; return <tr key={h.id} id={`mq-${h.id}`} style={{ background: h.id === highlight ? '#FFF4C2' : h.replied_at ? 'var(--ok-soft)' : undefined, outline: h.id === highlight ? '2px solid #F59E0B' : undefined }}>
+          <td className="cell-sub">{fmtKST(h.sent_at ?? h.queued_at)}</td><td><b>{h.store_name}</b>{h.target?.store_url && <a href={h.target.store_url} target="_blank" rel="noreferrer" className="cell-sub" style={{ marginLeft: 6 }}>스토어</a>}{h.target?.phone && <div className="cell-sub">{h.target.phone}</div>}</td><td style={{ fontSize: 12.5 }}>{h.to_email}</td><td>{h.keyword}</td>
           <td><Status kind={k}>{l}</Status>{h.error && <div className="cell-sub" style={{ maxWidth: 220 }}>{h.error}</div>}</td>
           <td>{h.opened_at ? <span style={{ color: 'var(--ok-ink)', fontWeight: 700 }}>{fmtKST(h.opened_at)} ({h.open_cnt})</span> : <span className="cell-sub">-</span>}</td>
           <td>{h.replied_at ? <b style={{ color: 'var(--ok-ink)' }}>📩 {fmtKST(h.replied_at)}</b> : <span className="cell-sub">-</span>}</td>
@@ -195,7 +196,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       right={<select value={who} onChange={e => setWho(e.target.value)} style={{ padding: '4px 8px', fontSize: 13 }}><option value="">담당자 전체</option>{[...new Set(teamHist.map(h => h.sender))].sort().map(n => <option key={n} value={n}>{n} ({teamHist.filter(h => h.sender === n).length})</option>)}</select>}>
       <div style={{ maxHeight: 560, overflow: 'auto' }}><table><thead><tr><th>시각</th><th>담당자</th><th>업체</th><th>이메일</th><th>키워드</th><th>제목</th><th>상태</th><th>열람</th><th>회신</th></tr></thead><tbody>
         {teamHist.filter(h => !who || h.sender === who).map(h => { const [l, k] = ST[h.status] ?? [h.status, 'off']; return <tr key={h.id} style={{ background: h.replied_at ? 'var(--ok-soft)' : undefined }}>
-          <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{fmtKST(h.sent_at ?? h.queued_at)}</td><td><b>{h.sender}</b></td><td>{h.store_name}</td><td style={{ fontSize: 12.5 }}>{h.to_email}</td><td>{h.keyword}</td>
+          <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{fmtKST(h.sent_at ?? h.queued_at)}</td><td><b>{h.sender}</b></td><td>{h.store_name}{h.target?.store_url && <a href={h.target.store_url} target="_blank" rel="noreferrer" className="cell-sub" style={{ marginLeft: 6 }}>스토어</a>}{h.target?.phone && <div className="cell-sub">{h.target.phone}</div>}</td><td style={{ fontSize: 12.5 }}>{h.to_email}</td><td>{h.keyword}</td>
           <td style={{ fontSize: 12.5, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h.subject}>{h.proposal_code ? <a href={`${base}/p/${h.proposal_code}`} target="_blank" rel="noreferrer">{h.subject || '(제목 없음)'}</a> : h.subject}</td>
           <td><Status kind={k}>{l}</Status>{h.error && <div className="cell-sub" style={{ maxWidth: 260, whiteSpace: 'normal' }} title={h.error}>{h.error}</div>}</td>
           <td>{h.opened_at ? <span style={{ color: 'var(--ok-ink)', fontWeight: 700 }}>{fmtKST(h.opened_at)} ({h.open_cnt})</span> : <span className="cell-sub">-</span>}</td>

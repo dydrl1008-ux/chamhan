@@ -16,7 +16,7 @@ export default async function PublicProposal({ params, searchParams }: { params:
   if (!pr) return msg('링크를 찾을 수 없습니다.');
   // 메일 발송 건(?m=큐번호): 수신자별 열람·수신거부
   const mId = /^\d{1,12}$/.test(searchParams.m ?? '') ? Number(searchParams.m) : null;
-  const mq = mId ? (await sb.from('mail_queue').select('id,to_email,proposal_code,opened_at,open_cnt,sender_id,store_name,keyword').eq('id', mId).maybeSingle()).data : null;
+  const mq = mId ? (await sb.from('mail_queue').select('id,to_email,proposal_code,opened_at,open_cnt,sender_id,store_name,keyword,target_id').eq('id', mId).maybeSingle()).data : null;
   if (searchParams.unsub === '1') {
     const em = (mq?.to_email || pr.email || '').toLowerCase();
     if (em) await sb.from('email_optouts').upsert({ email: em, code }, { onConflict: 'email' });
@@ -34,7 +34,11 @@ export default async function PublicProposal({ params, searchParams }: { params:
         await sb.from('proposals').update({ views: (pv?.views ?? 0) + 1, first_view_at: pv?.first_view_at ?? new Date().toISOString(), last_view_at: new Date().toISOString() }).eq('code', code);
         const cnt = (mq.open_cnt ?? 0) + 1;
         await sb.from('mail_queue').update({ opened_at: mq.opened_at ?? new Date().toISOString(), open_cnt: cnt }).eq('id', mq.id);
-        if (mq.sender_id && (cnt === 1 || cnt === 2 || cnt === 5)) await sb.from('notifications').insert({ user_id: mq.sender_id, kind: 'lead', title: `${cnt === 1 ? '📬 제안서 열람' : cnt === 2 ? '📬📬 제안서 재열람' : '📬📬📬 제안서 5회 열람'} — ${mq.store_name || mq.to_email}`, body: `'${mq.keyword}' 메일 · ${mq.to_email} · ${cnt}회 열람 — 전화·답장 타이밍`, link: '/mail' });
+        if (mq.sender_id && (cnt === 1 || cnt === 2 || cnt === 5)) {
+          const { data: tg } = mq.target_id ? await sb.from('mail_targets').select('phone,store_url').eq('id', mq.target_id).maybeSingle() : { data: null as any };
+          await sb.from('notifications').insert({ user_id: mq.sender_id, kind: 'lead', title: `${cnt === 1 ? '📬 제안서 열람' : cnt === 2 ? '📬📬 제안서 재열람' : '📬📬📬 제안서 5회 열람'} — ${mq.store_name || mq.to_email}`,
+            body: `'${mq.keyword}' · ${mq.to_email}${tg?.phone ? ' · ' + tg.phone : ''}${tg?.store_url ? ' · ' + tg.store_url : ''} · ${cnt}회 열람 — 전화·답장 타이밍`, link: `/mail?hl=${mq.id}` });
+        }
       }
     } else await sb.rpc('proposal_hit', { p_code: code, p_ip_hash: ipHash, p_ua: ua });
   }
