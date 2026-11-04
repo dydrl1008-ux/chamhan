@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { robots: { index: false, follow: false } };
 const BOT = /bot|crawl|spider|scrap|preview|facebookexternalhit|kakaotalk-scrap|slack|telegram|discord|whatsapp|yeti|daum|naver|headless|curl|wget|python|go-http/i;
 
-export default async function PublicProposal({ params, searchParams }: { params: { code: string }; searchParams: { unsub?: string; m?: string } }) {
+export default async function PublicProposal({ params, searchParams }: { params: { code: string }; searchParams: { unsub?: string; m?: string; preview?: string } }) {
   const code = (params.code || '').slice(0, 16);
   const msg = (t: string, sub = '') => <div style={{ fontFamily: 'Pretendard, sans-serif', maxWidth: 480, margin: '80px auto', background: '#fff', padding: 32, borderRadius: 12, textAlign: 'center' }}><b style={{ fontSize: 18 }}>{t}</b>{sub && <p style={{ color: '#64748B', fontSize: 14 }}>{sub}</p>}</div>;
   if (!/^[A-Za-z0-9_-]{6,16}$/.test(code)) return msg('잘못된 링크입니다.');
@@ -23,7 +23,7 @@ export default async function PublicProposal({ params, searchParams }: { params:
     return msg('수신거부 처리되었습니다', '앞으로 이 주소로 안내 메일을 보내지 않습니다.');
   }
   const h = headers(); const ua = h.get('user-agent') ?? ''; const ip = (h.get('x-forwarded-for')?.split(',')[0] || h.get('x-real-ip') || '').trim();
-  if (!(BOT.test(ua) || !ua)) {
+  if (!(BOT.test(ua) || !ua) && searchParams.preview !== '1') {   // preview=1 = 워크허브 안에서 직원이 여는 것 → 열람 집계 안 함
     const ipHash = createHash('sha256').update(ip + '|' + (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').slice(-16)).digest('hex').slice(0, 32);
     if (mq && mq.proposal_code === code) {
       // 메일 수신자 열람: 수신자별 기록 + 「누가 열었는지」 알림 (첫 열람·재열람 때). 일반 proposal_hit 알림(업체명 없음)은 안 띄움

@@ -188,7 +188,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
           <td><Status kind={k}>{l}</Status>{h.error && <div className="cell-sub" style={{ maxWidth: 220 }}>{h.error}</div>}</td>
           <td>{h.opened_at ? <span style={{ color: 'var(--ok-ink)', fontWeight: 700 }}>{fmtKST(h.opened_at)} ({h.open_cnt})</span> : <span className="cell-sub">-</span>}</td>
           <td>{h.replied_at ? <b style={{ color: 'var(--ok-ink)' }}>📩 {fmtKST(h.replied_at)}</b> : <span className="cell-sub">-</span>}</td>
-          <td>{h.status === 'queued' && <button type="button" className="btn ghost xs" onClick={async () => { const x = await cancelQueued(h.id); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }}>취소</button>}</td></tr>; })}
+          <td style={{ whiteSpace: 'nowrap' }}>{h.proposal_code && <a href={`${base}/p/${h.proposal_code}?preview=1`} target="_blank" rel="noreferrer" className="btn ghost xs" title="열람 집계 안 됨">미리보기</a>}{h.status === 'queued' && <button type="button" className="btn ghost xs" style={{ marginLeft: 4 }} onClick={async () => { const x = await cancelQueued(h.id); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }}>취소</button>}</td></tr>; })}
       </tbody></table>}
     </Section>
 
@@ -197,7 +197,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       <div style={{ maxHeight: 560, overflow: 'auto' }}><table><thead><tr><th>시각</th><th>담당자</th><th>업체</th><th>이메일</th><th>키워드</th><th>제목</th><th>상태</th><th>열람</th><th>회신</th></tr></thead><tbody>
         {teamHist.filter(h => !who || h.sender === who).map(h => { const [l, k] = ST[h.status] ?? [h.status, 'off']; return <tr key={h.id} style={{ background: h.replied_at ? 'var(--ok-soft)' : undefined }}>
           <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{fmtKST(h.sent_at ?? h.queued_at)}</td><td><b>{h.sender}</b></td><td>{h.store_name}{h.target?.store_url && <a href={h.target.store_url} target="_blank" rel="noreferrer" className="cell-sub" style={{ marginLeft: 6 }}>스토어</a>}{h.target?.phone && <div className="cell-sub">{h.target.phone}</div>}</td><td style={{ fontSize: 12.5 }}>{h.to_email}</td><td>{h.keyword}</td>
-          <td style={{ fontSize: 12.5, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h.subject}>{h.proposal_code ? <a href={`${base}/p/${h.proposal_code}`} target="_blank" rel="noreferrer">{h.subject || '(제목 없음)'}</a> : h.subject}</td>
+          <td style={{ fontSize: 12.5, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h.subject}>{h.proposal_code ? <a href={`${base}/p/${h.proposal_code}?preview=1`} target="_blank" rel="noreferrer" title="미리보기 (열람 집계 안 됨)">{h.subject || '(제목 없음)'}</a> : h.subject}</td>
           <td><Status kind={k}>{l}</Status>{h.error && <div className="cell-sub" style={{ maxWidth: 260, whiteSpace: 'normal' }} title={h.error}>{h.error}</div>}</td>
           <td>{h.opened_at ? <span style={{ color: 'var(--ok-ink)', fontWeight: 700 }}>{fmtKST(h.opened_at)} ({h.open_cnt})</span> : <span className="cell-sub">-</span>}</td>
           <td>{h.replied_at ? <b style={{ color: 'var(--ok-ink)' }}>📩 {fmtKST(h.replied_at)}</b> : <span className="cell-sub">-</span>}</td></tr>; })}
