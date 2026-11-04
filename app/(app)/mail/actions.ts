@@ -52,14 +52,14 @@ export async function saveTemplate(subject: string, body: string): Promise<R> {
 
 export async function loadKeywords(): Promise<R<{ rows: { keyword: string; n: number }[] }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
-  const { data, error } = await supabaseAdmin().rpc('mail_keywords');
+  const { data, error } = await supabaseAdmin().rpc('mail_keywords_json');   // jsonb 한 덩어리 — 1,000행 상한 없음
   return error ? { ok: false, msg: error.message } : { ok: true, msg: '', rows: (data ?? []) as any[] };
 }
 
 export async function loadCandidates(keyword: string): Promise<R<{ rows: Candidate[] }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const { days } = await settings();
-  const { data, error } = await supabaseAdmin().rpc('mail_candidates', { p_keyword: keyword.trim(), p_days: days });
+  const { data, error } = await supabaseAdmin().rpc('mail_candidates_json', { p_keyword: keyword.trim(), p_days: days });   // jsonb — 1,000행 상한 없음
   if (error) return { ok: false, msg: error.message };
   return { ok: true, msg: '', rows: (data ?? []) as Candidate[] };
 }
@@ -84,7 +84,7 @@ export async function prepareSend(i: { keyword: string; ids: number[]; subject: 
   const { days, limit } = await settings(); const lim = Math.min(acct.daily_limit || limit, limit);
   const { count: usedToday } = await sb.from('mail_queue').select('id', { count: 'exact', head: true }).eq('account_id', acct.id).in('status', ['queued', 'sending', 'sent']).gte('queued_at', kstDayStart());
   const remain = lim - (usedToday ?? 0); if (remain <= 0) return { ok: false, msg: `${acct.email} 오늘 발송 상한(${lim}건) 도달 — 다른 계정으로` };
-  const { data: cand, error } = await sb.rpc('mail_candidates', { p_keyword: kw, p_days: days }); if (error) return { ok: false, msg: error.message };
+  const { data: cand, error } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); if (error) return { ok: false, msg: error.message };
   const want = new Set(i.ids); const skipped: string[] = []; const picks: Candidate[] = [];
   for (const c of (cand ?? []) as Candidate[]) {
     if (!want.has(c.id)) continue;
@@ -134,12 +134,12 @@ export async function replyPayload(force = false): Promise<R<{ accounts: ReplyAc
   const sb = supabaseAdmin();
   const { data: accts } = await sb.from('mail_accounts').select('id,email,app_pw_enc,verified_at,imap_last_uid,imap_checked_at').eq('user_id', me.id).not('verified_at', 'is', null);
   if (!accts?.length) return { ok: false, msg: '메일 계정 없음' };
-  const since = new Date(Date.now() - 60 * 86400_000).toISOString(); const out: ReplyAcct[] = [];
+  const out: ReplyAcct[] = [];
   for (const a of accts) {
     if (!force && a.imap_checked_at && Date.now() - new Date(a.imap_checked_at).getTime() < 8 * 60_000) continue;
     let pw: string; try { pw = decrypt(a.app_pw_enc); } catch { continue; }
-    const { data: sent } = await sb.from('mail_queue').select('to_email').eq('account_id', a.id).eq('status', 'sent').gte('queued_at', since).limit(3000);
-    out.push({ id: a.id, email: a.email, password: pw, last_uid: Number(a.imap_last_uid ?? 0), known_emails: [...new Set((sent ?? []).map(s => s.to_email.toLowerCase()))] });
+    const { data: known } = await sb.rpc('mail_known_emails', { p_account: a.id });   // 배열 — 1,000행 상한 없음
+    out.push({ id: a.id, email: a.email, password: pw, last_uid: Number(a.imap_last_uid ?? 0), known_emails: (known ?? []) as string[] });
   }
   return out.length ? { ok: true, msg: '', accounts: out } : { ok: false, msg: 'recent' };
 }
