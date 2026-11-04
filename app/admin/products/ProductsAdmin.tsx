@@ -5,7 +5,7 @@ import { notify } from '@/components/Toast';
 import { upsertRow, deactivateRow, reorderRows } from '@/lib/adminCrud';
 type P = { id: number; name: string; category: string | null; description: string | null; unit_price: string | null; intake_process: string | null; required_materials: string | null; owner_id: string | null; caution: string | null; sort_order: number };
 export default function ProductsAdmin({ rows, people }: { rows: P[]; people: { id: string; name: string }[] }) {
-  const r = useRouter(); const [edit, setEdit] = useState<P | null>(null); const paths = ['/admin/products', '/products'];
+  const r = useRouter(); const [edit, setEdit] = useState<P | null>(null); const paths = ['/admin/products', '/products', '/products/manage'];
   const [order, setOrder] = useState<number[]>(rows.map(x => x.id)); const [drag, setDrag] = useState<number | null>(null); const [over, setOver] = useState<number | null>(null);
   const sorted = order.map(id => rows.find(x => x.id === id)!).filter(Boolean).concat(rows.filter(x => !order.includes(x.id)));
   const drop = async (targetId: number) => { if (drag === null || drag === targetId) { setDrag(null); setOver(null); return; } const ids = sorted.map(x => x.id); const from = ids.indexOf(drag), to = ids.indexOf(targetId); ids.splice(from, 1); ids.splice(to, 0, drag); setOrder(ids); setDrag(null); setOver(null); const x = await reorderRows('products', ids, paths); notify(x.msg); r.refresh(); };
