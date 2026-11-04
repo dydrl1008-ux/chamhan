@@ -120,7 +120,9 @@ export default function MailClient({ me, accounts, tpl, hist, days, initialKw }:
         <input list="mail-kws" value={kw} onChange={e => setKw(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') load(); }} placeholder="예: 과메기" style={{ width: 240 }} />
         <datalist id="mail-kws">{kws.map(k => <option key={k.keyword} value={k.keyword}>{`${k.n}곳`}</option>)}</datalist></label>
       <button type="button" className="btn" disabled={busy === 'load'} onClick={() => load()}>{busy === 'load' ? '불러오는 중…' : '대상 불러오기'}</button>
-      {kws.length > 0 && <span className="cell-sub" style={{ marginLeft: 'auto' }}>{kws.slice(0, 8).map(k => <button key={k.keyword} type="button" className="btn ghost xs" style={{ marginLeft: 4 }} onClick={() => { setKw(k.keyword); load(k.keyword); }}>{k.keyword} {k.n}</button>)}</span>}
+      {kws.length > 0 && <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3, marginLeft: 'auto' }}>전체 키워드 {kws.length}개 <span style={{ fontWeight: 400 }}>(이메일 업체 많은 순)</span>
+        <select value={kws.some(k => k.keyword === loadedKw) ? loadedKw : ''} onChange={e => { if (!e.target.value) return; setKw(e.target.value); load(e.target.value); }} style={{ minWidth: 260 }}>
+          <option value="">— 골라서 바로 불러오기</option>{kws.map(k => <option key={k.keyword} value={k.keyword}>{k.keyword} · {k.n}곳</option>)}</select></label>}
     </div>
 
     {/* ② 대상 */}
