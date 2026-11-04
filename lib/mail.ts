@@ -20,7 +20,9 @@ export const DEFAULT_BODY = `안녕하세요, {업체명} 담당자님.
 {수신거부링크}`;
 
 export function fillVars(t: string, v: Record<string, string>) {
-  return t.replace(/\{(업체명|키워드|순위|담당자|연락처|제안서링크|수신거부링크)\}/g, (_, k) => v[k] ?? '');
+  // 비어 있는 변수 앞뒤의 구분자(·, -, |)는 같이 지움 — 연락처 비우면 "이름 · " 처럼 남지 않게
+  return t.replace(/\{(업체명|키워드|순위|담당자|연락처|제안서링크|수신거부링크)\}/g, (_, k) => v[k] ?? '')
+    .replace(/[ \t]*[·\-|][ \t]*$/gm, '').replace(/^[ \t]*[·\-|][ \t]*/gm, '').replace(/[ \t]+[·|]\s+[·|][ \t]+/g, ' · ');
 }
 
 /** 스토어 URL → 식별 키. smartstore/brand 는 ID, 그 외는 호스트(+첫 경로). 상품 URL 도 스토어로 정규화 */
