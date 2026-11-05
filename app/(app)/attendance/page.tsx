@@ -19,7 +19,7 @@ export default async function AttendancePage() {
   ]);
   const mine = rows?.find(r => r.user_id === me.id && r.work_date === today) ?? null;
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, -i));
-  const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각' };
+  const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각', meeting: '미팅(외근)' };
   const scope = (people ?? []).filter(u => u.role !== 'head');
   const todayLv = (leaves ?? []).filter(l => scope.some(u => u.id === l.user_id));
   const noCheck = scope.filter(u => !rows?.find(r => r.user_id === u.id && r.work_date === today) && !todayLv.find(l => l.user_id === u.id && l.type !== 'late'));
@@ -35,7 +35,7 @@ export default async function AttendancePage() {
         <div className="card">
           <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>당일 근태 이슈 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{me.role === 'staff' ? '본인' : '보이는 범위'}</span></h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 12 }}>
-            {[['지각', cnt(['late']), 'var(--bad)'], ['병가', cnt(['sick']), 'var(--bad)'], ['월차', cnt(['monthly']), 'var(--ink)'], ['연차·반차', cnt(['annual', 'half_am', 'half_pm']), 'var(--ink)']].map(([l, n, c]) => (
+            {[['지각', cnt(['late']), 'var(--bad)'], ['병가', cnt(['sick']), 'var(--bad)'], ['월차', cnt(['monthly']), 'var(--ink)'], ['연차·반차', cnt(['annual', 'half_am', 'half_pm']), 'var(--ink)'], ['미팅(외근)', cnt(['meeting']), 'var(--ink)']].map(([l, n, c]) => (
               <div key={String(l)} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px' }}><div style={{ fontSize: 12, color: 'var(--muted)' }}>{l}</div><div style={{ fontSize: 20, fontWeight: 800, color: String(c) }}>{n}<span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>명</span></div></div>))}
           </div>
           {todayLv.map((l, i) => <div key={i} style={{ padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 8, marginBottom: 6, fontSize: 13 }}><b>{nm(l.user_id)}</b> <span className="pill" style={{ marginLeft: 6 }}>{leaveName[l.type]}</span>{l.status === 'pending' && <span style={{ color: 'var(--muted)', fontSize: 12 }}> · 확정 대기</span>}<div style={{ fontSize: 12, color: 'var(--muted)' }}>{l.reason}</div></div>)}

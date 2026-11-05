@@ -11,7 +11,7 @@ import { endingSoon, dLabel, type SlotEx } from '@/lib/slots';
 export const dynamic = 'force-dynamic';
 
 const pct = (a: number, b: number) => b ? Math.round(a / b * 100) : 0;
-const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각' };
+const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각', meeting: '미팅(외근)' };
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const dayLabel = (d: string) => `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일 (${DOW[new Date(d + 'T00:00:00Z').getUTCDay()]})`;
 const Bar = ({ p }: { p: number }) => <div className="bar"><i style={{ width: `${Math.min(100, Math.max(0, p))}%`, background: p >= 100 ? 'var(--ok)' : p >= 70 ? 'var(--wait)' : p > 0 && p < 40 ? 'var(--bad)' : undefined }} /></div>;

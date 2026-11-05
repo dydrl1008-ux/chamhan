@@ -7,7 +7,7 @@ import type { Profile } from '@/lib/auth/session';
 type P = { id: string; name: string; team_id: number | null; role: string; position: string | null; annual_leave_granted: number; monthly_leave_granted: number; hired_at: string | null };
 type L = { id: number; user_id: string; type: string; start_date: string; end_date: string; days: number; reason: string | null; status: string; source: string; team_approved_at: string | null };
 type Agg = { user_id: string; month?: string; year?: number; late_cnt: number; absent_cnt: number; sick_cnt: number; annual_cnt: number; half_cnt: number; monthly_cnt: number; annual_used: number; monthly_used: number };
-const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각' };
+const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각', meeting: '미팅(외근)' };
 const stName: Record<string, [string, React.CSSProperties]> = { pending: ['대기', { background: '#FDF1DD', color: '#D97706' }], approved: ['승인', { background: 'var(--ok-soft, #E7F7EC)', color: 'var(--ok)' }], rejected: ['반려', { background: 'var(--bad-soft)', color: 'var(--bad)' }], cancelled: ['취소', { background: 'var(--bg)', color: 'var(--muted)' }] };
 
 export default function LeaveClient({ me, people, leaves, monthly, yearly, teams, month, range, today, selUser }: { me: Profile; people: P[]; leaves: L[]; monthly: Agg[]; yearly: Agg[]; teams: { id: number; name: string }[]; month: string; range: [string, string]; today: string; selUser: string }) {
