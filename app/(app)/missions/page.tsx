@@ -1,10 +1,11 @@
 // 경쟁사 미션 — 미션 앱(캐시플랜 등)에서 긁은 (키워드, 상품). 쇼핑은 시크릿 지수로 스토어·순위 매칭, 콜 리스트/메일 대상과 대조
-import { getProfile } from '@/lib/auth/session';
+import { requireRole } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import MissionsClient from './MissionsClient';
 export const dynamic = 'force-dynamic';
 export default async function MissionsPage({ searchParams }: { searchParams: { kind?: string; days?: string } }) {
-  const me = (await getProfile())!; const sb = supabaseAdmin();
+  await requireRole(['admin', 'head']);   // 총괄·대표만
+  const sb = supabaseAdmin();
   const kind = ['nshop', 'place', 'coupang', 'all'].includes(searchParams.kind ?? '') ? searchParams.kind! : 'nshop';
   const days = Math.max(1, Math.min(90, Number(searchParams.days) || 14));
   const since = new Date(Date.now() - days * 86400_000).toISOString();

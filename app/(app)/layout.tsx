@@ -73,7 +73,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {lead && <NavLink href="/leads">콜 리스트 관리</NavLink>}
           <NavLink href="/proposals">키워드 제안서</NavLink>
           <NavLink href="/mail">메일 발송</NavLink>
-          <NavLink href="/missions">경쟁사 미션</NavLink>
+          {lead && <NavLink href="/missions">경쟁사 미션</NavLink>}
           {(mgr || mgmt) && <NavLink href="/sales-stats">콜 성과</NavLink>}
           <NavLink href="/renewals">이탈 고객</NavLink>
           <NavLink href="/notifications">알림{notiBadge}</NavLink>

@@ -1,6 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
+const allowed = async () => { const me = await getProfile(); return me && (me.role === 'admin' || me.role === 'head') ? me : null; };
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { supabaseServer } from '@/lib/supabase/server';
 import { searchFresh } from '@/lib/nsc';
@@ -12,7 +13,7 @@ const tokens = (s: string) => [...new Set(s.toLowerCase().split(/[^가-힣a-z0-9
 
 /** 시크릿 지수로 미션 상품 매칭 — 키워드 상위 100개 제목과 OCR 상품명 토큰 겹침으로 */
 export async function matchMission(id: number): Promise<R<{ mall: string; rank: number | null }>> {
-  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const me = await allowed(); if (!me) return { ok: false, msg: '총괄·대표만' };
   const sb = supabaseAdmin();
   const { data: m } = await sb.from('competitor_missions').select('id,keyword,product,kind,rank_first').eq('id', id).maybeSingle();
   if (!m) return { ok: false, msg: '없음' }; if (m.kind !== 'nshop') return { ok: false, msg: '쇼핑 미션만 매칭' };
@@ -37,7 +38,7 @@ export async function matchMission(id: number): Promise<R<{ mall: string; rank: 
 
 /** 미매칭 쇼핑 미션 n개 일괄 매칭 (시크릿 지수 조회 한도 안에서) */
 export async function matchMany(n = 20): Promise<R<{ done: number }>> {
-  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const me = await allowed(); if (!me) return { ok: false, msg: '총괄·대표만' };
   const { data: rows } = await supabaseAdmin().from('competitor_missions').select('id').eq('kind', 'nshop').is('matched_at', null).order('last_seen', { ascending: false }).limit(Math.min(50, n));
   let done = 0; for (const r of rows ?? []) { const x = await matchMission(r.id); if (!x.ok) return { ok: false, msg: `${done}개 후 중단: ${x.msg}`, done }; done++; }
   revalidatePath('/missions'); return { ok: true, msg: `${done}개 매칭`, done };
@@ -45,7 +46,7 @@ export async function matchMany(n = 20): Promise<R<{ done: number }>> {
 
 /** 순위 체크(ykreward rank_watch)에 등록 — 그룹명 = 스토어명 */
 export async function watchMission(id: number): Promise<R> {
-  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const me = await allowed(); if (!me) return { ok: false, msg: '총괄·대표만' };
   const sb = supabaseServer();
   const { data: m } = await supabaseAdmin().from('competitor_missions').select('keyword,mall_name,product_url').eq('id', id).maybeSingle();
   if (!m?.product_url) return { ok: false, msg: '먼저 매칭해서 상품 URL을 잡아야 함' };
