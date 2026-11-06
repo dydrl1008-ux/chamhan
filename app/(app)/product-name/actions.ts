@@ -38,7 +38,7 @@ function candidates(main: string, brand: string, must: string[], optional: strin
     if (src !== '필수' && src !== '후보') {
       if (STOP.has(k) || mallWords.has(k) || k.includes('%') || (/\d/.test(k) && fixedStems.has(stem(k)))) return;   // 남의 스펙(순도80%)·몰 이름·의미 없는 단어
       if (CLAIM.has(k)) return;                                     // 효과·개선 같은 표현어는 자동으로 안 넣음
-      if (isEffect(word) && st0.t10 < 3) return;                     // 효능·부위 단어는 상위10 중 3개 이상 쓸 때만
+      if (isEffect(word) && st0.t10 < 2 && st0.t30 < 3) return;      // 효능·부위 단어는 상위권이 실제로 쓰는 것만
     }
     const st = ws[word.toLowerCase()] ?? ws[k] ?? { t10: 0, t30: 0, all: 0 };
     const v = vols.find(x => norm(x.keyword) === norm(main) + k || norm(x.keyword) === k + norm(main));   // "강아지오메가3영양제" → 영양제 검색량
@@ -48,7 +48,7 @@ function candidates(main: string, brand: string, must: string[], optional: strin
   };
   must.forEach(w => add(w, '필수', 100000));
   optional.forEach(w => add(w, '후보', 500));
-  Object.entries(ws).filter(([, c]) => c.t10 >= 2 || c.t30 >= 5).forEach(([w]) => add(w, '상위권'));
+  Object.entries(ws).filter(([, c]) => c.t10 >= 1 || c.t30 >= 3 || c.all >= 8).forEach(([w]) => add(w, '상위권'));
   vols.forEach(v => { const rest = norm(v.keyword).replace(norm(main), ''); if (rest.length >= 2 && rest.length <= 8 && norm(v.keyword).length > norm(main).length) add(rest, '검색량'); });
   return Object.values(pool).sort((a, b) => b.score - a.score);
 }
@@ -59,7 +59,7 @@ function assemble(head: string[], rest: Cand[], maxLen = MAX_LEN) {
   let eff = head.filter(isEffect).length;
   for (const c of rest) {
     const k = norm(c.word); if (used.some(u => u === k || u.includes(k) || k.includes(u))) continue;
-    if (c.effect && c.src !== '필수') { if (eff >= 3) continue; eff++; }
+    if (c.effect && c.src !== '필수') { if (eff >= 5) continue; eff++; }
     const next = [...parts, c.word].join(' '); if (next.length > maxLen) continue;
     parts.push(c.word); used.push(k);
   }
@@ -104,7 +104,7 @@ export async function requestName(req: NameReq): Promise<R<{ id: number; drafts:
   const drafts: Draft[] = [
     mk('① 상위권 단어 우선', head, others),
     mk('② 검색량 우선', head, byVol),
-    mk('③ 간결', head, others.slice(0, 3)),
+    mk('③ 상위30 단어 우선', head, [...others].sort((a, b) => (ws[b.word.toLowerCase()]?.t30 ?? 0) - (ws[a.word.toLowerCase()]?.t30 ?? 0) || b.score - a.score)),
   ];
   // AI 검토 지시 — 짧게. 초안 + 단어표 핵심만
   const L: string[] = [];
