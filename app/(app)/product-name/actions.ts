@@ -100,12 +100,12 @@ export async function requestName(req: NameReq): Promise<R<{ id: number; drafts:
   const mustC = cands.filter(c => c.src === '필수'); const others = cands.filter(c => c.src !== '필수');
   const byVol = [...others].sort((a, b) => b.vol - a.vol || b.score - a.score);
   const mk = (label: string, head: string[], rest: Cand[]): Draft => { const name = assemble(head, [...mustC, ...rest]); const used = tokens(name).filter(isEffect); return { label, name, len: name.length, warn: used.length ? [`효능·부위 단어 ${used.join(' ')} — 심의 위험 ${used.every(w => (ws[w.toLowerCase()]?.t10 ?? 0) >= 3) ? '낮음(상위10 흔히 사용)' : '있음'}`] : [] }; };
+  const head = [brand, mainForm];   // 브랜드 → 메인 키워드 고정 (디폴트)
   const drafts: Draft[] = [
-    mk('① 메인 키워드 앞', [mainForm, brand], others),
-    mk('② 브랜드 앞', [brand, mainForm], others),
-    mk('③ 검색량 우선', [mainForm, brand], byVol),
+    mk('① 상위권 단어 우선', head, others),
+    mk('② 검색량 우선', head, byVol),
+    mk('③ 간결', head, others.slice(0, 3)),
   ];
-
   // AI 검토 지시 — 짧게. 초안 + 단어표 핵심만
   const L: string[] = [];
   L.push(`스마트스토어 상품명 초안 3개를 검토해 주세요. 코드 실행·파일 작성 없이 글로만, 전체 500자 이내. (요청: ${me.name})`);

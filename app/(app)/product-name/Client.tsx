@@ -51,7 +51,7 @@ export default function ProductNameClient({ tasks }: { tasks: NameTask[] }) {
         <label>메모 (AI 검토 참고)<input value={f.note} onChange={set('note')} placeholder="예: 신제품, 리워드 바로 돌릴 예정, 가격 2만원대" /></label>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn" disabled={busy || !f.brand.trim() || !f.main.trim()} onClick={submit}>{busy ? '만드는 중…' : '상품명 만들기'}</button>
-          <span className="help">브랜드·메인 키워드 맨 앞 고정 → 검색량·상위 10 사용 빈도 순으로 {MAX_LEN}자까지 채움 (즉시) → AI팀이 불필요·중복 단어 검토 (1~2분)</span>
+          <span className="help">브랜드 → 메인 키워드 순으로 앞에 고정 → 필수 단어 → 상위 10 사용 빈도·검색량 순으로 {MAX_LEN}자까지 채움 (즉시) → AI팀이 불필요·중복 단어 검토 (1~2분)</span>
         </div>
       </div>
 
