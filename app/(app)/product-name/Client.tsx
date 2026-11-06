@@ -18,7 +18,9 @@ export default function ProductNameClient({ tasks, adReady }: { tasks: NameTask[
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
   const submit = () => start(async () => { const res = await requestName(f); notify(res.msg, res.ok ? 'ok' : 'bad'); if (res.ok) { setOpen(res.id ?? null); r.refresh(); } });
   const copy = async (t: string) => { await navigator.clipboard.writeText(t); notify('복사됨'); };
-  const names = (txt: string) => Array.from(txt.matchAll(/^[^\n]*?([가-힣A-Za-z0-9%][^\n]{10,60}?)\s*\((\d{1,2})자\)/gm)).map(m => m[1].replace(/^[①②③\d.\s\-*#]+/, '').trim());   // "… (NN자)" 줄만 뽑아 복사 버튼
+  // "… (NN자)" 로 끝나는 줄 = 상품명 후보. AI가 센 숫자는 믿지 않고 여기서 다시 셈
+  const names = (txt: string) => Array.from(txt.matchAll(/^[^\n]*?([가-힣A-Za-z0-9%][^\n]{10,70}?)\s*\(\s*\d{1,2}\s*자\s*\)/gm)).map(m => m[1].replace(/^[①②③④\d.)\s\-*#:：]+/, '').replace(/[*_`]/g, '').trim()).filter((n, i, a) => a.indexOf(n) === i);
+  const fixCounts = (txt: string) => txt.replace(/^([^\n]*?)([가-힣A-Za-z0-9%][^\n]{10,70}?)\s*\(\s*\d{1,2}\s*자\s*\)/gm, (_m, pre, name) => { const n = String(name).replace(/^[①②③④\d.)\s\-*#:：]+/, '').replace(/[*_`]/g, '').trim(); return `${pre}${name} (${n.length}자${n.length > 50 ? ' ⚠50자 초과' : ''})`; });
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
@@ -46,8 +48,8 @@ export default function ProductNameClient({ tasks, adReady }: { tasks: NameTask[
             </div>
             {o && <div style={{ padding: '0 16px 14px', display: 'grid', gap: 10 }}>
               {t.result ? <>
-                <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, background: 'var(--bg)', padding: 14, borderRadius: 8 }}>{t.result}</pre>
-                {names(t.result).length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{names(t.result).map((n, i) => <button key={i} className="btn ghost" style={{ padding: '4px 10px' }} onClick={() => copy(n)}>복사 · {n.slice(0, 28)}{n.length > 28 ? '…' : ''} ({n.length}자)</button>)}</div>}
+                <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, background: 'var(--bg)', padding: 14, borderRadius: 8 }}>{fixCounts(t.result)}</pre>
+                {names(t.result).length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{names(t.result).map((n, i) => <button key={i} className="btn ghost" onClick={() => copy(n)} style={{ padding: '4px 10px', borderColor: n.length > 50 ? 'var(--bad, #c0392b)' : undefined }}>복사 · {n.slice(0, 28)}{n.length > 28 ? '…' : ''} ({n.length}자{n.length > 50 ? ' 초과' : ''})</button>)}</div>}
                 {['done', 'rejected'].includes(t.status) && <div style={{ display: 'flex', gap: 6 }}>
                   <input value={fb[t.id] ?? ''} onChange={e => setFb({ ...fb, [t.id]: e.target.value })} placeholder="고칠 점 (예: 심장 빼고 60캡슐 넣어줘)" style={{ flex: 1 }} />
                   <button className="btn ghost" disabled={busy || !(fb[t.id] ?? '').trim()} onClick={() => start(async () => { const res = await reviseName(t.id, fb[t.id] ?? ''); notify(res.msg, res.ok ? 'ok' : 'bad'); if (res.ok) { setFb({ ...fb, [t.id]: '' }); r.refresh(); } })}>고쳐줘</button>

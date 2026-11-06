@@ -58,13 +58,13 @@ export async function requestName(req: NameReq): Promise<R<{ id: number }>> {
   if (note) lines.push(`요청 메모: ${note}`);
   lines.push('');
   lines.push('규칙');
-  lines.push('- 공백 포함 50자 이내. 각 안마다 글자수를 파이썬 len()으로 실제로 세서 "(NN자)"로 표기할 것. 머리로 세지 말 것');
+  lines.push('- 공백 포함 50자 이내(45자 안팎 권장). 코드 실행·파일 작성 없이 글로만 답할 것. 각 안은 한 줄로 쓰고 줄 끝에 "(NN자)" 표기 (글자수는 화면에서 다시 셈)');
   lines.push('- 같은 단어 두 번 금지(예: 캡슐 2회). 특수문자·괄호·쉼표 없이 띄어쓰기만');
   lines.push('- 메인 키워드와 브랜드는 반드시 포함. 메인 키워드는 상위 100 상품명에서 많이 쓰는 띄어쓰기 형태로');
   lines.push('- 질병·부위·효능 단어(관절 피부 심장 신장 눈물 백내장 등)는 넣더라도 안별로 "심의 위험" 한 줄 경고. 상위 10이 흔히 쓰는 단어는 위험 낮음으로 표시');
   lines.push('- 남는 글자는 검색량 있는 서브 키워드·수량·용량·대상(소형견 등)으로 채우되, 상품과 관련 없는 단어는 금지');
   lines.push('- 3안 구성: ① 메인 키워드 맨 앞 ② 브랜드 맨 앞 ③ 검색량 최대로 채운 안. 각 안 아래에 포함 단어별 월 검색수(아래 표 기준)와 상위10 사용 개수 한 줄');
-  lines.push('- 마지막에 추천 1안과 이유 두 줄. 태그로 뺄 단어 10개 제안');
+  lines.push('- 마지막에 추천 1안과 이유 두 줄. 태그로 뺄 단어 10개 제안. 전체 답은 700자 이내');
   lines.push('');
   lines.push(`[검색광고 월 검색수 (PC+모바일), 메인 키워드 관련 ${vols.length}개]${volNote ? ' ' + volNote : ''}`);
   vols.forEach(v => lines.push(`${v.keyword}\t${v.total.toLocaleString()} (PC ${v.pc.toLocaleString()} / M ${v.mobile.toLocaleString()})`));
