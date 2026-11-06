@@ -24,6 +24,7 @@ function wordStats(titles: string[]) {
 type Cand = { word: string; score: number; vol: number; t10: number; src: string; effect: boolean };
 
 /** 단어 풀 만들기 — 필수 > 후보 > 상위10 단어 > 검색량 서브 키워드에서 메인 키워드 뺀 나머지 */
+const CLAIM = new Set(['효과', '개선', '완화', '예방', '치료', '효능', '도움', '케어', '종합']);
 const STOP = new Set(['추천', '인기', '베스트', '공식', '정품', '즉시배송', '무료배송', '당일배송', '세트', '증정', '사은품', '할인', '특가', '묶음', '본사', '공식몰', '직영', '정식', '국내산', '최저가', '신상', '신제품']);
 const stem = (w: string) => norm(w).replace(/[\d%.]+/g, '');   // 순도90% → 순도 (같은 스펙 다른 숫자 충돌 방지)
 function candidates(main: string, brand: string, must: string[], optional: string[], vols: KwVol[], ws: ReturnType<typeof wordStats>, malls: string[]) {
@@ -33,7 +34,12 @@ function candidates(main: string, brand: string, must: string[], optional: strin
   const pool: Record<string, Cand> = {};
   const add = (word: string, src: string, bonus = 0) => {
     const k = norm(word); if (!k || base.has(k) || [...base].some(b => k.includes(b) || b.includes(k))) return;   // 메인·브랜드와 겹치면 제외
-    if (src !== '필수' && src !== '후보') { if (STOP.has(k) || mallWords.has(k) || (/[\d%]/.test(k) && fixedStems.has(stem(k)))) return; }
+    const st0 = ws[word.toLowerCase()] ?? ws[k] ?? { t10: 0, t30: 0, all: 0 };
+    if (src !== '필수' && src !== '후보') {
+      if (STOP.has(k) || mallWords.has(k) || k.includes('%') || (/\d/.test(k) && fixedStems.has(stem(k)))) return;   // 남의 스펙(순도80%)·몰 이름·의미 없는 단어
+      if (CLAIM.has(k)) return;                                     // 효과·개선 같은 표현어는 자동으로 안 넣음
+      if (isEffect(word) && st0.t10 < 3) return;                     // 효능·부위 단어는 상위10 중 3개 이상 쓸 때만
+    }
     const st = ws[word.toLowerCase()] ?? ws[k] ?? { t10: 0, t30: 0, all: 0 };
     const v = vols.find(x => norm(x.keyword) === norm(main) + k || norm(x.keyword) === k + norm(main));   // "강아지오메가3영양제" → 영양제 검색량
     const vol = v?.total ?? 0;
@@ -50,8 +56,10 @@ function candidates(main: string, brand: string, must: string[], optional: strin
 /** 단어를 순서대로 붙여 50자 안으로 조립. 포함 관계 중복 제거 */
 function assemble(head: string[], rest: Cand[], maxLen = MAX_LEN) {
   const parts: string[] = [...head]; const used = parts.map(norm);
+  let eff = head.filter(isEffect).length;
   for (const c of rest) {
     const k = norm(c.word); if (used.some(u => u === k || u.includes(k) || k.includes(u))) continue;
+    if (c.effect && c.src !== '필수') { if (eff >= 3) continue; eff++; }
     const next = [...parts, c.word].join(' '); if (next.length > maxLen) continue;
     parts.push(c.word); used.push(k);
   }

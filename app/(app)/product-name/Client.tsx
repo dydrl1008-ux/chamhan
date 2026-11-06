@@ -12,8 +12,10 @@ const kst = (s: string) => new Date(s).toLocaleString('ko-KR', { timeZone: 'Asia
 const clean = (n: string) => n.replace(/^[①②③④\d.)\s\-*#:：]+/, '').replace(/[*_`]/g, '').trim();
 const effects = (n: string) => n.split(/\s+/).filter(w => EFFECT_WORDS.some(e => w.includes(e)));
 /** "… (NN자)" 로 끝나는 줄 = 상품명. 글자수는 여기서 다시 셈 */
-const pick = (txt: string) => Array.from(txt.matchAll(/^([^\n]*?)([가-힣A-Za-z0-9%][^\n]{8,80}?)\s*\(\s*\d{1,2}\s*자\s*\)/gm)).map(m => ({ label: m[1].replace(/[:：]\s*$/, '').trim(), name: clean(m[2]) })).filter((x, i, a) => a.findIndex(y => y.name === x.name) === i);
-const fixCounts = (txt: string) => txt.replace(/^([^\n]*?)([가-힣A-Za-z0-9%][^\n]{8,80}?)\s*\(\s*\d{1,2}\s*자\s*\)/gm, (_m, pre, name) => { const n = clean(String(name)).length; return `${pre}${name} (${n}자${n > MAX_LEN ? ' ⚠초과' : ''})`; });
+/** "라벨: 상품명 (NN자)" 한 줄 → 라벨은 첫 콜론 앞(20자 이내일 때만), 상품명은 그 뒤 */
+const splitLine = (line: string) => { const body = line.replace(/\s*\(\s*\d{1,2}\s*자[^)]*\)\s*$/, ''); const m = body.match(/^(.{0,20}?)[:：]\s*(.+)$/); if (m) return { label: clean(m[1]) || m[1].trim(), name: clean(m[2]) }; return { label: (body.match(/^[①②③④]/) ?? [''])[0], name: clean(body) }; };
+const pick = (txt: string) => txt.split('\n').filter(l => /\(\s*\d{1,2}\s*자[^)]*\)\s*$/.test(l) && l.length > 12).map(splitLine).filter(x => x.name.length >= 8).filter((x, i, a) => a.findIndex(y => y.name === x.name) === i);
+const fixCounts = (txt: string) => txt.split('\n').map(l => { if (!/\(\s*\d{1,2}\s*자[^)]*\)\s*$/.test(l) || l.length <= 12) return l; const { name } = splitLine(l); const n = name.length; return l.replace(/\(\s*\d{1,2}\s*자[^)]*\)\s*$/, `(${n}자${n > MAX_LEN ? ' ⚠초과' : ''})`); }).join('\n');
 const drafts = (ins: string) => { const i = ins.indexOf('[초안]'); if (i < 0) return []; const block = ins.slice(i + 4, ins.indexOf('\n\n', i + 4) > 0 ? ins.indexOf('\n\n', i + 4) : undefined); return pick(block); };
 
 function NameRow({ label, name, onCopy }: { label?: string; name: string; onCopy: (s: string) => void }) {
