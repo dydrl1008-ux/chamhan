@@ -3,7 +3,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { Status } from '@/components/ui';
-import { requestName, reviseName } from './actions';
+import { requestName, reviseName, removeName } from './actions';
 import { MAX_LEN, EFFECT_WORDS } from './shared';
 
 export type NameTask = { id: number; title: string; status: string; result: string | null; created_at: string; requested_by: string | null; instruction: string };
@@ -60,6 +60,7 @@ export default function ProductNameClient({ tasks }: { tasks: NameTask[] }) {
           <div key={t.id} style={{ borderBottom: '1px solid var(--line-soft)' }}>
             <div onClick={() => setOpen(o ? null : t.id)} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 16px', cursor: 'pointer', flexWrap: 'wrap' }}>
               <b>#{t.id}</b><span style={{ flex: 1, minWidth: 160 }}>{t.title.replace('[상품명]', '').trim()}</span><Status kind={st[1]}>{st[0]}</Status><span className="help">{t.requested_by} · {kst(t.created_at)}</span>
+              <button className="btn ghost" style={{ padding: '2px 8px' }} disabled={busy} onClick={e => { e.stopPropagation(); start(async () => { const res = await removeName(t.id); notify(res.msg, res.ok ? 'ok' : 'bad'); r.refresh(); }); }}>삭제</button>
             </div>
             {o && <div style={{ padding: '0 16px 14px', display: 'grid', gap: 12 }}>
               {ds.length > 0 && <div style={{ display: 'grid', gap: 6 }}>

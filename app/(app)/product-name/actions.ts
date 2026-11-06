@@ -136,3 +136,17 @@ export async function reviseName(id: number, feedback: string): Promise<R<{ id: 
   revalidatePath('/product-name');
   return { ok: true, msg: `수정 요청 #${data.id} 접수`, id: data.id };
 }
+
+/** 요청 삭제 — 내 것(총괄·대표는 전부). 진행 중이면 취소 후 삭제 */
+export async function removeName(id: number): Promise<R> {
+  const me = await getProfile(); if (!me || !me.is_active) return { ok: false, msg: '로그인 필요' };
+  const sb = supabaseAdmin();
+  const { data: base } = await sb.from('ai_tasks').select('id,title,requested_by_id').eq('id', id).maybeSingle();
+  if (!base || !String(base.title).startsWith(TITLE_PREFIX)) return { ok: false, msg: '상품명 요청이 아닙니다.' };
+  if (base.requested_by_id !== me.id && !['admin', 'head'].includes(me.role)) return { ok: false, msg: '내 요청만 지울 수 있습니다.' };
+  await sb.from('ai_tasks').delete().eq('parent_id', id);
+  const { error } = await sb.from('ai_tasks').delete().eq('id', id);
+  if (error) return { ok: false, msg: error.message };
+  revalidatePath('/product-name');
+  return { ok: true, msg: `#${id} 삭제됨` };
+}
