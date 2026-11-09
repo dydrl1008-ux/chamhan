@@ -184,6 +184,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
           <div style={{ fontSize: 12, marginTop: 8 }}><Hl t={`유입 → 구매가 이어지면 판매지수까지 같이 오름`} /></div></div>
       </div>
       <div className="pd-box" style={{ padding: '14px 20px 6px' }}><h4>상위 10개 — 순위 vs 리뷰 vs 클릭지수 (리뷰 순이 아님)</h4>
+        {(() => { const lo = d.top.filter(p => p.reviewCount < medTop).sort((a, b) => a.rank - b.rank)[0]; const hi = d.top.filter(p => p.reviewCount >= medTop).sort((a, b) => b.rank - a.rank)[0]; return lo && hi && lo.rank < hi.rank ? <div style={{ fontSize: 12.5, color: 'var(--ink2)', margin: '-4px 0 10px' }}>리뷰 <b>{fmtCnt(lo.reviewCount)}개</b>가 <b>{lo.rank}위</b>, 리뷰 <b>{fmtCnt(hi.reviewCount)}개</b>가 <b>{hi.rank}위</b> — 순위를 가른 건 리뷰가 아니라 <mark>클릭지수</mark></div> : null; })()}
         <table><thead><tr><th style={{ width: 40 }}>순위</th><th>상품</th><th className="r">리뷰</th><th className="r">클릭지수</th><th className="r">판매지수</th></tr></thead><tbody>
           {d.top.map(p => <tr key={p.rank} className={tgt && p.rank === tgt.rank ? 'me' : ''}><td style={{ fontWeight: 900 }}>{p.rank}</td><td><div style={{ maxWidth: 380, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{p.productTitle}</div></td><td className="r" style={{ color: p.reviewCount < medTop ? 'var(--red)' : undefined, fontWeight: p.reviewCount < medTop ? 800 : 400 }}>{fmtCnt(p.reviewCount)}{p.reviewCount < medTop ? ' ↓' : ''}</td><td className="r" style={{ fontWeight: 700, color: 'var(--blue)' }}>{p.hitStarScore || '-'}</td><td className="r">{p.saleStarScore || '-'}</td></tr>)}
         </tbody></table>
@@ -224,10 +225,10 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
           {[['회신', '전화 · 문자 · 카톡'], ['키워드 · 옵션 확정', '연관 키워드 순위 확인 후'], ['입금 · 세금계산서', '사업자 기준 발행'], ['익일 시작', '시작 순위 기록 → 매일 확인']].map(([t, d1], i) => <div key={t} style={{ display: 'grid', gridTemplateColumns: '22px 1fr', gap: 8, alignItems: 'start' }}><span style={{ width: 20, height: 20, borderRadius: 6, background: 'var(--blue)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span><span><b>{t}</b><br /><span className="pd-muted" style={{ fontSize: 11 }}>{d1}</span></span></div>)}
         </div></div>
       <div className="pd-opt rec" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'center' }}>
-        <div><div className="t" style={{ color: '#A9B1C6' }}>진행 조건</div><div style={{ fontSize: 15, fontWeight: 800, margin: '6px 0 4px' }}>키워드 1개 · 10일 단위 · 매일 순위 확인 · 변동 시 연락 · 종료 리포트</div><div style={{ fontSize: 12, color: '#A9B1C6' }}>연장은 리포트 보고 결정 · 연관 키워드 추가 가능</div></div>
+        <div><div className="t" style={{ color: '#A9B1C6' }}>진행 조건</div><div style={{ fontSize: 15, fontWeight: 800, margin: '6px 0 4px' }}>메인 키워드 1개 기준 · 10일 단위 · 매일 순위 확인 · 변동 시 연락 · 종료 리포트</div><div style={{ fontSize: 12, color: '#A9B1C6' }}>연장은 리포트 보고 결정 · 연관 키워드 추가 가능</div></div>
         <div style={{ textAlign: 'right' }}><div style={{ fontSize: 11, color: '#A9B1C6', letterSpacing: '.1em', fontWeight: 800 }}>비용</div><div style={{ fontSize: 22, fontWeight: 900, color: 'var(--lime)' }}>{d.offer.rec || d.offer.basic || '담당자 안내'}</div></div>
       </div>
-      <div className="pd-muted" style={{ fontSize: 10.5 }}>※ 결과는 키워드 경쟁도·상품 반응에 따라 다름 · 특정 순위 보장 없음 · 10일 단위 진행, 연장은 리포트 보고 결정</div>
+      <div className="pd-muted" style={{ fontSize: 10.5 }}>※ 결과는 키워드 경쟁도·상품 반응에 따라 다름 · 10일 단위 진행, 연장은 리포트 보고 결정</div>
     </div>{foot(pn)}
   </div>);
 
@@ -247,7 +248,7 @@ export default function ProposalDoc({ d, total, img = (u: string) => u }: { d: D
       </div>
       <div style={{ border: '1px solid rgba(255,255,255,.16)', borderRadius: 14, padding: '18px 22px' }}>
         <div style={{ fontSize: 11, letterSpacing: '.14em', color: 'var(--lime)', fontWeight: 800, marginBottom: 12 }}>이 자료 요약</div>
-        {[['현재 위치', oneLine], ['조건', tgt ? (d.meetsPrice && d.meetsReview ? '가격·리뷰 상위권 수준 — 순위만 차이' : `${d.meetsPrice ? '가격 상위권 수준' : '가격 상위권 밖'} · ${d.meetsReview ? '리뷰 상위권 수준' : '리뷰 부족'}`) : `상위 10개 평균가 ${fmtWon(d.avgPrice10)} · 평균 리뷰 ${fmtCnt(d.avgReview10)}개`], ['유입 반영도', `${d.traffic.verdict} — 클릭지수 상위 10 ${d.traffic.hitTop} / 11~40위 ${d.traffic.hitMid}`], ['진행', '키워드 1개 · 10일 단위 · 매일 순위 확인 · 종료 리포트'], ['비용', d.offer.rec || d.offer.basic || '담당자 안내']].map(([k, v]) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 12, padding: '9px 0', borderTop: '1px solid rgba(255,255,255,.1)', fontSize: 13 }}><span style={{ color: '#8E97AD', fontWeight: 700 }}>{k}</span><span>{v}</span></div>)}
+        {[['현재 위치', oneLine], ['조건', tgt ? (d.meetsPrice && d.meetsReview ? '가격·리뷰 상위권 수준 — 순위만 차이' : `${d.meetsPrice ? '가격 상위권 수준' : '가격 상위권 밖'} · ${d.meetsReview ? '리뷰 상위권 수준' : '리뷰 부족'}`) : `상위 10개 평균가 ${fmtWon(d.avgPrice10)} · 평균 리뷰 ${fmtCnt(d.avgReview10)}개`], ['유입 반영도', `${d.traffic.verdict} — 클릭지수 상위 10 ${d.traffic.hitTop} / 11~40위 ${d.traffic.hitMid}`], ['진행', '메인 키워드 1개 기준 · 10일 단위 · 매일 순위 확인 · 종료 리포트'], ['비용', d.offer.rec || d.offer.basic || '담당자 안내']].map(([k, v]) => <div key={k} style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 12, padding: '9px 0', borderTop: '1px solid rgba(255,255,255,.1)', fontSize: 13 }}><span style={{ color: '#8E97AD', fontWeight: 700 }}>{k}</span><span>{v}</span></div>)}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
         {[[tgt ? (tgt.rank > 100 ? '100위 밖' : `${tgt.rank}위`) : `${d.n}개`, tgt ? `'${d.keyword}' 현재 순위` : '분석 상품'], [fmtWon(d.avgPrice10), '상위 10개 평균가'], [fmtCnt(d.avgReview10) + '개', '상위 10개 평균 리뷰']].map(([v, l]) => <div key={l} style={{ borderTop: '2px solid var(--lime)', paddingTop: 10 }}><div style={{ fontSize: 26, fontWeight: 900 }}>{v}</div><div style={{ fontSize: 11, color: '#8E97AD' }}>{l}</div></div>)}
