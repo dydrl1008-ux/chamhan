@@ -66,3 +66,27 @@ export async function setActive(id: string, active: boolean): Promise<{ ok: bool
   if (error) return { ok: false, msg: error.message };
   revalidatePath('/users'); return { ok: true, msg: active ? '복직 처리됨' : '퇴사 처리됨 (로그인 차단, 기록 보존)' };
 }
+
+/** 팀 추가/수정 — 어드민·총책임자. 팀장 지정 시 그 사람을 해당 팀·팀장 권한으로 맞춤 */
+export async function saveTeam(fd: FormData): Promise<{ ok: boolean; msg: string }> {
+  try { await guard(); } catch (e: any) { return { ok: false, msg: e.message }; }
+  const id = fd.get('id') ? Number(fd.get('id')) : null;
+  const name = String(fd.get('name') || '').trim();
+  const leader = String(fd.get('leader_id') || '') || null;
+  const active = id ? fd.get('is_active') === 'on' : true;
+  if (!name) return { ok: false, msg: '팀 이름은 필수입니다.' };
+  const admin = supabaseAdmin();
+  let teamId = id;
+  if (id) { const { error } = await admin.from('teams').update({ name, leader_id: leader, is_active: active }).eq('id', id); if (error) return { ok: false, msg: error.message }; }
+  else {
+    const { data: mx } = await admin.from('teams').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
+    const { data, error } = await admin.from('teams').insert({ name, leader_id: leader, is_active: true, sort_order: (mx?.sort_order ?? 0) + 10 }).select('id').single();
+    if (error) return { ok: false, msg: error.message }; teamId = data.id;
+  }
+  if (leader && teamId) {
+    const { data: p } = await admin.from('profiles').select('role').eq('id', leader).maybeSingle();
+    await admin.from('profiles').update({ team_id: teamId, ...(p?.role === 'staff' ? { role: 'manager' } : {}) }).eq('id', leader);
+  }
+  revalidatePath('/users'); revalidatePath('/admin/users');
+  return { ok: true, msg: id ? '팀 저장됨' : `「${name}」 팀 추가됨` };
+}

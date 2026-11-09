@@ -1,7 +1,8 @@
 'use client';
 import { notify } from '@/components/Toast';
 import { useState } from 'react';
-import { inviteUser, updateUser, resetPassword, setActive } from './actions';
+import { useRouter } from 'next/navigation';
+import { inviteUser, updateUser, resetPassword, setActive, saveTeam } from './actions';
 type U = { id: string; name: string; email: string; role: string; team_id: number | null; is_mgmt: boolean; position: string | null; hired_at: string | null; annual_leave_granted: number; is_active: boolean };
 type T = { id: number; name: string; leader_id: string | null };
 const roleName: Record<string, string> = { admin: '어드민', head: '총책임자', manager: '팀장', staff: '직원' };
@@ -9,7 +10,7 @@ const roleName: Record<string, string> = { admin: '어드민', head: '총책임�
 export default function UsersClient({ users, teams, isAdmin }: { users: U[]; teams: T[]; isAdmin: boolean }) {
   const [msg, setMsg] = useState<{ t: string; temp?: string } | null>(null); const [showLeft, setShowLeft] = useState(false);
   const shown = users.filter(u => showLeft ? !u.is_active : u.is_active);
-  const [edit, setEdit] = useState<U | null>(null);
+  const [edit, setEdit] = useState<U | null>(null); const [teamEdit, setTeamEdit] = useState<T | null>(null); const router = useRouter();
   const tn = (id: number | null) => teams.find(t => t.id === id)?.name ?? '-';
   return (
     <div style={{ display: 'grid', gap: 18 }}>
@@ -46,7 +47,18 @@ export default function UsersClient({ users, teams, isAdmin }: { users: U[]; tea
               <div style={{ display: 'flex', gap: 8 }}><button className="btn">{edit ? '저장' : '초대 (임시 비밀번호 발급)'}</button>{edit && <button type="button" className="btn ghost" onClick={() => setEdit(null)}>취소</button>}</div>
             </form>
           </div>
-          <div className="card"><h3 style={{ margin: '0 0 10px', fontSize: 15 }}>팀</h3><table><tbody>{teams.map(t => <tr key={t.id}><td>{t.name}</td><td style={{ color: 'var(--muted)', fontSize: 12.5 }}>팀장 {users.find(u => u.id === t.leader_id)?.name ?? '-'}</td><td style={{ textAlign: 'right' }}>{users.filter(u => u.team_id === t.id && u.is_active).length}명</td></tr>)}</tbody></table></div>
+          <div className="card"><h3 style={{ margin: '0 0 10px', fontSize: 15 }}>팀</h3>
+            <table><tbody>{teams.map(t => <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => setTeamEdit(t)}><td><b>{t.name}</b></td><td style={{ color: 'var(--muted)', fontSize: 12.5 }}>팀장 {users.find(u => u.id === t.leader_id)?.name ?? '-'}</td><td style={{ textAlign: 'right' }}>{users.filter(u => u.team_id === t.id && u.is_active).length}명</td></tr>)}</tbody></table>
+            <form key={teamEdit?.id ?? 'new'} action={async fd => { const r = await saveTeam(fd); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) { setTeamEdit(null); router.refresh(); } }} style={{ display: 'grid', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>{teamEdit ? `「${teamEdit.name}」 수정` : '팀 추가'}</div>
+              {teamEdit && <input type="hidden" name="id" value={teamEdit.id} />}
+              <input name="name" placeholder="팀 이름 (예: 3팀)" defaultValue={teamEdit?.name ?? ''} required />
+              <select name="leader_id" defaultValue={teamEdit?.leader_id ?? ''}><option value="">팀장 없음</option>{users.filter(u => u.is_active).map(u => <option key={u.id} value={u.id}>{u.name} ({roleName[u.role]})</option>)}</select>
+              {teamEdit && <label style={{ fontSize: 13 }}><input type="checkbox" name="is_active" defaultChecked style={{ width: 'auto', marginRight: 6 }} />활성 (해제 시 목록에서 숨김 · 소속 직원은 그대로)</label>}
+              <div style={{ display: 'flex', gap: 8 }}><button className="btn">{teamEdit ? '저장' : '팀 추가'}</button>{teamEdit && <button type="button" className="btn ghost" onClick={() => setTeamEdit(null)}>취소</button>}</div>
+              <div className="help">팀장을 지정하면 그 사람이 이 팀 소속·팀장 권한으로 맞춰집니다</div>
+            </form>
+          </div>
         </div>
       </div>
     </div>
