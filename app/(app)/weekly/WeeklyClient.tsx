@@ -2,6 +2,7 @@
 import { notify } from '@/components/Toast';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { saveReport, addPipeline, updatePipeline } from './actions';
 import { won, man, fmtMD, fmtKST } from '@/lib/date/kst';
 import type { Profile } from '@/lib/auth/session';
@@ -14,7 +15,7 @@ const stageStyle: Record<string, React.CSSProperties> = { 콜: { background: 'va
 export default function WeeklyClient(p: { me: Profile; teams: { id: number; name: string; leader_id: string | null }[]; teamId: number; ws: string; we: string; ps: string; pe: string; weeks: { start: string; end: string; status: string; saved: boolean }[]; members: { id: string; name: string; position: string | null }[]; kpi: K[]; report: Rep; notes: { user_id: string; directive: string | null; feedback: string | null }[]; pipeline: P[]; targets: Record<string, number>; monthStart: string; monthEnd: string; monthKey: string; customers: string[] }) {
   const { me, teams, teamId, ws, we, ps, pe, weeks, members, kpi, report, notes, pipeline, targets, monthStart, monthEnd, monthKey, customers } = p;
   const r = useRouter(); const [msg, setMsg] = useState(''); const [cps, setCps] = useState<string[]>(report?.checkpoints?.length ? report.checkpoints : ['']);
-  const canEdit = me.role === 'admin' || (me.role === 'manager' && me.team_id === teamId);
+  const canEdit = false;   // 보관용 — 2026-11부터 주간보고는 월간 보고 주차 카드로 통합. 열람만
   const ids = members.map(m => m.id);
   const S = (rows: K[], k: keyof K) => rows.reduce((a, x) => a + Number(x[k] || 0), 0);
   const inW = (a: string, b: string) => kpi.filter(x => x.work_date >= a && x.work_date <= b);
@@ -28,8 +29,10 @@ export default function WeeklyClient(p: { me: Profile; teams: { id: number; name
   const val = (rows: K[], k: string) => k === 'overtime' ? rows.filter(x => x.overtime).length : S(rows, k as keyof K);
   const fmt = (k: string, v: number) => k === 'margin' ? won(v) : v.toLocaleString();
 
+  const archiveNote = <div className="card" style={{ background: 'var(--wait-soft)', borderColor: 'var(--wait)', fontSize: 13 }}>보관용 화면입니다. 주간보고는 <Link href="/monthly">월간 보고</Link>의 주차 카드로 통합됐고, 제출 마감은 매주 월요일 09:00입니다. 여기 내용은 열람만 됩니다.</div>;
   return (
     <form action={async fd => { const x = await saveReport(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 18 }}>
+      {archiveNote}
       <input type="hidden" name="team_id" value={teamId} /><input type="hidden" name="week_start" value={ws} /><input type="hidden" name="week_end" value={we} />
       <div style={{ background: 'linear-gradient(120deg,#101A4A,#26308F)', color: '#fff', borderRadius: 16, padding: '22px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
         <div><h1 style={{ margin: '0 0 4px', fontSize: 20 }}>영업팀 팀장 주간보고</h1><div style={{ fontSize: 12.5, opacity: .85, display: 'flex', gap: 14 }}><span>{teams.find(t => t.id === teamId)?.name}</span><span>{fmtMD(ws)} ~ {fmtMD(we)}</span><span>{report?.status === 'submitted' ? `제출 완료 ${fmtKST(report.submitted_at)}` : '작성 중'}</span></div></div>

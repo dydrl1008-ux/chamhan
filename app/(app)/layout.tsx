@@ -57,8 +57,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         {unreadIssues > 0 && <NavLink href="/issues">금일 이슈 미확인{issueBadge}</NavLink>}
         <NavGroup title="보고 · 이슈" hrefs={['/monthly', '/weekly', '/reports', '/issues', '/products']}>
-          {(mgr || lead) && <NavLink href="/monthly">월간 계획서</NavLink>}
-          {(mgr || lead) && <NavLink href="/weekly">팀장 주간보고</NavLink>}
+          {(mgr || lead) && <NavLink href="/monthly">월간 보고</NavLink>}
+          {(mgr || lead) && <NavLink href="/weekly">지난 주간보고 (보관)</NavLink>}
           <NavLink href="/reports">보고서</NavLink>
           <NavLink href="/issues">금일 이슈{issueBadge}</NavLink>
           <NavLink href="/products">상품 안내 · 접수</NavLink>

@@ -16,7 +16,7 @@ export type MemberState = {
 };
 export type PlanState = {
   strategy: string;
-  weeks: Record<string, { plan_margin: number; issue: string; fix: string; focus: string; support: string; risk: string }>;
+  weeks: Record<string, { plan_margin: number; issue: string; fix: string; focus: string; support: string; risk: string; directive?: string }>;
   members: Record<string, MemberState>;
 };
 type RenewRef = { settle_no: string; user_id: string; cust_name: string; prod_name: string; amount: number; date_to: string };
@@ -49,7 +49,10 @@ export async function savePlan(teamId: number, bm: string, st: PlanState, refs: 
     for (const wk of weeks) { const x = m.weeks?.[String(wk.no)]; if (!x) continue; mwRows.push({ plan_id: pid, user_id: uid, week_no: wk.no, new_cnt: n(x.new_cnt), new_amt: n(x.new_amt), keep_amt: n(x.keep_amt), goal: x.goal ?? '', tried: x.tried ?? '', judged: x.judged ?? '', changed: x.changed ?? '' }); }
     memberRows.push({ plan_id: pid, user_id: uid, renew_amt: renew, pipe_amt: pipe, new_amt: newAmt, upsell_amt: upsell, verdict: m.verdict ?? '', strategy: m.strategy ?? '', target_note: m.target_note ?? '' });
   }
-  const weekRows = weeks.map(wk => { const x = st.weeks?.[String(wk.no)]; const reviewedBefore = mode === 'review' && wk.end < new Date().toISOString().slice(0, 10); return { plan_id: pid, week_no: wk.no, start_date: wk.start, end_date: wk.end, plan_margin: n(x?.plan_margin), issue: x?.issue ?? '', fix: x?.fix ?? '', focus: x?.focus ?? '', support: x?.support ?? '', risk: x?.risk ?? '', ...(reviewedBefore && (x?.issue || x?.fix) ? { reviewed_at: new Date().toISOString() } : {}) }; });
+  // 총괄 피드백은 팀장 저장 때 지우지 않도록 보존
+  const { data: oldMw } = await sb.from('monthly_plan_member_weeks').select('user_id,week_no,feedback,feedback_by,feedback_at').eq('plan_id', pid);
+  for (const r of mwRows) { const o = (oldMw ?? []).find(x => x.user_id === r.user_id && x.week_no === r.week_no); if (o?.feedback) { r.feedback = o.feedback; r.feedback_by = o.feedback_by; r.feedback_at = o.feedback_at; } }
+  const weekRows = weeks.map(wk => { const x = st.weeks?.[String(wk.no)]; const reviewedBefore = mode === 'review' && wk.end < new Date().toISOString().slice(0, 10); return { plan_id: pid, week_no: wk.no, start_date: wk.start, end_date: wk.end, plan_margin: n(x?.plan_margin), issue: x?.issue ?? '', fix: x?.fix ?? '', focus: x?.focus ?? '', support: x?.support ?? '', risk: x?.risk ?? '', directive: x?.directive ?? '', ...(reviewedBefore && (x?.issue || x?.fix) ? { reviewed_at: new Date().toISOString() } : {}) }; });
   // 자식 테이블: 지우고 다시 넣기 (plan 단위)
   for (const t of ['monthly_plan_renewals', 'monthly_plan_pipes', 'monthly_plan_upsells', 'monthly_plan_activities', 'monthly_plan_member_weeks', 'monthly_plan_members']) { const { error } = await sb.from(t).delete().eq('plan_id', pid); if (error) return { ok: false, msg: `${t} 정리 실패: ${error.message}` }; }
   const ins = async (t: string, rows: any[]) => { if (!rows.length) return null; const { error } = await sb.from(t).insert(rows); return error ? `${t} 저장 실패: ${error.message}` : null; };
@@ -67,4 +70,44 @@ export async function addActivityType(name: string): Promise<R> {
   const nm = name.trim(); if (!nm) return { ok: false, msg: '이름을 입력하세요' };
   const { error } = await supabaseServer().from('activity_types').upsert({ name: nm, created_by: me.id, is_active: true }, { onConflict: 'name' });
   if (error) return { ok: false, msg: error.message }; revalidatePath('/monthly'); return { ok: true, msg: `활동 '${nm}' 추가` };
+}
+
+/** 주차 제출 (팀장) — 마감: 주 종료 다음 월요일 09:00. 끝난 주는 사람별 결과, 다음 주 목표(숫자 포함) 없으면 막음 */
+export async function submitWeek(teamId: number, bm: string, weekNo: number): Promise<R> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  if (!canEdit(me, teamId)) return { ok: false, msg: '해당 팀 팀장만 제출할 수 있습니다' };
+  const sb = supabaseServer();
+  const { data: plan } = await sb.from('monthly_plans').select('id').eq('team_id', teamId).eq('month', bm + '-01').maybeSingle();
+  if (!plan) return { ok: false, msg: '먼저 임시저장하세요' };
+  const weeks = bizWeeks(bm); const wk = weeks.find(w => w.no === weekNo); if (!wk) return { ok: false, msg: '주차 오류' };
+  const next = weeks.find(w => w.no === weekNo + 1);
+  const [{ data: members }, { data: mw }] = await Promise.all([
+    sb.from('profiles').select('id,name').eq('team_id', teamId).eq('is_active', true).eq('role', 'staff'),
+    sb.from('monthly_plan_member_weeks').select('user_id,week_no,goal,judged').eq('plan_id', plan.id),
+  ]);
+  const miss: string[] = [];
+  for (const m of members ?? []) {
+    const cur = (mw ?? []).find(x => x.user_id === m.id && x.week_no === weekNo); const nx = next ? (mw ?? []).find(x => x.user_id === m.id && x.week_no === next.no) : null;
+    if (!cur?.judged?.trim()) miss.push(`${m.name} ${weekNo}주 결과`);
+    if (next && !/\d/.test(nx?.goal ?? '')) miss.push(`${m.name} ${next.no}주 목표(숫자)`);
+  }
+  if (miss.length) return { ok: false, msg: `먼저 채우고 저장하세요: ${miss.slice(0, 4).join(' · ')}${miss.length > 4 ? ` 외 ${miss.length - 4}` : ''}` };
+  const { error } = await sb.from('monthly_plan_weeks').update({ submitted_at: new Date().toISOString(), submitted_by: me.id }).eq('plan_id', plan.id).eq('week_no', weekNo);
+  if (error) return { ok: false, msg: error.message };
+  ['/monthly', '/'].forEach(p => revalidatePath(p));
+  return { ok: true, msg: `${weekNo}주 보고 제출 완료` };
+}
+
+/** 사람별 주차 피드백 — 총괄·대표 */
+export async function saveFeedback(teamId: number, bm: string, userId: string, weekNo: number, text: string): Promise<R> {
+  const me = await getProfile(); if (!me || !['admin', 'head'].includes(me.role)) return { ok: false, msg: '총괄·대표만 쓸 수 있습니다' };
+  const sb = supabaseServer();
+  const { data: plan } = await sb.from('monthly_plans').select('id').eq('team_id', teamId).eq('month', bm + '-01').maybeSingle();
+  if (!plan) return { ok: false, msg: '계획서가 없습니다' };
+  const { data: ex } = await sb.from('monthly_plan_member_weeks').select('user_id').eq('plan_id', plan.id).eq('user_id', userId).eq('week_no', weekNo).maybeSingle();
+  const patch = { feedback: text.trim().slice(0, 1000), feedback_by: me.id, feedback_at: new Date().toISOString() };
+  const { error } = ex ? await sb.from('monthly_plan_member_weeks').update(patch).eq('plan_id', plan.id).eq('user_id', userId).eq('week_no', weekNo)
+    : await sb.from('monthly_plan_member_weeks').insert({ plan_id: plan.id, user_id: userId, week_no: weekNo, ...patch });
+  if (error) return { ok: false, msg: error.message };
+  revalidatePath('/monthly'); return { ok: true, msg: '피드백 저장' };
 }

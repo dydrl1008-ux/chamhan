@@ -9,7 +9,7 @@ import { won, man, fmtMD, fmtKST, addDays } from '@/lib/date/kst';
 import { bizLabel, prevBizMonth, nextBizMonth } from '@/lib/date/period';
 import type { Profile } from '@/lib/auth/session';
 import type { PlanData } from '@/lib/monthly';
-import { savePlan, addActivityType, type PlanState, type MemberState } from './actions';
+import { savePlan, submitWeek, saveFeedback, addActivityType, type PlanState, type MemberState } from './actions';
 
 type Props = { me: Profile; teams: { id: number; name: string; leader: string }[]; teamId: number; bm: string; curBm: string; nextBm: string; data: PlanData | null; summaries: any[]; canEdit: boolean; tab: string };
 const nz = (v: unknown) => { const x = Number(String(v ?? '0').replace(/[^\d.-]/g, '')); return Number.isFinite(x) ? x : 0; };
@@ -25,6 +25,13 @@ export default function MonthlyClient({ me, teams, teamId, bm, curBm, nextBm, da
   const [st, setSt] = useState<PlanState>(() => init(data));
   let [person, setPerson] = useState<string>(data?.auto[0]?.user_id ?? '');
   const d = data; const weeks = d?.weeks ?? []; const cur = d?.curWeek ?? null; const today = d?.today ?? '';
+  const rowsFor = (v: string) => Math.min(10, Math.max(2, (v ?? '').split('\n').length + Math.floor((v ?? '').length / 80)));   // 내용만큼 늘어나는 칸 — 한 줄짜리로 잘려 안 보이던 것 해결
+  const isLead = me.role === 'admin' || me.role === 'head';
+  const deadline = (end: string) => { const x = new Date(end + 'T09:00:00+09:00'); do { x.setDate(x.getDate() + 1); } while (x.getUTCDay() !== 1); return x; };   // 주 종료 다음 월요일 09:00 KST
+  const wkRow = (no: number) => d?.detail?.weeks?.find((y: any) => y.week_no === no);
+  const fbOf = (uid: string, no: number) => d?.detail?.memberWeeks?.find((y: any) => y.user_id === uid && y.week_no === no)?.feedback ?? '';
+  const [fb, setFb] = useState<Record<string, string>>({});
+  const doSubmitWeek = async (no: number) => { if (!d || !calc) return; setBusy(true); await save('save', true); const x = await submitWeek(teamId, bm, no); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
   const wT = d?.cfg.wT ?? 0.5; const w = (m: 'o' | 't' | 'x') => m === 'o' ? 1 : m === 't' ? wT : 0;
 
   // ---------- 파생 금액 ----------
@@ -55,20 +62,20 @@ export default function MonthlyClient({ me, teams, teamId, bm, curBm, nextBm, da
   const upd = (f: (s: PlanState) => void) => setSt(s => { const c = structuredClone(s); f(c); return c; });
   const EMPTY_M: MemberState = { renew: {}, pipes: {}, upsells: [], activities: [], weeks: {}, verdict: '', strategy: '', target_note: '' };
   const mem = (uid: string) => st.members[uid] ?? EMPTY_M;
-  const save = async (mode: 'save' | 'submit' | 'review') => {
+  const save = async (mode: 'save' | 'submit' | 'review', quiet = false) => {
     if (!d || !calc) return; if (mode === 'submit' && !confirm('제출하면 개인 목표가 홈·현황 달성률 기준으로 반영됩니다. 제출할까요?')) return;
     setBusy(true);
     // 주차 계획은 파생값을 저장
     const s2 = structuredClone(st); for (const wk of weeks) { s2.weeks[String(wk.no)] = { ...(s2.weeks[String(wk.no)] ?? { issue: '', fix: '', focus: '', support: '', risk: '' }), plan_margin: calc.teamW[wk.no].plan }; for (const m of d.auto) { const mw = s2.members[m.user_id].weeks[String(wk.no)] ?? { new_cnt: 0, new_amt: 0, keep_amt: 0, goal: '', tried: '', judged: '', changed: '' }; mw.keep_amt = calc.per[m.user_id].keepW[wk.no] ?? 0; s2.members[m.user_id].weeks[String(wk.no)] = mw; } }
     const x = await savePlan(teamId, bm, s2, { renewals: d.renewals.map(x => ({ settle_no: x.settle_no, user_id: x.user_id, cust_name: x.cust_name, prod_name: x.prod_name, amount: nz(x.sale_total), date_to: x.date_to })), pipes: d.pipes.map(p => ({ id: p.id, owner_id: p.owner_id, amount: p.amount })), weightT: wT }, mode);
-    setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh();
+    if (quiet) return; setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh();
   };
 
   // ---------- 헤더 ----------
   const teamName = teams.find(x => x.id === teamId)?.name ?? '전사';
   const lastDone = weeks.filter(x => x.end < today).at(-1);
   const head = (
-    <PageHeader title={`${teamName} ${Number(bm.slice(5))}월 계획서`} desc={`업무월 ${d ? `${fmtMD(d.ms)} → ${fmtMD(d.me)}` : ''} · ${d?.plan ? (d.plan.status === 'submitted' ? `제출 ${fmtKST(d.plan.submitted_at)}` : '작성 중') : '아직 작성 전'}${d?.plan?.last_review_at ? ` · 마지막 리뷰 ${fmtKST(d.plan.last_review_at)}` : ''}${cur ? ` · ${cur}주차 진행 중` : ''}`}
+    <PageHeader title={`${teamName} ${Number(bm.slice(5))}월 보고`} desc={`업무월 ${d ? `${fmtMD(d.ms)} → ${fmtMD(d.me)}` : ''} · ${d?.plan ? (d.plan.status === 'submitted' ? `제출 ${fmtKST(d.plan.submitted_at)}` : '작성 중') : '아직 작성 전'}${d?.plan?.last_review_at ? ` · 마지막 리뷰 ${fmtKST(d.plan.last_review_at)}` : ''}${cur ? ` · ${cur}주차 진행 중` : ''}`}
       actions={<>
         {me.role !== 'manager' && <select value={teamId} onChange={e => go({ team: e.target.value, tab: t })} style={{ width: 140 }}><option value={0}>전사 보기</option>{teams.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><button className="btn ghost" onClick={() => go({ m: prevBizMonth(bm), tab: t })}>‹</button><b style={{ minWidth: 90, textAlign: 'center' }}>{bizLabel(bm)}</b><button className="btn ghost" disabled={bm >= nextBm} onClick={() => go({ m: nextBizMonth(bm), tab: t })}>›</button></div>
@@ -103,20 +110,27 @@ export default function MonthlyClient({ me, teams, teamId, bm, curBm, nextBm, da
     <Section title="이번 달 영업 전략" sub="월초에 쓰고, 리뷰 때 고침 · 팀장">
       <textarea style={ta} rows={5} disabled={!canEdit} value={st.strategy} onChange={e => upd(s => { s.strategy = e.target.value; })} placeholder={'1. 재계약 먼저 (1~2주) — …\n2. 신규는 소개·메일로 (2~3주) — …\n3. 사람별로 다르게 — …\n4. 업셀링 — …'} />
     </Section>
-    <Section title="주차 리뷰" sub="매주 월요일 · 실제는 자동 · 미흡/보완만 씀" flush>
+    <Section title="주차 보고" sub="매주 월요일 09:00 마감 · 실제 수치는 자동 · 미흡/보완·지시만 씀 · 사람별 결과·목표는 인원 탭" flush>
       <div style={{ display: 'grid' }}>{weeks.map(wk => { const tw = calc.teamW[wk.no]; const x = st.weeks[String(wk.no)] ?? { plan_margin: 0, issue: '', fix: '', focus: '', support: '', risk: '' }; const isCur = wk.no === cur; const done = tw.done; const ratio = tw.plan ? tw.actual / tw.plan : null;
         return <div key={wk.no} style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 16, padding: '14px 22px', borderTop: '1px solid var(--line)', background: isCur ? 'var(--accent-soft)' : undefined }}>
           <div><b>{wk.no}주</b> {done ? <Status kind="ok">완료</Status> : isCur ? <Status kind="wait">진행 중</Status> : null}<div className="cell-sub num">{fmtMD(wk.start)} ~ {fmtMD(wk.end)}</div></div>
           <div style={{ display: 'grid', gap: 8 }}>
             <div className="num" style={{ fontSize: 14 }}>계획 <b>{won(tw.plan)}</b>{tw.carry ? <span className="cell-sub" style={{ display: 'inline' }}> (이월 +{man(tw.carry)})</span> : null}{done || isCur ? <> → 실제 <b style={{ color: done && ratio != null && ratio < d.cfg.weekRatio ? 'var(--bad-ink)' : 'var(--ok-ink)' }}>{won(tw.actual)}</b>{done && ratio != null ? ` (${Math.round(ratio * 100)}%)` : ''}</> : null}</div>
             {(done || isCur || canEdit) && <div className="grid2">
-              {(done || x.issue) && <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>미흡 · 원인</div><textarea style={{ ...ta, minHeight: 56 }} rows={3} disabled={!canEdit} value={x.issue} onChange={e => upd(s => { s.weeks[String(wk.no)] = { ...x, issue: e.target.value }; })} placeholder="뭐가 안 됐고 왜" /></div>}
-              <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>{done ? '이 주에 집중했던 것' : '이 주 보완 · 집중할 것'}</div>{!done && x.focus && <div className="cell-sub" style={{ marginBottom: 4, padding: '4px 8px', background: 'var(--bg)', borderRadius: 6, whiteSpace: 'pre-wrap' }}>↳ 지난 주 리뷰에서 넘어온 보완: {x.focus}</div>}<textarea style={{ ...ta, minHeight: 56 }} rows={3} disabled={!canEdit} value={x.fix} onChange={e => upd(s => { s.weeks[String(wk.no)] = { ...x, fix: e.target.value }; })} placeholder="이 주에 집중할 것" /></div>
-              {done && weeks.some(w2 => w2.no === wk.no + 1) && (() => { const nx = st.weeks[String(wk.no + 1)] ?? { plan_margin: 0, issue: '', fix: '', focus: '', support: '', risk: '' }; return <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>→ 그래서 다음 주({wk.no + 1}주) 보완</div><textarea style={{ ...ta, minHeight: 56 }} rows={3} disabled={!canEdit} value={nx.focus} onChange={e => upd(s => { s.weeks[String(wk.no + 1)] = { ...nx, focus: e.target.value }; })} placeholder="뭘 바꾸는지 — 다음 주 카드 위에 표시됨" /></div>; })()}
+              {(done || x.issue) && <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>미흡 · 원인</div><textarea style={{ ...ta, minHeight: 56 }} rows={rowsFor(x.issue)} disabled={!canEdit} value={x.issue} onChange={e => upd(s => { s.weeks[String(wk.no)] = { ...x, issue: e.target.value }; })} placeholder="뭐가 안 됐고 왜" /></div>}
+              <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>{done ? '이 주에 집중했던 것' : '이 주 보완 · 집중할 것'}</div>{!done && x.focus && <div className="cell-sub" style={{ marginBottom: 4, padding: '4px 8px', background: 'var(--bg)', borderRadius: 6, whiteSpace: 'pre-wrap' }}>↳ 지난 주 리뷰에서 넘어온 보완: {x.focus}</div>}<textarea style={{ ...ta, minHeight: 56 }} rows={rowsFor(x.fix)} disabled={!canEdit} value={x.fix} onChange={e => upd(s => { s.weeks[String(wk.no)] = { ...x, fix: e.target.value }; })} placeholder="이 주에 집중할 것" /></div>
+              {done && weeks.some(w2 => w2.no === wk.no + 1) && (() => { const nx = st.weeks[String(wk.no + 1)] ?? { plan_margin: 0, issue: '', fix: '', focus: '', support: '', risk: '' }; return <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>→ 그래서 다음 주({wk.no + 1}주) 보완</div><textarea style={{ ...ta, minHeight: 56 }} rows={rowsFor(nx.focus)} disabled={!canEdit} value={nx.focus} onChange={e => upd(s => { s.weeks[String(wk.no + 1)] = { ...nx, focus: e.target.value }; })} placeholder="뭘 바꾸는지 — 다음 주 카드 위에 표시됨" /></div>; })()}
             </div>}
             {(isCur || x.support || x.risk) && <div className="grid2">
-              <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>지원 요청 (대표·총괄·관리팀)</div><textarea style={{ ...ta, minHeight: 44 }} rows={2} disabled={!canEdit} value={x.support} onChange={e => upd(s => { s.weeks[String(wk.no)] = { ...x, support: e.target.value }; })} placeholder="한 줄에 하나 — 요약 탭 '결정 필요'에 올라감" /></div>
-              <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>리스크</div><textarea style={{ ...ta, minHeight: 44 }} rows={2} disabled={!canEdit} value={x.risk} onChange={e => upd(s => { s.weeks[String(wk.no)] = { ...x, risk: e.target.value }; })} /></div>
+              <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>지원 요청 (대표·총괄·관리팀)</div><textarea style={{ ...ta, minHeight: 44 }} rows={rowsFor(x.support)} disabled={!canEdit} value={x.support} onChange={e => upd(s => { s.weeks[String(wk.no)] = { ...x, support: e.target.value }; })} placeholder="한 줄에 하나 — 요약 탭 '결정 필요'에 올라감" /></div>
+              <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>리스크</div><textarea style={{ ...ta, minHeight: 44 }} rows={rowsFor(x.risk)} disabled={!canEdit} value={x.risk} onChange={e => upd(s => { s.weeks[String(wk.no)] = { ...x, risk: e.target.value }; })} /></div>
+              <div><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 2 }}>다음 주 공통 지시 (팀 전체)</div><textarea style={{ ...ta, minHeight: 44 }} rows={rowsFor(x.directive ?? '')} disabled={!canEdit} value={x.directive ?? ''} onChange={e => upd(s => { s.weeks[String(wk.no)] = { ...x, directive: e.target.value }; })} placeholder="예: 재계약 D-3 고객 전원 월요일 오전 콜 · 메일 열람 업체 우선" /></div>
+              {(isCur || done) && (() => { const hot = d.pipes.filter(p => ['협상', '결제'].includes(p.stage)); return hot.length ? <div style={{ gridColumn: '1 / -1' }}><div className="cell-sub" style={{ fontWeight: 700, marginBottom: 4 }}>파이프라인 협상·결제 (현재)</div><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{hot.map(p => <span key={p.id} className="chip" style={{ fontSize: 12, background: p.stage === '결제' ? 'var(--ok-soft)' : '#FDF1DD', color: p.stage === '결제' ? 'var(--ok)' : '#D97706' }}>{d.auto.find(m => m.user_id === p.owner_id)?.name ?? '-'} · {p.client} · {p.stage} · {man(p.amount)}</span>)}</div></div> : null; })()}
+              {(() => { const row = wkRow(wk.no); const dl = deadline(wk.end); const sub = row?.submitted_at ? new Date(row.submitted_at) : null; const late = sub ? sub > dl : new Date() > dl; return <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', paddingTop: 6, borderTop: '1px dashed var(--line)' }}>
+                {sub ? <Status kind={late ? 'bad' : 'ok'}>{late ? '지각 제출' : '제출 완료'} · {fmtKST(row.submitted_at)}</Status> : done ? <Status kind={late ? 'bad' : 'wait'}>{late ? '미제출 · 마감 지남' : '미제출'}</Status> : <span className="cell-sub">마감 {fmtMD(dl.toISOString().slice(0, 10))}(월) 09:00</span>}
+                {canEdit && (done || isCur) && <button className="btn" style={{ padding: '5px 12px' }} disabled={busy} onClick={() => doSubmitWeek(wk.no)}>{sub ? `${wk.no}주 다시 제출` : `${wk.no}주 보고 제출`}</button>}
+                {canEdit && <span className="cell-sub">제출 조건: 사람별 {wk.no}주 결과 + 다음 주 목표(숫자) 입력</span>}
+              </div>; })()}
             </div>}
           </div></div>; })}</div>
       <div className="cell-sub" style={{ padding: '10px 22px' }}>주차 계획 합 = 월 목표 {won(calc.target)} · 지난 주에서 빠진 금액은 이번 주에 이월로 얹힘</div>
@@ -140,14 +154,15 @@ export default function MonthlyClient({ me, teams, teamId, bm, curBm, nextBm, da
     </Section>
     <Section title="주차별 실행 기록 — 시도 → 결과 → 변경" sub="실제 숫자는 자동 · 판단·변경은 팀장" flush>
       <div>{weeks.map(wk => { const x = ms.weeks[String(wk.no)] ?? { new_cnt: 0, new_amt: 0, keep_amt: 0, goal: '', tried: '', judged: '', changed: '' }; const a = pm.weeks[wk.no]; const done = wk.end < today; const isCur = wk.no === cur; const planAmt = (pc.keepW[wk.no] ?? 0) + nz(x.new_amt);
-        return <div key={wk.no} style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 14, padding: '12px 22px', borderTop: '1px solid var(--line)', background: isCur ? 'var(--accent-soft)' : undefined }}>
+        return <div key={wk.no} style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 14, padding: '18px 22px', borderTop: isCur ? '2px solid var(--accent)' : '1px solid var(--line)', background: isCur ? 'var(--accent-soft)' : undefined }}>
           <div><b>{wk.no}주</b><div className="cell-sub num">{fmtMD(wk.start)}~{fmtMD(wk.end)}</div></div>
           <div style={{ display: 'grid', gridTemplateColumns: '56px 1fr', gap: '6px 10px', alignItems: 'start', fontSize: 14 }}>
             <span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8 }}>마진</span><div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><span className="cell-sub">신규</span><input style={{ ...inp, width: 60 }} disabled={!canEdit} value={x.new_cnt || ''} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, new_cnt: nz(e.target.value) }; })} placeholder="건" title="신규 예상 건 (선택)" /><span className="cell-sub">건 ·</span><input style={{ ...inp, width: 110 }} disabled={!canEdit} value={x.new_amt ? x.new_amt.toLocaleString() : ''} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, new_amt: nz(e.target.value) }; })} placeholder="신규 마진" /><span className="cell-sub">+ 기존(재계약·파이프·업셀) <b className="num">{won(pc.keepW[wk.no] ?? 0)}</b> = <b className="num">{won(planAmt)}</b></span>{(done || isCur) && a && <span className="num" style={{ marginLeft: 6 }}>→ 실제 <b style={{ color: done && planAmt && a.margin < planAmt * d.cfg.weekRatio ? 'var(--bad-ink)' : 'var(--ok-ink)' }}>{won(a.margin)}</b> <span className="cell-sub" style={{ display: 'inline' }}>(신규 {man(a.new_margin)} · 기존 {man(a.keep_margin)} · 콜 {a.calls} · 신규 {a.new_cnt}건)</span></span>}</div>
-            <span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8 }}>목표</span><textarea style={{ ...ta, minHeight: 40 }} rows={1} disabled={!canEdit} value={x.goal} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, goal: e.target.value }; })} placeholder="이 주 목표 — 사람마다 다르게 (재계약 9건 마감 · 업셀 2건 · 신규 3건 · 콜 220 …)" />
-            <span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8 }}>시도</span><textarea style={{ ...ta, minHeight: 40 }} rows={1} disabled={!canEdit} value={x.tried} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, tried: e.target.value }; })} placeholder="이 주에 하기로 한 것 (콜 220 · 메일 150 · 재계약 9건 마감 …)" />
-            {(done || x.judged) && <><span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8 }}>결과</span><textarea style={{ ...ta, minHeight: 40 }} rows={1} disabled={!canEdit} value={x.judged} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, judged: e.target.value }; })} placeholder="효과 있던 것 / 없던 것 · 원인" /></>}
-            {(done || x.changed) && <><span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8 }}>변경</span><textarea style={{ ...ta, minHeight: 40 }} rows={1} disabled={!canEdit} value={x.changed} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, changed: e.target.value }; })} placeholder="→ 다음 주 이렇게 바꿈" /></>}
+            <span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8 }}>목표</span><textarea style={{ ...ta, minHeight: 40 }} rows={rowsFor(x.goal)} disabled={!canEdit} value={x.goal} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, goal: e.target.value }; })} placeholder="이 주 목표 — 사람마다 다르게 (재계약 9건 마감 · 업셀 2건 · 신규 3건 · 콜 220 …)" />
+            <span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8 }}>시도</span><textarea style={{ ...ta, minHeight: 40 }} rows={rowsFor(x.tried)} disabled={!canEdit} value={x.tried} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, tried: e.target.value }; })} placeholder="이 주에 하기로 한 것 (콜 220 · 메일 150 · 재계약 9건 마감 …)" />
+            {(done || x.judged) && <><span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8 }}>결과</span><textarea style={{ ...ta, minHeight: 40 }} rows={rowsFor(x.judged)} disabled={!canEdit} value={x.judged} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, judged: e.target.value }; })} placeholder="효과 있던 것 / 없던 것 · 원인" /></>}
+            {(done || isCur || fbOf(person, wk.no)) && <><span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8, color: 'var(--accent)' }}>총괄 피드백</span>{isLead ? <div style={{ display: 'flex', gap: 6 }}><textarea style={{ ...ta, minHeight: 40, flex: 1 }} rows={1} value={fb[`${person}:${wk.no}`] ?? fbOf(person, wk.no)} onChange={e => setFb({ ...fb, [`${person}:${wk.no}`]: e.target.value })} placeholder="이 사람 이 주에 대한 피드백 — 팀장·본인에게 보임" /><button className="btn ghost" style={{ padding: '4px 10px' }} disabled={busy} onClick={async () => { const x = await saveFeedback(teamId, bm, person, wk.no, fb[`${person}:${wk.no}`] ?? fbOf(person, wk.no)); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }}>저장</button></div> : <div style={{ whiteSpace: 'pre-wrap', padding: '8px 10px', background: 'var(--accent-soft)', borderRadius: 8, fontSize: 13, color: fbOf(person, wk.no) ? 'inherit' : 'var(--muted)' }}>{fbOf(person, wk.no) || '아직 없음'}</div>}</>}
+            {(done || x.changed) && <><span className="cell-sub" style={{ fontWeight: 700, paddingTop: 8 }}>변경</span><textarea style={{ ...ta, minHeight: 40 }} rows={rowsFor(x.changed)} disabled={!canEdit} value={x.changed} onChange={e => upd(s => { s.members[person].weeks[String(wk.no)] = { ...x, changed: e.target.value }; })} placeholder="→ 다음 주 이렇게 바꿈" /></>}
           </div></div>; })}</div>
     </Section>
     <div className="grid2">
@@ -242,7 +257,7 @@ function AddActivity({ types, used, onAdd }: { types: string[]; used: string[]; 
 function init(d: PlanData | null): PlanState {
   const s: PlanState = { strategy: d?.plan?.strategy ?? '', weeks: {}, members: {} };
   if (!d) return s;
-  for (const wk of d.weeks) { const x = d.detail?.weeks?.find((y: any) => y.week_no === wk.no); s.weeks[String(wk.no)] = { plan_margin: Number(x?.plan_margin ?? 0), issue: x?.issue ?? '', fix: x?.fix ?? '', focus: x?.focus ?? '', support: x?.support ?? '', risk: x?.risk ?? '' }; }
+  for (const wk of d.weeks) { const x = d.detail?.weeks?.find((y: any) => y.week_no === wk.no); s.weeks[String(wk.no)] = { plan_margin: Number(x?.plan_margin ?? 0), issue: x?.issue ?? '', fix: x?.fix ?? '', focus: x?.focus ?? '', support: x?.support ?? '', risk: x?.risk ?? '', directive: x?.directive ?? '' }; }
   for (const m of d.auto) {
     const dm = d.detail?.members?.find((y: any) => y.user_id === m.user_id);
     const ms: MemberState = { renew: {}, pipes: {}, upsells: [], activities: [], weeks: {}, verdict: dm?.verdict ?? '', strategy: dm?.strategy ?? '', target_note: dm?.target_note ?? '' };

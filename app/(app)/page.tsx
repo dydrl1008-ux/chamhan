@@ -179,13 +179,13 @@ export default async function Home() {
     const w = wrCur(p.team_id);
     return (
       <div className="page">
-        <PageHeader title={`${tn(p.team_id)} — ${dayLabel(today)}`} desc={`팀원 ${staff.length}명 · ${bizLabel(bm)} 기준 · 주간보고 ${w?.status === 'submitted' ? '제출 완료' : w ? '작성 중' : '미작성'}`} actions={<><Link href="/kpi" className="btn ghost">내 KPI 제출</Link><Link href="/weekly" className="btn">주간보고 {w?.status === 'submitted' ? '보기' : '작성'} →</Link></>} />
+        <PageHeader title={`${tn(p.team_id)} — ${dayLabel(today)}`} desc={`팀원 ${staff.length}명 · ${bizLabel(bm)} 기준 · 월간 보고(주차)는 월요일 09:00 마감`} actions={<><Link href="/kpi" className="btn ghost">내 KPI 제출</Link><Link href="/monthly" className="btn">월간 보고 →</Link></>} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <span className="cell-sub" style={{ fontWeight: 700, marginRight: 4 }}>처리할 것</span>
           <Chip n={pendMine.length} label="근태 승인 (팀장)" href="/leave" />
           <Chip n={noAtt.length} label="미출근" href="/attendance" hot />
           <Chip n={noKpi.length} label="KPI 미제출" href="/kpi" />
-          {!w && <Chip n={1} label="주간보고 미작성" href="/weekly" />}
+          
           <Chip n={mpNeed} label={!mpl?.hasPlan ? '월간 계획서 미작성' : `${mpl.lastWeek?.no ?? ''}주 리뷰 안 함`} href="/monthly" hot={!!mpl && mpl.overdue >= 3} />
         </div>
         <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', padding: '22px 0' }}>
@@ -222,7 +222,7 @@ export default async function Home() {
         <Chip n={openRows.length} label="정산 승인 대기" href="/pending" hot />
         <Chip n={pendMine.length} label="근태 최종 승인" href="/leave" />
         <Chip n={noKpi.length} label="KPI 미제출" href="/kpi" />
-        <Chip n={wrMissing.length} label="주간보고 미제출 팀" href="/weekly" />
+        <Chip n={wrMissing.length} label="지난 주간보고 미제출 팀 (보관)" href="/weekly" />
         <Chip n={mpMissing.length} label="월간 계획서 미작성·리뷰 안 한 팀" href="/monthly" hot={mpMissing.some(x => x.s.overdue >= 3)} />
         {openRows.length > 0 && <span className="cell-sub" style={{ marginLeft: 'auto' }}>승인 대기 {won(openSum)} · 가장 오래된 건 {oldest ? fmtKST(oldest) : ''}</span>}
       </div>
