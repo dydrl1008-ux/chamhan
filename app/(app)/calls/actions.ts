@@ -14,7 +14,7 @@ export async function setResult(id: number, status: string, note: string, next?:
   const nx = status === 'interested' && next && /^\d{4}-\d{2}-\d{2}$/.test(next) ? next : null;
   const { error } = await supabaseServer().rpc('lead_set_result', { p_id: id, p_status: status, p_note: note.slice(0, 1000), p_next: nx });
   if (error) return { ok: false, msg: error.message };
-  revalidatePath('/calls');
+  // revalidatePath 안 함 — 클릭마다 페이지 전체 재조회가 로딩·무한 대기의 원인. 화면은 클라이언트가 먼저 바꾸고 저장은 뒤에서
   return { ok: true, msg: nx ? `기록됨 · ${nx.slice(5).replace('-', '/')} 아침 리스트 맨 위에 다시 뜸` : '기록됨' };
 }
 /** 관심 업체 다음 연락일 변경 */
@@ -23,7 +23,7 @@ export async function setNext(id: number, next: string): Promise<R> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(next)) return { ok: false, msg: '날짜 확인' };
   const { error } = await supabaseServer().rpc('lead_set_next', { p_id: id, p_next: next });
   if (error) return { ok: false, msg: error.message };
-  revalidatePath('/calls'); return { ok: true, msg: `다음 연락일 ${next.slice(5).replace('-', '/')}` };
+  return { ok: true, msg: `다음 연락일 ${next.slice(5).replace('-', '/')}` };
 }
 
 /** 제안서 주소를 추적 링크로 감싸기 — 고객이 열면 담당자에게 알림 */
@@ -43,7 +43,6 @@ export async function undoResult(id: number): Promise<R> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const { error } = await supabaseServer().rpc('lead_undo_result', { p_id: id });
   if (error) return { ok: false, msg: error.message.replace(/^.*?: /, '') };
-  revalidatePath('/calls'); revalidatePath('/leads');
   return { ok: true, msg: '되돌림 — 다시 오늘 리스트에 있음' };
 }
 
