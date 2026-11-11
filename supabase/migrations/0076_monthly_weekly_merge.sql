@@ -10,3 +10,11 @@ drop policy if exists mpmw_feedback_lead on monthly_plan_member_weeks;
 create policy mpmw_feedback_lead on monthly_plan_member_weeks for update using (exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('admin','head'))) with check (true);
 drop policy if exists mpw_lead_update on monthly_plan_weeks;
 create policy mpw_lead_update on monthly_plan_weeks for update using (exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('admin','head','manager'))) with check (true);
+
+-- 총괄(head)도 월간 보고 작성·수정 가능
+drop policy if exists mp_write on monthly_plans; create policy mp_write on monthly_plans for all using (is_admin() or my_role()='head' or manages_team(team_id)) with check (is_admin() or my_role()='head' or manages_team(team_id));
+do $$ declare t text; begin
+  foreach t in array array['monthly_plan_weeks','monthly_plan_members','monthly_plan_renewals','monthly_plan_pipes','monthly_plan_upsells','monthly_plan_activities','monthly_plan_member_weeks'] loop
+    execute format('drop policy if exists %1$s_write on %1$I; create policy %1$s_write on %1$I for all using (is_admin() or my_role()=''head'' or manages_team(plan_team(plan_id))) with check (is_admin() or my_role()=''head'' or manages_team(plan_team(plan_id)))', t);
+  end loop; end $$;
+drop policy if exists at_write on activity_types; create policy at_write on activity_types for all using (is_admin() or my_role() in ('head','manager')) with check (is_admin() or my_role() in ('head','manager'));

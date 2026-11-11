@@ -4,7 +4,7 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
 import { bizWeeks, n } from '@/lib/monthly';
 type R = { ok: boolean; msg: string };
-const canEdit = (me: { role: string; team_id: number | null }, team: number) => me.role === 'admin' || (me.role === 'manager' && me.team_id === team);
+const canEdit = (me: { role: string; team_id: number | null }, team: number) => me.role === 'admin' || me.role === 'head' || (me.role === 'manager' && me.team_id === team);
 
 export type MemberState = {
   renew: Record<string, 'o' | 't' | 'x'>;                       // settle_no → mark
@@ -66,7 +66,7 @@ export async function savePlan(teamId: number, bm: string, st: PlanState, refs: 
 }
 
 export async function addActivityType(name: string): Promise<R> {
-  const me = await getProfile(); if (!me || !['admin', 'manager'].includes(me.role)) return { ok: false, msg: '권한 없음' };
+  const me = await getProfile(); if (!me || !['admin', 'head', 'manager'].includes(me.role)) return { ok: false, msg: '권한 없음' };
   const nm = name.trim(); if (!nm) return { ok: false, msg: '이름을 입력하세요' };
   const { error } = await supabaseServer().from('activity_types').upsert({ name: nm, created_by: me.id, is_active: true }, { onConflict: 'name' });
   if (error) return { ok: false, msg: error.message }; revalidatePath('/monthly'); return { ok: true, msg: `활동 '${nm}' 추가` };
