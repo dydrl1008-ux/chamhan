@@ -222,7 +222,6 @@ export default async function Home() {
         <Chip n={openRows.length} label="정산 승인 대기" href="/pending" hot />
         <Chip n={pendMine.length} label="근태 최종 승인" href="/leave" />
         <Chip n={noKpi.length} label="KPI 미제출" href="/kpi" />
-        <Chip n={wrMissing.length} label="지난 주간보고 미제출 팀 (보관)" href="/weekly" />
         <Chip n={mpMissing.length} label="월간 계획서 미작성·리뷰 안 한 팀" href="/monthly" hot={mpMissing.some(x => x.s.overdue >= 3)} />
         {openRows.length > 0 && <span className="cell-sub" style={{ marginLeft: 'auto' }}>승인 대기 {won(openSum)} · 가장 오래된 건 {oldest ? fmtKST(oldest) : ''}</span>}
       </div>
