@@ -20,7 +20,7 @@ export default async function Pv3View({ searchParams }: { searchParams: { kind?:
     const { data: kd } = await sb.from('pv3_keywords').select('data,ai').eq('keyword', String(searchParams.ref ?? '')).maybeSingle(); if (!kd) return <div style={{ padding: 40 }}>키워드 없음</div>;
     k = kd.data as KwData; s = computeStore(k, { store: '귀사', rank: null, reviews: null, price: null }); ka = (kd.ai as KwAi) ?? fallbackKwAi(k, s); sa = fallbackStoreAi(k, s);
   }
-  if (k.dv !== PV3_DATA_VER || (searchParams.kind === 'store' && s.dv !== PV3_DATA_VER)) return <div style={{ padding: 40 }}>예전 구조의 데이터입니다 — 제안서 화면에서 「다시 계산」 후 확인하세요.</div>;
+  if (k.dv !== PV3_DATA_VER || (searchParams.kind === 'store' && s.dv !== PV3_DATA_VER)) return <div style={{ padding: 40 }}>예전 구조의 데이터입니다 — 제안서 화면에서 「다시 계산」 후 확인하세요. (키워드 {String(k.dv)} · 업체 {String(s.dv)} · 기준 {PV3_DATA_VER} · {searchParams.kind}/{String(searchParams.ref)} · 배포 {(process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7)})</div>;
   const { data: kk } = await sb.from('ai_settings').select('value').eq('key', 'kakao_open').maybeSingle();
   const brand = { name: BRAND.name, email: BRAND.email, kakao: kk?.value || 'https://open.kakao.com/o/saz4cuKi' };
   return <html lang="ko"><head><meta charSet="utf-8" />
