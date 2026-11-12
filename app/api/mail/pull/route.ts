@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     const kw = kws.find(x => !prog.done.includes(x));
     if (!kw) { log('모든 키워드 완료'); await sb.from('mail_campaigns').update({ status: 'done', progress: prog }).eq('id', c.id); return J({ ok: true, idle: true, reason: '캠페인 완료', wait: 300 }); }
     const n = Math.min(c.per_kw || 30, remain);
-    const r = await autoPrepareCore(me, { keyword: kw, n, subject: c.subject, body: c.body, owner: c.owner_name, phone: c.phone, offer: (c.offer ?? { basic: '', rec: '' }) as any, accountId: c.account_id, campaignId: c.id });
+    const r = await autoPrepareCore(me, { keyword: kw, n, subject: c.subject, body: c.body, owner: c.owner_name, phone: c.phone, offer: (c.offer ?? { basic: '', rec: '' }) as any, accountId: c.account_id, campaignId: c.id, v3: !!c.use_v3 });
     prog.done.push(kw);
     if (!r.ok || !r.job) { log(`'${kw}' 건너뜀 — ${r.msg}`); if (/상한/.test(r.msg)) { await sb.from('mail_campaigns').update({ progress: prog }).eq('id', c.id); return J({ ok: true, idle: true, reason: r.msg, wait: 1800 }); } continue; }
     prog.sent += r.job.items.length; log(`'${kw}' ${r.job.items.length}건 → SNS_Manager`);

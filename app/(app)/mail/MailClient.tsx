@@ -38,7 +38,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   const [autoDone, setAutoDone] = useState<string[]>(() => { try { const j = JSON.parse(localStorage.getItem(DONE_KEY) || '{}'); return j.d === today ? (j.kws ?? []) : []; } catch { return []; } });
   const markDone = (k: string) => setAutoDone(d => { const n = [...new Set([...d, k])]; try { localStorage.setItem(DONE_KEY, JSON.stringify({ d: today, kws: n })); } catch {} return n; });
   const resetDone = () => { setAutoDone([]); try { localStorage.removeItem(DONE_KEY); } catch {} };
-  const [camps, setCamps] = useState<Campaign[]>([]); const [agentAuto, setAgentAuto] = useState<{ enabled: boolean; last: string; msg: string } | null>(null);
+  const [useV3, setUseV3] = useState(false); const [camps, setCamps] = useState<Campaign[]>([]); const [agentAuto, setAgentAuto] = useState<{ enabled: boolean; last: string; msg: string } | null>(null);
   const loadCamps = async () => { const x = await listCampaigns(); if (x.ok) setCamps(x.rows!); };
 
   const eligible = (c: Candidate) => !!c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by;
@@ -138,7 +138,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       if (stopRef.current) { alog('중단'); break; }
       const left = cap - sent; if (left <= 0) { alog(`이번 실행 한도 ${cap}건 도달 — 종료`); break; }
       const n = Math.min(perKw, left); alog(`'${k}' 대상 ${n}건 준비…`);
-      const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id });
+      const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3 });
       if (!p.ok || !p.job) { alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) break; markDone(k); continue; }
       try {
         const res = await agentPost('/mail/wh-send', p.job, 15_000);
@@ -157,7 +157,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     if (!h.up || !h.mailWh) { notify(h.up ? 'SNS_Manager 구버전' : 'SNS_Manager 가 꺼져 있습니다', 'bad'); return; }
     if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
     setBusy('test');
-    const p = await testSend({ keyword: k, to: testTo, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id });
+    const p = await testSend({ keyword: k, to: testTo, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3 });
     if (!p.ok || !p.job) { setBusy(''); notify(p.msg, 'bad'); return; }
     try { const res = await agentPost('/mail/wh-send', p.job, 15_000); if (!res?.ok) { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 거부'); setBusy(''); notify('테스트 발송 실패: ' + (res?.error || ''), 'bad'); return; } }
     catch { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 연결 실패'); setBusy(''); notify('SNS_Manager 에 연결할 수 없음', 'bad'); return; }
@@ -175,7 +175,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     if (!h.autoPull) { notify('SNS_Manager 가 자동 끌어가기 없는 구버전 — 새 exe 로 교체 후 다시', 'bad'); return; }
     if (!confirm(`키워드 ${list.length}개를 이 PC의 SNS_Manager 에 맡깁니다. 브라우저를 닫아도 PC·SNS_Manager 가 켜져 있으면 계속 발송합니다 (키워드당 ${perKw}건 · 하루 ${autoMax > 0 ? autoMax + '건' : '계정 상한'}).`)) return;
     setBusy('camp');
-    const c = await createCampaign({ keywords: list, perKw, dailyCap: autoMax, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id });
+    const c = await createCampaign({ keywords: list, perKw, dailyCap: autoMax, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3 });
     if (!c.ok) { setBusy(''); notify(c.msg, 'bad'); return; }
     const k = await agentKey(); if (!k.ok || !k.key) { setBusy(''); notify(k.msg, 'bad'); return; }
     try { const res = await agentPost('/mail/wh-auto', { enabled: true, base_url: k.base, key: k.key }, 8000); if (!res?.ok) notify('SNS_Manager 설정 실패: ' + (res?.error || ''), 'bad'); else notify(c.msg, 'ok'); }
@@ -236,6 +236,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>키워드당 최대<input type="number" value={perKw} onChange={e => setPerKw(Math.max(1, Number(e.target.value) || 1))} style={{ width: 90 }} /></label>
           <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>이번 실행 최대 <span style={{ fontWeight: 400 }}>(0 = 오늘 남은 한도)</span><input type="number" value={autoMax} onChange={e => setAutoMax(Math.max(0, Number(e.target.value) || 0))} style={{ width: 110 }} /></label>
+          <label style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }} title="제안서 v3 화면에서 이미지가 준비된 업체만 발송 · 본문에 이미지 8장 인라인 · 제안서 링크 없음"><input type="checkbox" checked={useV3} onChange={e => setUseV3(e.target.checked)} style={{ width: 'auto', margin: 0 }} /> 제안서 v3 이미지로 (링크 없음)</label>
           {!autoRun ? <button type="button" className="btn" disabled={!!busy || !autoSel.size || !account} onClick={runAuto} style={{ background: '#03C75A', borderColor: '#03C75A' }}>자동 발송 시작</button>
             : <button type="button" className="btn" onClick={() => { stopRef.current = true; alog('중단 요청 — 현재 키워드 끝나면 멈춤'); }} style={{ background: '#E11D48', borderColor: '#E11D48' }}>중단</button>}
           {account && <span className="cell-sub">{account.email} · 오늘 {account.today}/{account.limit}</span>}

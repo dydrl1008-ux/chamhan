@@ -8,7 +8,7 @@ import { buildDoc, BRAND, type Doc } from '@/lib/proposalDoc';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
 export type Candidate = { id: number; store_name: string; store_url: string; email: string; phone: string; rank_now: number | null; review_cnt: number | null; optout: boolean; replied: boolean; ours: string | null; interest: string | null; recent_by: string | null; recent_at: string | null };
-export type AgentItem = { id: number; to: string; subject: string; body: string; message_id: string; store: string };
+export type AgentItem = { id: number; to: string; subject: string; body: string; message_id: string; store: string; html?: string };   // html 있으면 SNS_Manager 가 그걸 HTML 파트로 (제안서 v3 이미지 인라인)
 export type AgentJob = { job_id: string; sender_email: string; password: string; sender_name: string; items: AgentItem[]; gap_sec: number; callback_url: string; callback_token: string };
 
 export async function settings() {
@@ -21,7 +21,30 @@ export const siteBase = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://cham
 export const linkBase = () => (process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');
 export const eligible = (c: Candidate) => !!c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by;
 
-export async function prepareCore(me: { id: string; name: string }, i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string; accountId: number; campaignId?: number | null }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
+/** 제안서 v3 이미지: 업체별 4장(1·2·5·7) + 키워드 공통 4장(3·4·6·8) 이 다 있어야 발송 가능 */
+export async function v3ImagesFor(keyword: string, targetIds: number[]): Promise<Map<number, { storeId: number; urls: string[] }>> {
+  const out = new Map<number, { storeId: number; urls: string[] }>(); if (!targetIds.length) return out;
+  const sb = supabaseAdmin();
+  const { data: k } = await sb.from('pv3_keywords').select('images').eq('keyword', keyword).maybeSingle();
+  const kimg = new Map<number, string>(((k?.images ?? []) as { page: number; url: string }[]).map(x => [x.page, x.url]));
+  if ([3, 4, 6, 8].some(p => !kimg.get(p))) return out;
+  const { data: ss } = await sb.from('pv3_stores').select('id,target_id,images').eq('keyword', keyword).in('target_id', targetIds);
+  for (const st of ss ?? []) {
+    const simg = new Map<number, string>(((st.images ?? []) as { page: number; url: string }[]).map(x => [x.page, x.url]));
+    if ([1, 2, 5, 7].some(p => !simg.get(p))) continue;
+    out.set(st.target_id!, { storeId: st.id, urls: [1, 2, 3, 4, 5, 6, 7, 8].map(p => (simg.get(p) ?? kimg.get(p))!) });
+  }
+  return out;
+}
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** 본문 텍스트 + 이미지 8장 → 메일 HTML (링크 없음 · 수신거부만) */
+export function v3Html(body: string, urls: string[], unsub: string) {
+  const text = esc(body).replace(/\n/g, '<br>');
+  const imgs = urls.map((u, i) => `<img src="${u}" alt="제안서 ${i + 1}" width="640" style="display:block;width:100%;max-width:640px;height:auto;margin:0 0 6px;border:0">`).join('');
+  return `<div style="font-family:'Malgun Gothic',Apple SD Gothic Neo,sans-serif;font-size:14px;line-height:1.7;color:#222;max-width:640px">${text}<div style="margin:18px 0 10px">${imgs}</div><div style="font-size:12px;color:#888;margin-top:14px">수신을 원치 않으시면 <a href="${unsub}" style="color:#888">여기</a>를 눌러주세요.</div></div>`;
+}
+
+export async function prepareCore(me: { id: string; name: string }, i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string; accountId: number; campaignId?: number | null; v3?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
   const kw = i.keyword;
   const sb = supabaseAdmin();
   const { data: acct } = await sb.from('mail_accounts').select('id,email,app_pw_enc,from_name,verified_at,daily_limit').eq('user_id', me.id).eq('id', i.accountId).maybeSingle();
@@ -42,7 +65,9 @@ export async function prepareCore(me: { id: string; name: string }, i: { keyword
     if (c.recent_by) { skipped.push(`${c.store_name}: ${c.recent_by} ${days}일 내 발송`); continue; }
     picks.push(c);
   }
-  if (!picks.length) return { ok: false, msg: '보낼 수 있는 대상이 없습니다', skipped };
+  const v3map = i.v3 ? await v3ImagesFor(kw, picks.map(c => c.id)) : null;
+  if (v3map) { for (let x = picks.length - 1; x >= 0; x--) if (!v3map.has(picks[x].id)) { skipped.push(`${picks[x].store_name}: 제안서 v3 이미지 없음`); picks.splice(x, 1); } }
+  if (!picks.length) return { ok: false, msg: i.v3 ? '제안서 v3 이미지가 준비된 대상이 없습니다 (제안서 v3 화면에서 키워드 만들기 → 수거 → 렌더)' : '보낼 수 있는 대상이 없습니다', skipped };
   if (picks.length > remain) { skipped.push(`일 상한 초과 ${picks.length - remain}곳 제외`); picks.length = remain; }
   // 미리본 제안서 그대로 링크 1개 (수신자 구분은 ?m=큐번호)
   const code = randomBytes(6).toString('base64url').slice(0, 8);
@@ -50,14 +75,15 @@ export async function prepareCore(me: { id: string; name: string }, i: { keyword
   if (pe) return { ok: false, msg: '제안서 저장 실패: ' + pe.message };
   await sb.from('proposal_logs').insert({ user_id: me.id, keyword: kw, target: null, action: 'link', code });
   const token = randomBytes(16).toString('base64url'); const jobId = `${Date.now().toString(36)}${randomBytes(3).toString('hex')}`;
-  const { data: ins, error: qe } = await sb.from('mail_queue').insert(picks.map(c => ({ sender_id: me.id, account_id: acct.id, target_id: c.id, to_email: c.email.toLowerCase(), store_name: c.store_name, keyword: kw, proposal_code: code, job_token: token, status: 'queued', campaign_id: i.campaignId ?? null }))).select('id,target_id');
+  const { data: ins, error: qe } = await sb.from('mail_queue').insert(picks.map(c => ({ sender_id: me.id, account_id: acct.id, target_id: c.id, to_email: c.email.toLowerCase(), store_name: c.store_name, keyword: kw, proposal_code: code, job_token: token, status: 'queued', campaign_id: i.campaignId ?? null, pv3_store_id: v3map?.get(c.id)?.storeId ?? null }))).select('id,target_id');
   if (qe) return { ok: false, msg: qe.message };
   const byT = new Map(picks.map(c => [c.id, c])); const base = linkBase(); const items: AgentItem[] = [];
   await Promise.all((ins ?? []).map(q => {
     const c = byT.get(q.target_id!)!; const mid = `wh.${q.id}.${randomBytes(4).toString('hex')}@inquirydesk.bid`;
-    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}` };
+    const v3 = v3map?.get(c.id);
+    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: v3 ? '' : `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}` };
     const subject = fillVars(i.subject, v).slice(0, 200), body = fillVars(i.body, v);
-    items.push({ id: q.id, to: c.email.toLowerCase(), subject, body, message_id: `<${mid}>`, store: c.store_name });
+    items.push({ id: q.id, to: c.email.toLowerCase(), subject, body, message_id: `<${mid}>`, store: c.store_name, ...(v3 ? { html: v3Html(body, v3.urls, v.수신거부링크) } : {}) });
     return sb.from('mail_queue').update({ subject, body, message_id: `<${mid}>` }).eq('id', q.id);
   }));
   items.sort((a, b) => a.id - b.id);
@@ -66,7 +92,7 @@ export async function prepareCore(me: { id: string; name: string }, i: { keyword
 
 
 /** 자동 발송(캠페인) 1키워드: 대상 n건 고르고 제안서 만들어 작업 반환 — 브라우저 자동 모드와 SNS_Manager 끌어가기 공용 */
-export async function autoPrepareCore(me: { id: string; name: string }, i: { keyword: string; n: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; campaignId?: number | null }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
+export async function autoPrepareCore(me: { id: string; name: string }, i: { keyword: string; n: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; campaignId?: number | null; v3?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
   const kw = i.keyword.trim(); if (!kw) return { ok: false, msg: '키워드 없음' };
   if (!i.subject.trim() || !i.body.trim()) return { ok: false, msg: '제목·본문을 입력하세요' };
   const { days } = await settings();
@@ -76,5 +102,5 @@ export async function autoPrepareCore(me: { id: string; name: string }, i: { key
   let doc: Doc;
   try { const r = await search(kw, me.id); doc = buildDoc(r, { ...BRAND, owner: i.owner.trim() || me.name, phone: i.phone.trim() }, null, { basic: i.offer.basic.trim().slice(0, 40), rec: i.offer.rec.trim().slice(0, 40) }); }
   catch (e: any) { return { ok: false, msg: `${kw}: 제안서 생성 실패 — ${e.message}` }; }
-  return prepareCore(me, { keyword: kw, ids, subject: i.subject, body: i.body, doc, owner: i.owner, phone: i.phone, accountId: i.accountId, campaignId: i.campaignId });
+  return prepareCore(me, { keyword: kw, ids, subject: i.subject, body: i.body, doc, owner: i.owner, phone: i.phone, accountId: i.accountId, campaignId: i.campaignId, v3: i.v3 });
 }

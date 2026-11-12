@@ -9,7 +9,7 @@ import { buildDoc, BRAND, type Doc } from '@/lib/proposalDoc';
 import { fillVars } from '@/lib/mail';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
-import { settings, kstDayStart, siteBase, linkBase, prepareCore, autoPrepareCore, eligible, type Candidate, type AgentItem, type AgentJob } from '@/lib/mailSend';
+import { settings, kstDayStart, siteBase, linkBase, prepareCore, autoPrepareCore, eligible, v3ImagesFor, v3Html, type Candidate, type AgentItem, type AgentJob } from '@/lib/mailSend';
 export type { Candidate, AgentItem, AgentJob };
 
 
@@ -72,13 +72,13 @@ export async function prepareSend(i: { keyword: string; ids: number[]; subject: 
 }
 
 /** 자동 발송: 키워드 1개 — 서버가 대상 n건 고르고(제외 규칙) 제안서(캐시 지수)까지 만들어 바로 작업 반환. 브라우저가 키워드 목록을 돌며 호출 */
-export async function autoPrepare(i: { keyword: string; n: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
+export async function autoPrepare(i: { keyword: string; n: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; v3?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const r = await autoPrepareCore(me, i); if (r.ok) revalidatePath('/mail'); return r;
 }
 
 /** 테스트 발송: 키워드 제안서를 내가 지정한 주소 1곳으로. 큐에 '테스트'로 남고 대상 업체·일 상한엔 영향 없음 */
-export async function testSend(i: { keyword: string; to: string; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number }): Promise<R<{ job: AgentJob }>> {
+export async function testSend(i: { keyword: string; to: string; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; v3?: boolean }): Promise<R<{ job: AgentJob }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const kw = i.keyword.trim(); const to = i.to.trim().toLowerCase();
   if (!kw) return { ok: false, msg: '키워드를 먼저 고르세요' };
@@ -100,10 +100,17 @@ export async function testSend(i: { keyword: string; to: string; subject: string
   if (qe || !q) return { ok: false, msg: qe?.message ?? '큐 등록 실패' };
   const base = linkBase(); const mid = `wh.${q.id}.${randomBytes(4).toString('hex')}@inquirydesk.bid`;
   const v = { 업체명: '테스트업체', 키워드: kw, 순위: '23위', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}` };
+  let html: string | undefined;
+  if (i.v3) {
+    const { data: st } = await sb.from('pv3_stores').select('target_id').eq('keyword', kw).not('target_id', 'is', null).limit(50);
+    const m = await v3ImagesFor(kw, (st ?? []).map(x => x.target_id!)); const first = [...m.values()][0];
+    if (!first) return { ok: false, msg: `'${kw}' 제안서 v3 이미지가 아직 없습니다 (제안서 v3 화면에서 만들기 → 수거 → 렌더)` };
+    v.제안서링크 = ''; html = v3Html(fillVars(i.body, v), first.urls, v.수신거부링크);
+  }
   const subject = `[테스트] ` + fillVars(i.subject, v).slice(0, 190), body = fillVars(i.body, v);
   await sb.from('mail_queue').update({ subject, body, message_id: `<${mid}>` }).eq('id', q.id);
   revalidatePath('/mail');
-  return { ok: true, msg: `테스트 1건 → ${to}`, job: { job_id: jobId, sender_email: acct.email, password: pw, sender_name: acct.from_name || `참한기획 ${me.name}`, items: [{ id: q.id, to, subject, body, message_id: `<${mid}>`, store: '테스트 발송' }], gap_sec: 1, callback_url: `${siteBase()}/api/mail/agent-callback`, callback_token: token } };
+  return { ok: true, msg: `테스트 1건 → ${to}${html ? ' (v3 이미지 8장)' : ''}`, job: { job_id: jobId, sender_email: acct.email, password: pw, sender_name: acct.from_name || `참한기획 ${me.name}`, items: [{ id: q.id, to, subject, body, message_id: `<${mid}>`, store: '테스트 발송', ...(html ? { html } : {}) }], gap_sec: 1, callback_url: `${siteBase()}/api/mail/agent-callback`, callback_token: token } };
 }
 
 /** SNS_Manager 가 안 받았거나 실패한 건 정리 (브라우저가 에이전트 호출 실패 시) */
@@ -214,13 +221,13 @@ export async function listCampaigns(): Promise<R<{ rows: Campaign[] }>> {
   const { data, error } = await supabaseAdmin().from('mail_campaigns').select('id,account_id,keywords,per_kw,daily_cap,subject,status,progress,last_pull_at,created_at').eq('owner_id', me.id).order('created_at', { ascending: false }).limit(20);
   return error ? { ok: false, msg: error.message } : { ok: true, msg: '', rows: (data ?? []) as Campaign[] };
 }
-export async function createCampaign(i: { keywords: string[]; perKw: number; dailyCap: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number }): Promise<R<{ id: number }>> {
+export async function createCampaign(i: { keywords: string[]; perKw: number; dailyCap: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; v3?: boolean }): Promise<R<{ id: number }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const kws = [...new Set(i.keywords.map(k => k.trim()).filter(Boolean))]; if (!kws.length) return { ok: false, msg: '키워드를 고르세요' };
   if (!i.subject.trim() || !i.body.trim()) return { ok: false, msg: '제목·본문을 입력하세요' };
   const sb = supabaseAdmin();
   const { data: acct } = await sb.from('mail_accounts').select('id').eq('id', i.accountId).eq('user_id', me.id).maybeSingle(); if (!acct) return { ok: false, msg: '발신 계정을 선택하세요' };
-  const { data, error } = await sb.from('mail_campaigns').insert({ owner_id: me.id, account_id: acct.id, keywords: kws, per_kw: Math.max(1, Math.min(500, i.perKw)), daily_cap: Math.max(0, i.dailyCap), subject: i.subject.slice(0, 200), body: i.body.slice(0, 5000), owner_name: i.owner.trim(), phone: i.phone.trim(), offer: { basic: i.offer.basic.slice(0, 40), rec: i.offer.rec.slice(0, 40) } }).select('id').single();
+  const { data, error } = await sb.from('mail_campaigns').insert({ owner_id: me.id, account_id: acct.id, keywords: kws, per_kw: Math.max(1, Math.min(500, i.perKw)), daily_cap: Math.max(0, i.dailyCap), subject: i.subject.slice(0, 200), body: i.body.slice(0, 5000), owner_name: i.owner.trim(), phone: i.phone.trim(), offer: { basic: i.offer.basic.slice(0, 40), rec: i.offer.rec.slice(0, 40) }, use_v3: !!i.v3 }).select('id').single();
   if (error || !data) return { ok: false, msg: error?.message ?? '등록 실패' };
   return { ok: true, msg: `자동 발송 등록 — 키워드 ${kws.length}개. SNS_Manager 가 1분 안에 가져갑니다`, id: data.id };
 }

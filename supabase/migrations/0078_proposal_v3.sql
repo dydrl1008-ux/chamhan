@@ -88,3 +88,4 @@ create policy "pv3 public read" on storage.objects for select using (bucket_id =
 
 -- 메일 큐: v3 이미지 발송 연결
 alter table mail_queue add column if not exists pv3_store_id bigint references pv3_stores(id) on delete set null;
+alter table mail_campaigns add column if not exists use_v3 boolean not null default false;   -- 제안서 v3 이미지로 발송
