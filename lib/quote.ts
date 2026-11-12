@@ -6,7 +6,7 @@ export type Suppliers = { main: Supplier; novat: Supplier };   // main = 세금�
 export type QRow = { id: number; title: string; total: number; updated_at: string; owner: string; data: QData };
 export const DEFAULT_SUPPLIERS: Suppliers = {
   main: { regNo: '148-87-03877', name: '㈜ 참한기획', ceo: '곽봉우', addr: '서울특별시 강남구 압구정로2길 46, 214 제이 56호(신사동)', biz: '서비스업', type: '광고대행업', tel: '', email: 'chamchamcorp@naver.com', account: '신한은행 140-016-484360 (주)참한기획' },
-  novat: { regNo: '', name: '리코프리', ceo: '', addr: '', biz: '', type: '', tel: '', email: '', account: '신한은행 110-560-534499 리코프리' },
+  novat: { regNo: '668-29-01636', name: '리코프리', ceo: '최승현', addr: '경기도 남양주시 별내중앙로 26, 1006-33호(별내동)', biz: '서비스업', type: '광고대행업', tel: '', email: '', account: '신한은행 110-560-534499 리코프리' },
 };
 /** 품목별 공급가액·세액과 합계 — excl: 단가에 10% 추가 · incl: 단가에 10% 포함 · none: 세액 없음 */
 export function calc(d: QData) {

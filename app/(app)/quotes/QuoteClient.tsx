@@ -35,12 +35,12 @@ export default function QuoteClient({ rows, suppliers, canEditSupplier, me }: { 
     catch (e: any) { notify('저장 실패: ' + (e?.message ?? ''), 'bad'); } finally { setBusy(''); }
   };
   const keep = async () => { setBusy('keep'); const r = await persist(); notify(r.msg, r.ok ? 'ok' : 'bad'); setBusy(''); router.refresh(); };
-  const open = (r: QRow) => { setId(r.id); setD({ ...blank(), ...r.data, items: r.data.items?.length ? r.data.items : [blankItem()] }); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const open = (r: QRow) => { setId(r.id); setD({ ...blank(), ...r.data, vat: r.data.vat === 'none' ? 'none' : 'excl', items: r.data.items?.length ? r.data.items : [blankItem()] }); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const del = async (r: QRow) => { const x = await deleteQuote(r.id); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok && id === r.id) { setId(null); setD(blank()); } router.refresh(); };
-  const cell: React.CSSProperties = { border: '1px solid #222', padding: '7px 8px', fontSize: 13, textAlign: 'center', verticalAlign: 'middle' };
-  const head: React.CSSProperties = { ...cell, background: '#F1F3F7', fontWeight: 700 };
+  const cell: React.CSSProperties = { border: '1px solid #222', padding: '7px 8px', fontSize: 13, textAlign: 'center', verticalAlign: 'middle', background: '#fff', color: '#111', fontWeight: 400 };
+  const head: React.CSSProperties = { ...cell, background: '#F1F3F7', fontWeight: 700, color: '#111' };
   const filled = d.items.filter(it => it.name || it.price);
-  const padRows = Math.max(0, 6 - filled.length);
+  const padRows = Math.max(0, 5 - filled.length);
 
   return <div style={{ display: 'grid', gap: 16 }}>
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 460px) 1fr', gap: 16, alignItems: 'start' }}>
@@ -52,8 +52,8 @@ export default function QuoteClient({ rows, suppliers, canEditSupplier, me }: { 
           <label><span style={lab}>견적일자</span><input style={inp} type="date" value={d.date} onChange={e => set({ date: e.target.value })} /></label>
         </div>
         <div><span style={lab}>부가세</span>
-          <div style={{ display: 'flex', gap: 6 }}>{([['excl', '10% 별도'], ['incl', '10% 포함'], ['none', '없음 (리코프리)']] as [QData['vat'], string][]).map(([v, t]) => <button key={v} className={d.vat === v ? 'btn xs' : 'btn ghost xs'} onClick={() => set({ vat: v })}>{t}</button>)}</div>
-          <div className="help" style={{ marginTop: 4 }}>{d.vat === 'none' ? `부가세 없는 견적 — 공급자·입금계좌가 ${sup.novat.name}로 나갑니다` : `공급자 ${sup.main.name} · 단가는 부가세 ${d.vat === 'excl' ? '별도' : '포함'} 금액으로 입력`}</div></div>
+          <div style={{ display: 'flex', gap: 6 }}>{([['excl', '10% 별도'], ['none', '없음 (리코프리)']] as [QData['vat'], string][]).map(([v, t]) => <button key={v} className={d.vat === v ? 'btn xs' : 'btn ghost xs'} onClick={() => set({ vat: v })}>{t}</button>)}</div>
+          <div className="help" style={{ marginTop: 4 }}>{d.vat === 'none' ? `부가세 없는 견적 — 공급자·입금계좌가 ${sup.novat.name}로 나갑니다` : `공급자 ${sup.main.name} · 단가는 부가세 별도 금액으로 입력`}</div></div>
         <div><span style={lab}>품목</span>
           <div style={{ display: 'grid', gap: 8 }}>{d.items.map((it, i) => <div key={i} style={{ border: '1px solid var(--line, #d9dde6)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 28px', gap: 6 }}><input style={inp} value={it.name} onChange={e => setItem(i, { name: e.target.value })} placeholder="품명 (예: 강아지덴탈껌 xs)" /><button className="btn ghost xs" onClick={() => setD(x => ({ ...x, items: x.items.length > 1 ? x.items.filter((_, j) => j !== i) : [blankItem()] }))} title="삭제">×</button></div>
@@ -105,7 +105,7 @@ export default function QuoteClient({ rows, suppliers, canEditSupplier, me }: { 
               <tr><td colSpan={6} style={head}>합계</td><td style={{ ...cell, textAlign: 'right', fontWeight: 800 }}>{won(c.supply)}</td><td style={{ ...cell, textAlign: 'right', fontWeight: 800 }}>{d.vat === 'none' ? '-' : won(c.tax)}</td><td style={{ ...cell, fontWeight: 800 }}>{won(c.total)}</td></tr>
             </tbody></table>
           <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 18 }}><tbody>
-            <tr><td style={{ ...head, width: 90 }}>납품조건</td><td style={{ ...cell, textAlign: 'left' }}>{d.delivery || '-'}</td><td style={{ ...head, width: 90 }}>입금계좌</td><td style={{ ...cell, fontWeight: 700 }}>{S.account || '-'}</td></tr>
+            <tr><td style={{ ...head, width: 90 }}>납품조건</td><td style={{ ...cell, textAlign: 'left', width: 250 }}>{d.delivery || '-'}</td><td style={{ ...head, width: 90 }}>입금계좌</td><td style={{ ...cell, fontWeight: 700 }}>{S.account || '-'}</td></tr>
             <tr><td style={head}>특이사항</td><td colSpan={3} style={{ ...cell, textAlign: 'left', whiteSpace: 'pre-wrap', minHeight: 48, height: 56 }}>{d.memo || '-'}</td></tr>
           </tbody></table>
         </div>
@@ -116,7 +116,7 @@ export default function QuoteClient({ rows, suppliers, canEditSupplier, me }: { 
     <div className="card"><b>저장된 견적서 {rows.length}건</b>
       {rows.length === 0 ? <div className="help" style={{ marginTop: 8 }}>아직 없습니다 — 이미지 복사·저장을 하면 여기에 남습니다.</div> :
         <table style={{ width: '100%', marginTop: 10 }}><thead><tr><th style={{ textAlign: 'left' }}>거래처</th><th>합계</th><th>부가세</th><th>작성</th><th>수정일</th><th /></tr></thead><tbody>
-          {rows.map(r => <tr key={r.id} style={id === r.id ? { background: 'rgba(47,91,255,.06)' } : {}}><td><b>{r.title}</b><div className="cell-sub">{(r.data.items ?? []).filter(i => i.name).map(i => i.name).slice(0, 3).join(', ')}</div></td><td className="num">{won(r.total)}원</td><td style={{ textAlign: 'center' }}>{r.data.vat === 'none' ? '없음' : r.data.vat === 'incl' ? '포함' : '별도'}</td><td style={{ textAlign: 'center' }}>{r.owner || me}</td><td style={{ textAlign: 'center' }}>{new Date(r.updated_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</td>
+          {rows.map(r => <tr key={r.id} style={id === r.id ? { background: 'rgba(47,91,255,.06)' } : {}}><td><b>{r.title}</b><div className="cell-sub">{(r.data.items ?? []).filter(i => i.name).map(i => i.name).slice(0, 3).join(', ')}</div></td><td className="num">{won(r.total)}원</td><td style={{ textAlign: 'center' }}>{r.data.vat === 'none' ? '없음' : '별도'}</td><td style={{ textAlign: 'center' }}>{r.owner || me}</td><td style={{ textAlign: 'center' }}>{new Date(r.updated_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</td>
             <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="btn ghost xs" onClick={() => open(r)}>열기</button> <button className="btn ghost xs" onClick={() => del(r)}>삭제</button></td></tr>)}</tbody></table>}
     </div>
   </div>;
