@@ -145,7 +145,7 @@ export async function queueRender(kind: 'keyword' | 'store', ref: string) {
 export { nounEnd };
 
 /** 발송 쪽에서 호출: 키워드·업체 v3 데이터가 없으면 자동으로 계산 + 워커 요청 + (글 있으면) 렌더 큐. 반환 = 지금 보낼 수 있는지 */
-export async function autoPrepareV3(kw: string, me: { id: string; name: string }, picks: { target_id: number; store: string; rank: number | null; reviews: number | null; link?: string }[]): Promise<{ ready: boolean; msg: string }> {
+export async function autoPrepareV3(kw: string, me: { id: string; name: string }, picks: { target_id: number; store: string; rank: number | null; reviews: number | null; link?: string }[], quick = false): Promise<{ ready: boolean; msg: string }> {
   const ek = await ensureKeyword(kw, me); if (!ek.ok || !ek.k) return { ready: false, msg: ek.msg };
   const k = ek.k; const db = sb();
   const { data: nsc } = await db.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods: any[] = (nsc?.data as any)?.products ?? [];
@@ -154,10 +154,28 @@ export async function autoPrepareV3(kw: string, me: { id: string; name: string }
   const sample = targets.length ? computeStore(k, targets[0]) : computeStore(k, { store: '귀사', rank: null, reviews: null, price: null });
   await requestKwAi(kw, k, sample, me, ek.fresh);
   await ingestAi();
+  if (quick) {   // 빠른 모드: 워커 안 기다리고 기본 문장으로 바로 렌더 (워커 글 나오면 다음 발송부터 그걸 씀 — 이미지는 '다시 렌더' 필요)
+    const { data: k0 } = await db.from('pv3_keywords').select('ai_status').eq('keyword', kw).maybeSingle();
+    if (k0 && k0.ai_status !== 'done') await db.from('pv3_keywords').update({ ai: fallbackKwAi(k, sample), ai_status: 'fallback' }).eq('keyword', kw);
+    const { data: s0 } = await db.from('pv3_stores').select('id,data').eq('keyword', kw).is('ai', null).in('id', es.ids ?? []);
+    for (const st of s0 ?? []) await db.from('pv3_stores').update({ ai: fallbackStoreAi(k, st.data as StoreData) }).eq('id', st.id);
+  }
   const { data: kr } = await db.from('pv3_keywords').select('ai_status,images').eq('keyword', kw).maybeSingle();
   if (kr && ['done', 'fallback'].includes(kr.ai_status) && (kr.images ?? []).length < 4) await queueRender('keyword', kw);
   const { data: ss } = await db.from('pv3_stores').select('id,images').eq('keyword', kw).not('ai', 'is', null).in('id', es.ids ?? []);
   for (const s of ss ?? []) if ((s.images ?? []).length < 4) await queueRender('store', String(s.id));
   const ready = !!kr && (kr.images ?? []).length >= 4 && (ss ?? []).some(s => (s.images ?? []).length >= 4);
   return { ready, msg: ready ? '준비됨' : `'${kw}' 제안서 v3 준비 중 — 워커 글·이미지 생성 요청함 (보통 5~10분, 워커 PC 켜져 있어야 함)` };
+}
+
+/** 메일 화면용 진행 상태 */
+export async function v3Status(kw: string): Promise<{ kwData: boolean; kwAi: string; kwTask: number | null; kwTaskStatus: string; kwImg: number; stores: number; storesAi: number; storesImg: number; renderLast: string | null; renderQueue: number }> {
+  const db = sb();
+  const { data: k } = await db.from('pv3_keywords').select('ai_status,ai_task_id,images').eq('keyword', kw).maybeSingle();
+  let kwTaskStatus = '';
+  if (k?.ai_task_id) { const { data: t } = await db.from('ai_tasks').select('status').eq('id', k.ai_task_id).maybeSingle(); kwTaskStatus = t?.status ?? ''; }
+  const { data: ss } = await db.from('pv3_stores').select('ai,images').eq('keyword', kw);
+  const { data: rl } = await db.from('ai_settings').select('value').eq('key', 'pv3_render_last').maybeSingle();
+  const { count } = await db.from('pv3_render_jobs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'running']);
+  return { kwData: !!k, kwAi: k?.ai_status ?? 'none', kwTask: k?.ai_task_id ?? null, kwTaskStatus, kwImg: (k?.images ?? []).length, stores: ss?.length ?? 0, storesAi: (ss ?? []).filter(s => s.ai).length, storesImg: (ss ?? []).filter(s => (s.images ?? []).length >= 4).length, renderLast: rl?.value ?? null, renderQueue: count ?? 0 };
 }

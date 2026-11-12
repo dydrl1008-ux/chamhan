@@ -12,6 +12,7 @@ const COMMON = Array.from({ length: PV3_PAGES }, (_, i) => i + 1).filter(p => !P
 export async function GET(req: Request) {
   if (!authed(req)) return J({ ok: false }, 401);
   const sb = supabaseAdmin();
+  await sb.from('ai_settings').upsert({ key: 'pv3_render_last', value: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'key' });   // 렌더 PC 연결 표시
   // 10분 넘게 running 이면 다시 queued (워커 죽음)
   await sb.from('pv3_render_jobs').update({ status: 'queued' }).eq('status', 'running').lt('created_at', new Date(Date.now() - 10 * 60e3).toISOString());
   const { data: jobs } = await sb.from('pv3_render_jobs').select('id,kind,ref').eq('status', 'queued').order('id').limit(5);

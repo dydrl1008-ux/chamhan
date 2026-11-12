@@ -45,7 +45,7 @@ export function v3Html(body: string, urls: string[]) {
   return `<div style="font-family:'Malgun Gothic',Apple SD Gothic Neo,sans-serif;font-size:14px;line-height:1.7;color:#222;max-width:640px">${text}<div style="margin:18px 0 10px">${imgs}</div></div>`;
 }
 
-export async function prepareCore(me: { id: string; name: string }, i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string; accountId: number; campaignId?: number | null; v3?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
+export async function prepareCore(me: { id: string; name: string }, i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string; accountId: number; campaignId?: number | null; v3?: boolean; quick?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
   const kw = i.keyword;
   const sb = supabaseAdmin();
   const { data: acct } = await sb.from('mail_accounts').select('id,email,app_pw_enc,from_name,verified_at,daily_limit').eq('user_id', me.id).eq('id', i.accountId).maybeSingle();
@@ -70,7 +70,7 @@ export async function prepareCore(me: { id: string; name: string }, i: { keyword
   if (v3map) {
     const missing = picks.filter(c => !v3map!.has(c.id));
     if (missing.length) {   // 없으면 자동으로 계산·워커 요청·렌더 큐 → 이번엔 준비된 업체만, 나머진 다음에
-      const pr = await autoPrepareV3(kw, me, missing.map(c => ({ target_id: c.id, store: c.store_name, rank: c.rank_now, reviews: c.review_cnt, link: c.store_url })));
+      const pr = await autoPrepareV3(kw, me, missing.map(c => ({ target_id: c.id, store: c.store_name, rank: c.rank_now, reviews: c.review_cnt, link: c.store_url })), !!i.quick);
       if (pr.ready) v3map = await v3ImagesFor(kw, picks.map(c => c.id)); v3msg = pr.msg;
     }
     for (let x = picks.length - 1; x >= 0; x--) if (!v3map!.has(picks[x].id)) { skipped.push(`${picks[x].store_name}: 제안서 v3 준비 중`); picks.splice(x, 1); }
@@ -100,7 +100,7 @@ export async function prepareCore(me: { id: string; name: string }, i: { keyword
 
 
 /** 자동 발송(캠페인) 1키워드: 대상 n건 고르고 제안서 만들어 작업 반환 — 브라우저 자동 모드와 SNS_Manager 끌어가기 공용 */
-export async function autoPrepareCore(me: { id: string; name: string }, i: { keyword: string; n: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; campaignId?: number | null; v3?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
+export async function autoPrepareCore(me: { id: string; name: string }, i: { keyword: string; n: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; campaignId?: number | null; v3?: boolean; quick?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
   const kw = i.keyword.trim(); if (!kw) return { ok: false, msg: '키워드 없음' };
   if (!i.subject.trim() || !i.body.trim()) return { ok: false, msg: '제목·본문을 입력하세요' };
   const { days } = await settings();
@@ -110,5 +110,5 @@ export async function autoPrepareCore(me: { id: string; name: string }, i: { key
   let doc: Doc;
   try { const r = await search(kw, me.id); doc = buildDoc(r, { ...BRAND, owner: i.owner.trim() || me.name, phone: i.phone.trim() }, null, { basic: i.offer.basic.trim().slice(0, 40), rec: i.offer.rec.trim().slice(0, 40) }); }
   catch (e: any) { return { ok: false, msg: `${kw}: 제안서 생성 실패 — ${e.message}` }; }
-  return prepareCore(me, { keyword: kw, ids, subject: i.subject, body: i.body, doc, owner: i.owner, phone: i.phone, accountId: i.accountId, campaignId: i.campaignId, v3: i.v3 });
+  return prepareCore(me, { keyword: kw, ids, subject: i.subject, body: i.body, doc, owner: i.owner, phone: i.phone, accountId: i.accountId, campaignId: i.campaignId, v3: i.v3, quick: i.quick });
 }

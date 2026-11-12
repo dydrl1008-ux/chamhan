@@ -9,7 +9,7 @@ import { buildDoc, BRAND, type Doc } from '@/lib/proposalDoc';
 import { fillVars } from '@/lib/mail';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
-import { autoPrepareV3 } from '@/lib/pv3Tasks';
+import { autoPrepareV3, v3Status } from '@/lib/pv3Tasks';
 import { settings, kstDayStart, siteBase, linkBase, prepareCore, autoPrepareCore, eligible, v3ImagesFor, v3Html, type Candidate, type AgentItem, type AgentJob } from '@/lib/mailSend';
 export type { Candidate, AgentItem, AgentJob };
 
@@ -73,13 +73,13 @@ export async function prepareSend(i: { keyword: string; ids: number[]; subject: 
 }
 
 /** 자동 발송: 키워드 1개 — 서버가 대상 n건 고르고(제외 규칙) 제안서(캐시 지수)까지 만들어 바로 작업 반환. 브라우저가 키워드 목록을 돌며 호출 */
-export async function autoPrepare(i: { keyword: string; n: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; v3?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
+export async function autoPrepare(i: { keyword: string; n: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; v3?: boolean; quick?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const r = await autoPrepareCore(me, i); if (r.ok) revalidatePath('/mail'); return r;
 }
 
 /** 테스트 발송: 키워드 제안서를 내가 지정한 주소 1곳으로. 큐에 '테스트'로 남고 대상 업체·일 상한엔 영향 없음 */
-export async function testSend(i: { keyword: string; to: string; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; v3?: boolean }): Promise<R<{ job: AgentJob }>> {
+export async function testSend(i: { keyword: string; to: string; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; v3?: boolean; quick?: boolean }): Promise<R<{ job: AgentJob }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
   const kw = i.keyword.trim(); const to = i.to.trim().toLowerCase();
   if (!kw) return { ok: false, msg: '키워드를 먼저 고르세요' };
@@ -108,7 +108,7 @@ export async function testSend(i: { keyword: string; to: string; subject: string
     if (!first) {   // 없으면 자동 준비 (메일 대상 상위 3곳으로)
       const { days } = await settings(); const { data: cand } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days });
       const picks = ((cand ?? []) as Candidate[]).filter(c => c.email).slice(0, 3);
-      const pr = await autoPrepareV3(kw, me, picks.map(c => ({ target_id: c.id, store: c.store_name, rank: c.rank_now, reviews: c.review_cnt, link: c.store_url })));
+      const pr = await autoPrepareV3(kw, me, picks.map(c => ({ target_id: c.id, store: c.store_name, rank: c.rank_now, reviews: c.review_cnt, link: c.store_url })), !!i.quick);
       if (pr.ready) { const { data: st2 } = await sb.from('pv3_stores').select('target_id').eq('keyword', kw).not('target_id', 'is', null).limit(50); m = await v3ImagesFor(kw, (st2 ?? []).map(x => x.target_id!)); first = [...m.values()][0]; }
       if (!first) return { ok: false, msg: pr.msg + ' · 준비되면 다시 「테스트 1건 발송」' };
     }
@@ -253,4 +253,9 @@ export async function agentKey(regen = false): Promise<R<{ key: string; base: st
   const key = randomBytes(24).toString('base64url');
   const { error } = await sb.from('mail_agent_keys').upsert({ user_id: me.id, key }, { onConflict: 'user_id' });
   return error ? { ok: false, msg: error.message } : { ok: true, msg: '', key, base: siteBase() };
+}
+
+export async function v3StatusOf(keyword: string) {
+  const me = await getProfile(); if (!me) return null;
+  return v3Status(keyword.trim());
 }

@@ -9,7 +9,7 @@ import { fmtKST } from '@/lib/date/kst';
 import { fillVars, MAIL_VARS } from '@/lib/mail';
 import { agentHealth, agentPost, type AgentHealth } from '@/lib/snsAgent';
 import type { Doc } from '@/lib/proposalDoc';
-import { loadKeywords, loadCandidates, makeDoc, prepareSend, autoPrepare, testSend, failQueued, saveTemplate, cancelQueued, replyPayload, ingestReplies, listCampaigns, createCampaign, setCampaign, agentKey, type Candidate, type AgentJob, type Campaign } from './actions';
+import { loadKeywords, loadCandidates, makeDoc, prepareSend, autoPrepare, testSend, failQueued, saveTemplate, cancelQueued, replyPayload, ingestReplies, listCampaigns, createCampaign, setCampaign, agentKey, v3StatusOf, type Candidate, type AgentJob, type Campaign } from './actions';
 
 type Hist = { id: number; target?: { phone: string; store_url: string } | null; to_email: string; store_name: string; keyword: string; status: string; error: string | null; queued_at: string; sent_at: string | null; opened_at: string | null; open_cnt: number; replied_at: string | null; proposal_code: string | null };
 type Acct = { id: number; email: string; provider: string; today: number; limit: number };
@@ -38,7 +38,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   const [autoDone, setAutoDone] = useState<string[]>(() => { try { const j = JSON.parse(localStorage.getItem(DONE_KEY) || '{}'); return j.d === today ? (j.kws ?? []) : []; } catch { return []; } });
   const markDone = (k: string) => setAutoDone(d => { const n = [...new Set([...d, k])]; try { localStorage.setItem(DONE_KEY, JSON.stringify({ d: today, kws: n })); } catch {} return n; });
   const resetDone = () => { setAutoDone([]); try { localStorage.removeItem(DONE_KEY); } catch {} };
-  const [useV3, setUseV3] = useState(false); const [camps, setCamps] = useState<Campaign[]>([]); const [agentAuto, setAgentAuto] = useState<{ enabled: boolean; last: string; msg: string } | null>(null);
+  const [useV3, setUseV3] = useState(false); const [quick, setQuick] = useState(false); const [v3st, setV3st] = useState<Awaited<ReturnType<typeof v3StatusOf>>>(null); const [camps, setCamps] = useState<Campaign[]>([]); const [agentAuto, setAgentAuto] = useState<{ enabled: boolean; last: string; msg: string } | null>(null);
   const loadCamps = async () => { const x = await listCampaigns(); if (x.ok) setCamps(x.rows!); };
 
   const eligible = (c: Candidate) => !!c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by;
@@ -138,7 +138,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       if (stopRef.current) { alog('중단'); break; }
       const left = cap - sent; if (left <= 0) { alog(`이번 실행 한도 ${cap}건 도달 — 종료`); break; }
       const n = Math.min(perKw, left); alog(`'${k}' 대상 ${n}건 준비…`);
-      const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3 });
+      const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3, quick });
       if (!p.ok || !p.job) { alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) break; if (!/준비 중/.test(p.msg)) markDone(k); continue; }   // v3 준비 중인 키워드는 다음 실행 때 다시
       try {
         const res = await agentPost('/mail/wh-send', p.job, 15_000);
@@ -157,7 +157,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     if (!h.up || !h.mailWh) { notify(h.up ? 'SNS_Manager 구버전' : 'SNS_Manager 가 꺼져 있습니다', 'bad'); return; }
     if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
     setBusy('test');
-    const p = await testSend({ keyword: k, to: testTo, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3 });
+    const p = await testSend({ keyword: k, to: testTo, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3, quick });
     if (!p.ok || !p.job) { setBusy(''); notify(p.msg, 'bad'); return; }
     try { const res = await agentPost('/mail/wh-send', p.job, 15_000); if (!res?.ok) { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 거부'); setBusy(''); notify('테스트 발송 실패: ' + (res?.error || ''), 'bad'); return; } }
     catch { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 연결 실패'); setBusy(''); notify('SNS_Manager 에 연결할 수 없음', 'bad'); return; }
@@ -190,6 +190,8 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   const refreshAgentAuto = async () => { try { const h = await agentHealth(); setAgent(h); if (h.autoPull) { const st = await agentPost('/mail/wh-auto-status', {}, 5000); setAgentAuto({ enabled: !!st?.enabled, last: st?.last_pull || '', msg: st?.last_msg || '' }); } } catch {} };
   useEffect(() => { loadCamps(); refreshAgentAuto(); const t = setInterval(() => { loadCamps(); refreshAgentAuto(); }, 60_000); return () => clearInterval(t); // eslint-disable-next-line
   }, []);
+  const v3kw = loadedKw || [...autoSel][0] || '';
+  useEffect(() => { if (!useV3 || !v3kw) { setV3st(null); return; } let on = true; const f = async () => { const x = await v3StatusOf(v3kw); if (on) setV3st(x); }; f(); const t = setInterval(f, 20_000); return () => { on = false; clearInterval(t); }; }, [useV3, v3kw]);
 
   const sample = rows.find(c => sel.has(c.id)) ?? rows[0];
   const vars = sample ? { 업체명: sample.store_name || '담당자', 키워드: loadedKw, 순위: sample.rank_now ? `${sample.rank_now}위` : '-', 담당자: owner || me.name, 연락처: phone, 제안서링크: '(발송 시 수신자마다 다른 제안서 링크)', 수신거부링크: '(수신자별 수신거부 링크)' } : null;
@@ -237,6 +239,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
           <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>키워드당 최대<input type="number" value={perKw} onChange={e => setPerKw(Math.max(1, Number(e.target.value) || 1))} style={{ width: 90 }} /></label>
           <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>이번 실행 최대 <span style={{ fontWeight: 400 }}>(0 = 오늘 남은 한도)</span><input type="number" value={autoMax} onChange={e => setAutoMax(Math.max(0, Number(e.target.value) || 0))} style={{ width: 110 }} /></label>
           <label style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }} title="제안서 v3 화면에서 이미지가 준비된 업체만 발송 · 본문에 이미지 8장 인라인 · 제안서 링크 없음"><input type="checkbox" checked={useV3} onChange={e => setUseV3(e.target.checked)} style={{ width: 'auto', margin: 0 }} /> 제안서 v3 이미지로 (링크 없음)</label>
+          {useV3 && <label style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }} title="워커 글을 안 기다리고 코드 기본 문장으로 바로 렌더 (1~2분). 워커 글이 나오면 다음 발송부터 자동 반영"><input type="checkbox" checked={quick} onChange={e => setQuick(e.target.checked)} style={{ width: 'auto', margin: 0 }} /> 빠른 모드 (워커 안 기다림)</label>}
           {!autoRun ? <button type="button" className="btn" disabled={!!busy || !autoSel.size || !account} onClick={runAuto} style={{ background: '#03C75A', borderColor: '#03C75A' }}>자동 발송 시작</button>
             : <button type="button" className="btn" onClick={() => { stopRef.current = true; alog('중단 요청 — 현재 키워드 끝나면 멈춤'); }} style={{ background: '#E11D48', borderColor: '#E11D48' }}>중단</button>}
           {account && <span className="cell-sub">{account.email} · 오늘 {account.today}/{account.limit}</span>}
@@ -246,6 +249,17 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
           </span>
         </div>
         <div className="cell-sub">테스트는 {loadedKw ? `'${loadedKw}'` : '고른 키워드 첫 번째'} 제안서로 제목 앞에 [테스트]를 붙여 보냄 · 일 상한·대상 업체 기록에 안 들어감</div>
+        {useV3 && v3kw && <div style={{ fontSize: 12.5, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', padding: '8px 10px', background: 'var(--bg)', borderRadius: 8 }}>
+          <b>v3 '{v3kw}'</b>
+          {!v3st ? <span className="cell-sub">확인 중…</span> : !v3st.kwData ? <span className="cell-sub">아직 안 만듦 — 보내기/테스트 누르면 자동 준비</span> : <>
+            <span>지수 ✓</span>
+            <span>업체 {v3st.stores}곳 (글 {v3st.storesAi} · 이미지 {v3st.storesImg})</span>
+            <span>키워드 글 {v3st.kwAi === 'done' ? '✓' : v3st.kwAi === 'fallback' ? '기본 문장' : v3st.kwTask ? `워커 #${v3st.kwTask} ${v3st.kwTaskStatus === 'running' ? '작업 중' : v3st.kwTaskStatus === 'queued' ? '대기' : v3st.kwTaskStatus}` : '요청 전'}</span>
+            <span>공통 이미지 {v3st.kwImg}/4</span>
+            <span className="cell-sub">렌더 PC {v3st.renderLast ? `${fmtKST(v3st.renderLast)} 연결 · 큐 ${v3st.renderQueue}` : '연결 안 됨 (pv3_render.py 실행 필요)'}</span>
+            {v3st.kwImg >= 4 && v3st.storesImg > 0 && <Status kind="ok">보낼 수 있음</Status>}
+          </>}
+        </div>}
         {autoDone.length > 0 && <div className="cell-sub">오늘 이미 끝난 키워드 {autoDone.length}개는 건너뜀 (이어하기) · <button type="button" className="btn ghost xs" onClick={resetDone}>처음부터</button></div>}
         <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, display: 'grid', gap: 8 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
