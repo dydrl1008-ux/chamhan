@@ -197,7 +197,7 @@ export async function manualPlan(total: number, perKeyword: number): Promise<R<{
 }
 
 /** 2단계: 키워드 1개 — 제안서(캐시 지수) 1개 만들고 대상 n건을 엑셀 행으로 반환. 워크허브에 발송 기록은 남기지 않음(총괄 요청) */
-export async function manualExport(i: { keyword: string; n: number; owner: string; phone: string; offer: { basic: string; rec: string }; tpl: Tpl; tplB: Tpl; tplC: Tpl; startNo: number }): Promise<R<{ rows: ManualRow[] }>> {
+export async function manualExport(i: { keyword: string; n: number; owner: string; phone: string; offer: { basic: string; rec: string }; tpl: Tpl; tplB: Tpl; tplC: Tpl; startNo: number; kakao?: string }): Promise<R<{ rows: ManualRow[] }>> {
   const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
   const kw = i.keyword.trim(); const sb = supabaseAdmin(); const { days } = await settings();
   const { data: cand, error } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); if (error) return { ok: false, msg: error.message };
@@ -212,7 +212,7 @@ export async function manualExport(i: { keyword: string; n: number; owner: strin
   const base = linkBase(); const rows: ManualRow[] = []; let no = i.startNo;
   for (const c of picks) {
     const em = c.email.toLowerCase(); const e = Buffer.from(em).toString('base64url');
-    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}`, 수신거부링크: `${base}/p/${code}?unsub=1&e=${e}` };
+    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}`, 수신거부링크: `${base}/p/${code}?unsub=1&e=${e}`, 오픈채팅: (i.kakao ?? '').trim() };
     const f = (t: Tpl) => [fillVars(t.subject, v).slice(0, 200), fillVars(t.body, v)] as const;
     const [s1, b1] = f(i.tpl), [s2, b2] = f(i.tplB), [s3, b3] = f(i.tplC);
     rows.push({ no: no++, store: c.store_name, email: em, keyword: kw, rank: v.순위, subject: s1, body: b1, subjectB: s2, bodyB: b2, subjectC: s3, bodyC: b3, link: v.제안서링크, unsub: v.수신거부링크 });

@@ -17,6 +17,8 @@ const A: Tpl = { subject: "{업체명} '{키워드}' 지수 확인 후 연락드
 진행 중에는 순위를 매일 확인하고, 변동은 주간 리포트로 공유하며, 요청은 당일 반영합니다.
 
 자료 보시고 이 메일에 회신 주시면 {업체명} 상품 기준으로 어느 지수가 비는지 바로 짚어드리겠습니다.
+카카오톡이 편하시면 아래 오픈채팅으로 주셔도 됩니다.
+{오픈채팅}
 
 꼭 읽어보시고 회신주세요.` };
 const B: Tpl = { subject: "{업체명} '{키워드}' 상위 10개와 벌어진 지수, 한 장으로 정리했습니다", body: `안녕하세요, {업체명} 대표님. {담당자}입니다.
@@ -44,7 +46,7 @@ const C: Tpl = { subject: "'{키워드}' {업체명} 순위, 리뷰 문제가 �
 
 export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; phone: string }) {
   const [total, setTotal] = useState(1000); const [per, setPer] = useState(50); const [owner, setOwner] = useState(o0); const [phone, setPhone] = useState(p0);
-  const [basic, setBasic] = useState(''); const [rec, setRec] = useState('');
+  const [basic, setBasic] = useState(''); const [rec, setRec] = useState(''); const [kakao, setKakao] = useState('https://open.kakao.com/o/saz4cuKi'); const [onlyA, setOnlyA] = useState(true);
   const [tpl, setTpl] = useState(A); const [tplB, setTplB] = useState(B); const [tplC, setTplC] = useState(C);
   const [busy, setBusy] = useState(false); const [log, setLog] = useState<string[]>([]); const [plan, setPlan] = useState<{ keyword: string; n: number }[] | null>(null);
   const T = ({ v, set, label }: { v: Tpl; set: (t: Tpl) => void; label: string }) => <div className="card" style={{ display: 'grid', gap: 8 }}><div style={{ fontWeight: 800 }}>{label}</div><input value={v.subject} onChange={e => set({ ...v, subject: e.target.value })} placeholder="제목" /><textarea value={v.body} onChange={e => set({ ...v, body: e.target.value })} rows={12} style={{ fontSize: 13, lineHeight: 1.6 }} /></div>;
@@ -55,15 +57,17 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
     if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건 엑셀을 만듭니다. 워크허브에는 기록되지 않습니다. 진행할까요?`)) return;
     setBusy(true); const rows: ManualRow[] = []; let no = 1; const lg: string[] = [];
     for (const p of plan) {
-      const r = await manualExport({ keyword: p.keyword, n: p.n, owner, phone, offer: { basic, rec }, tpl, tplB, tplC, startNo: no });
+      const r = await manualExport({ keyword: p.keyword, n: p.n, owner, phone, offer: { basic, rec }, tpl, tplB, tplC, startNo: no, kakao });
       lg.push(`${r.ok ? '✓' : '✕'} ${r.msg}`); setLog([...lg]);
       if (r.ok && r.rows) { rows.push(...r.rows); no += r.rows.length; }
     }
     setBusy(false);
     if (!rows.length) return notify('뽑힌 행이 없습니다', 'bad');
     const XLSX = await import('xlsx');
-    const ws = XLSX.utils.json_to_sheet(rows.map(r => ({ 번호: r.no, 스토어명: r.store, 메일주소: r.email, 키워드: r.keyword, 현재순위: r.rank, '제목 A': r.subject, '본문 A': r.body, '제목 B': r.subjectB, '본문 B': r.bodyB, '제목 C': r.subjectC, '본문 C': r.bodyC, 제안서링크: r.link, 수신거부링크: r.unsub, 발송계정: '', 발송일: '', 비고: '' })));
-    ws['!cols'] = [4, 22, 30, 14, 8, 50, 70, 50, 70, 50, 70, 46, 46, 18, 12, 20].map(w => ({ wch: w }));
+    const ws = XLSX.utils.json_to_sheet(rows.map(r => onlyA
+      ? { 번호: r.no, 스토어명: r.store, 메일주소: r.email, 키워드: r.keyword, 현재순위: r.rank, 제목: r.subject, 본문: r.body, 제안서링크: r.link, 수신거부링크: r.unsub, 발송계정: '', 발송일: '', 비고: '' }
+      : { 번호: r.no, 스토어명: r.store, 메일주소: r.email, 키워드: r.keyword, 현재순위: r.rank, '제목 A': r.subject, '본문 A': r.body, '제목 B': r.subjectB, '본문 B': r.bodyB, '제목 C': r.subjectC, '본문 C': r.bodyC, 제안서링크: r.link, 수신거부링크: r.unsub, 발송계정: '', 발송일: '', 비고: '' }));
+    ws['!cols'] = (onlyA ? [4, 22, 30, 14, 8, 50, 70, 46, 46, 18, 12, 20] : [4, 22, 30, 14, 8, 50, 70, 50, 70, 50, 70, 46, 46, 18, 12, 20]).map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '발송');
     const ws2 = XLSX.utils.json_to_sheet(plan.map(p => ({ 키워드: p.keyword, 건수: p.n })));
     XLSX.utils.book_append_sheet(wb, ws2, '키워드별');
@@ -80,11 +84,13 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
         <label>연락처<input value={phone} onChange={e => setPhone(e.target.value)} /></label>
         <label>제안서 기본 가격<input value={basic} onChange={e => setBasic(e.target.value)} placeholder="비우면 담당자 안내" /></label>
         <label>제안서 추천 가격<input value={rec} onChange={e => setRec(e.target.value)} placeholder="비우면 담당자 안내" /></label>
+        <label>오픈채팅 링크 ({'{오픈채팅}'})<input value={kakao} onChange={e => setKakao(e.target.value)} placeholder="https://open.kakao.com/o/…" /></label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'end' }}><input type="checkbox" checked={onlyA} onChange={e => setOnlyA(e.target.checked)} style={{ width: 'auto' }} /> A형만 (제목·본문 1칸)</label>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
-        <T v={tpl} set={setTpl} label="A (기본)" /><T v={tplB} set={setTplB} label="B (변형)" /><T v={tplC} set={setTplC} label="C (변형)" />
+        <T v={tpl} set={setTpl} label="A (기본)" />{!onlyA && <><T v={tplB} set={setTplB} label="B (변형)" /><T v={tplC} set={setTplC} label="C (변형)" /></>}
       </div>
-      <div className="help">변수: {'{업체명} {키워드} {순위} {담당자} {연락처} {제안서링크} {수신거부링크}'}</div>
+      <div className="help">변수: {'{업체명} {키워드} {순위} {담당자} {연락처} {제안서링크} {수신거부링크} {오픈채팅}'}</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn ghost" disabled={busy} onClick={doPlan}>{busy ? '확인 중…' : '1. 대상 확인'}</button>
         <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? '만드는 중…' : '2. 엑셀 받기'}</button>
