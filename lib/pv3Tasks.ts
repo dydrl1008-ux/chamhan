@@ -169,8 +169,8 @@ function toStoreAi(it: any, k: KwData, s: StoreData): StoreAi | null {
   };
   return BAD.test(JSON.stringify({ ...ai, first: '', skipWhy: [] })) ? null : ai;
 }
-export async function ingestAi(): Promise<{ kw: number; stores: number; err?: string }> {
-  const db = sb(); let kwN = 0, stN = 0; let err = '';
+export async function ingestAi(): Promise<{ kw: number; stores: number; err?: string; dbg?: string }> {
+  const db = sb(); let kwN = 0, stN = 0; let err = ''; const dbg: string[] = [];
   const chk = (r: { error: { message: string } | null }, where: string) => { if (r.error && !err) err = `${where}: ${r.error.message}`.slice(0, 300); return !r.error; };
   // 키워드: 워커 대기 중(queued) 또는 기본 문장으로 먼저 나간 것(fallback + 작업 번호 남아 있음)
   const { data: ks } = await db.from('pv3_keywords').select('keyword,data,ai,ai_status,ai_task_id').in('ai_status', ['queued', 'fallback']).not('ai_task_id', 'is', null).limit(80);
@@ -186,12 +186,13 @@ export async function ingestAi(): Promise<{ kw: number; stores: number; err?: st
   const byTask = new Map<number, any[]>(); (ss ?? []).forEach(s => { const a = byTask.get(s.ai_task_id) ?? []; a.push(s); byTask.set(s.ai_task_id, a); });
   const kCache = new Map<string, KwData | null>();
   for (const [taskId, rows] of byTask) {
-    const { data: t } = await db.from('ai_tasks').select('status,result').eq('id', taskId).maybeSingle(); if (!t) continue;
-    if (t.status !== 'done' && !DONE_BAD.includes(t.status)) continue;
+    const { data: t } = await db.from('ai_tasks').select('status,result').eq('id', taskId).maybeSingle(); if (!t) { dbg.push(`#${taskId} 작업없음 ${rows.length}곳`); continue; }
+    if (t.status !== 'done' && !DONE_BAD.includes(t.status)) { dbg.push(`#${taskId} ${t.status} ${rows.length}곳`); continue; }
     const kwName = rows[0].keyword as string;
     if (!kCache.has(kwName)) { const { data: kd } = await db.from('pv3_keywords').select('data').eq('keyword', kwName).maybeSingle(); kCache.set(kwName, (kd?.data as KwData) ?? null); }
     const k = kCache.get(kwName); if (!k) continue;
     const j = t.status === 'done' ? parseLoose(t.result) : null; const items: any[] | null = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : null;
+    dbg.push(`#${taskId} ${t.status} ${kwName} ${rows.length}곳(id ${rows.map(r => r.id).slice(0, 4).join(',')}) 결과 ${String(t.result ?? '').length}자 items ${items ? items.length : '파싱실패'}`);
     for (const s of rows) {
       const ai = toStoreAi(items?.find(x => Number(x?.id) === s.id), k, s.data as StoreData);
       let r;
@@ -201,7 +202,7 @@ export async function ingestAi(): Promise<{ kw: number; stores: number; err?: st
       if (chk(r, `업체 ${s.id} 글 저장`)) stN++;
     }
   }
-  return { kw: kwN, stores: stN, ...(err ? { err } : {}) };
+  return { kw: kwN, stores: stN, ...(err ? { err } : {}), dbg: dbg.join(' / ').slice(0, 900) };
 }
 
 /** 렌더 작업 등록 (키워드 공통 장 / 업체별 장) */
