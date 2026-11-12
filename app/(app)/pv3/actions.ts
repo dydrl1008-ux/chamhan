@@ -41,7 +41,7 @@ export async function collect(): Promise<R<{ kw: number; stores: number; renders
   const me = await getProfile(); if (!me || !lead(me)) return { ok: false, msg: '총괄·대표만' };
   const r = await ingestAi(); const renders = await queueMissingRenders();
   revalidatePath('/pv3');
-  return { ok: true, msg: `수거 — 키워드 글 ${r.kw} · 업체 글 ${r.stores} · 렌더 요청 ${renders}`, ...r, renders };
+  return { ok: !r.err, msg: `수거 — 키워드 글 ${r.kw} · 업체 글 ${r.stores} · 렌더 요청 ${renders}${r.err ? ` · 저장 오류: ${r.err}` : ''}`, ...r, renders };
 }
 /** 강제 다시 렌더 (글 고친 뒤) */
 export async function rerender(keyword: string): Promise<R> {

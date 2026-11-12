@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const { data: jobs } = await sb.from('pv3_render_jobs').select('id,kind,ref').eq('status', 'queued').order('id').limit(5);
   if (jobs?.length) await sb.from('pv3_render_jobs').update({ status: 'running' }).in('id', jobs.map(j => j.id));
   const t = process.env.CRON_SECRET;
-  return J({ ok: true, width: 720, scale: 1.5, quality: 82, jobs: (jobs ?? []).map(j => ({ id: j.id, kind: j.kind, ref: j.ref, pages: (j.kind === 'store' ? PV3_STORE_PAGES : COMMON).map(p => ({ page: p, url: `${base()}/pv3/view?kind=${j.kind}&ref=${encodeURIComponent(j.ref)}&page=${p}&t=${t}` })) })) });
+  return J({ ok: true, width: 720, scale: 1.5, quality: 82, jobs: (jobs ?? []).map(j => ({ id: j.id, kind: j.kind, ref: j.ref, pages: (j.kind === 'store' ? PV3_STORE_PAGES : COMMON).map(p => ({ page: p, url: `${base()}/pv3/view?kind=${j.kind}&ref=${encodeURIComponent(j.ref)}&page=${p}&t=${encodeURIComponent(t ?? '')}` })) })) });
 }
 
 export async function POST(req: Request) {

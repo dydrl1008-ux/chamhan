@@ -169,8 +169,9 @@ function toStoreAi(it: any, k: KwData, s: StoreData): StoreAi | null {
   };
   return BAD.test(JSON.stringify({ ...ai, first: '', skipWhy: [] })) ? null : ai;
 }
-export async function ingestAi(): Promise<{ kw: number; stores: number }> {
-  const db = sb(); let kwN = 0, stN = 0;
+export async function ingestAi(): Promise<{ kw: number; stores: number; err?: string }> {
+  const db = sb(); let kwN = 0, stN = 0; let err = '';
+  const chk = (r: { error: { message: string } | null }, where: string) => { if (r.error && !err) err = `${where}: ${r.error.message}`.slice(0, 300); return !r.error; };
   // 키워드: 워커 대기 중(queued) 또는 기본 문장으로 먼저 나간 것(fallback + 작업 번호 남아 있음)
   const { data: ks } = await db.from('pv3_keywords').select('keyword,data,ai,ai_status,ai_task_id').in('ai_status', ['queued', 'fallback']).not('ai_task_id', 'is', null).limit(80);
   for (const k of ks ?? []) {
@@ -193,13 +194,14 @@ export async function ingestAi(): Promise<{ kw: number; stores: number }> {
     const j = t.status === 'done' ? parseLoose(t.result) : null; const items: any[] | null = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : null;
     for (const s of rows) {
       const ai = toStoreAi(items?.find(x => Number(x?.id) === s.id), k, s.data as StoreData);
-      if (ai) await db.from('pv3_stores').update({ ai, ...(s.ai ? { images: [] } : {}) }).eq('id', s.id);                               // 기본 문장 → 워커 글로 교체 시 다시 렌더
-      else if (!s.ai) await db.from('pv3_stores').update({ ai: { ...fallbackStoreAi(k, s.data as StoreData), _src: 'final', _v: PV3_AI_VER } }).eq('id', s.id);
-      else await db.from('pv3_stores').update({ ai: { ...(s.ai as StoreAi), _src: 'final' } }).eq('id', s.id);                           // 워커 실패 — 기본 문장 확정
-      stN++;
+      let r;
+      if (ai) r = await db.from('pv3_stores').update({ ai, ...(s.ai ? { images: [] } : {}) }).eq('id', s.id);                               // 기본 문장 → 워커 글로 교체 시 다시 렌더
+      else if (!s.ai) r = await db.from('pv3_stores').update({ ai: { ...fallbackStoreAi(k, s.data as StoreData), _src: 'final', _v: PV3_AI_VER } }).eq('id', s.id);
+      else r = await db.from('pv3_stores').update({ ai: { ...(s.ai as StoreAi), _src: 'final' } }).eq('id', s.id);                           // 워커 실패 — 기본 문장 확정
+      if (chk(r, `업체 ${s.id} 글 저장`)) stN++;
     }
   }
-  return { kw: kwN, stores: stN };
+  return { kw: kwN, stores: stN, ...(err ? { err } : {}) };
 }
 
 /** 렌더 작업 등록 (키워드 공통 장 / 업체별 장) */
