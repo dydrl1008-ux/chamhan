@@ -113,3 +113,6 @@ details.help-box .body{font-size:13.5px;color:var(--muted);background:#F8F9FC;bo
 
 /* 빈 상태 */
 .empty{text-align:center;color:var(--muted);padding:28px 12px;font-size:14px}
+
+/* 작은 알약 라벨 (제안서 v3 · 수동 엑셀 키워드 표시) */
+.chip { display: inline-block; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); font-size: 12px; font-weight: 600; line-height: 1.5; }
