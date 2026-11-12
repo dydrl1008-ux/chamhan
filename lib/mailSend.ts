@@ -44,7 +44,7 @@ const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 export function v3Html(body: string, urls: string[]) {
   const text = esc(body).replace(/(https?:\/\/[^\s<>"']+)/g, '<a href="$1" style="color:#2F5BFF">$1</a>').replace(/\n/g, '<br>');
   const imgs = urls.map((u, i) => `<img src="${u}" alt="제안서 ${i + 1}" width="720" style="display:block;width:100%;max-width:720px;height:auto;margin:0;border:0">`).join('');
-  return `<div style="font-family:'Malgun Gothic',Apple SD Gothic Neo,sans-serif;font-size:14px;line-height:1.7;color:#222;max-width:720px">${text}<div style="margin:18px 0 10px;border:1px solid #E6E9F0;border-radius:10px;overflow:hidden;font-size:0;line-height:0">${imgs}</div></div>`;
+  return `<div style="font-family:'Malgun Gothic',Apple SD Gothic Neo,sans-serif;font-size:14px;line-height:1.7;color:#222;max-width:720px">${text}<div style="margin:18px 0 10px;border:1px solid #E6E9F0;border-radius:8px;overflow:hidden">${imgs}</div></div>`;
 }
 
 export async function prepareCore(me: { id: string; name: string }, i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string; accountId: number; campaignId?: number | null; v3?: boolean; quick?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
