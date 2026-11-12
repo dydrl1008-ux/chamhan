@@ -77,6 +77,55 @@ export async function prepareSend(i: { keyword: string; ids: number[]; subject: 
   const kw = i.keyword.trim(); if (!kw || !i.ids.length) return { ok: false, msg: '대상을 선택하세요' };
   if (!i.subject.trim() || !i.body.trim()) return { ok: false, msg: '제목·본문을 입력하세요' };
   if (!i.doc || i.doc.keyword !== kw) return { ok: false, msg: '제안서를 먼저 만들어 확인하세요' };
+  return prepareCore(me, { ...i, keyword: kw });
+}
+
+/** 자동 발송: 키워드 1개 — 서버가 대상 n건 고르고(제외 규칙) 제안서(캐시 지수)까지 만들어 바로 작업 반환. 브라우저가 키워드 목록을 돌며 호출 */
+export async function autoPrepare(i: { keyword: string; n: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const kw = i.keyword.trim(); if (!kw) return { ok: false, msg: '키워드 없음' };
+  if (!i.subject.trim() || !i.body.trim()) return { ok: false, msg: '제목·본문을 입력하세요' };
+  const { days } = await settings();
+  const { data: cand, error } = await supabaseAdmin().rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); if (error) return { ok: false, msg: error.message };
+  const ids = ((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by).slice(0, Math.max(1, Math.min(500, i.n))).map(c => c.id);
+  if (!ids.length) return { ok: false, msg: `${kw}: 보낼 수 있는 대상 없음`, skipped: [] };
+  let doc: Doc;
+  try { const r = await search(kw, me.id); doc = buildDoc(r, { ...BRAND, owner: i.owner.trim() || me.name, phone: i.phone.trim() }, null, { basic: i.offer.basic.trim().slice(0, 40), rec: i.offer.rec.trim().slice(0, 40) }); }
+  catch (e: any) { return { ok: false, msg: `${kw}: 제안서 생성 실패 — ${e.message}` }; }
+  return prepareCore(me, { keyword: kw, ids, subject: i.subject, body: i.body, doc, owner: i.owner, phone: i.phone, accountId: i.accountId });
+}
+
+/** 테스트 발송: 키워드 제안서를 내가 지정한 주소 1곳으로. 큐에 '테스트'로 남고 대상 업체·일 상한엔 영향 없음 */
+export async function testSend(i: { keyword: string; to: string; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number }): Promise<R<{ job: AgentJob }>> {
+  const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const kw = i.keyword.trim(); const to = i.to.trim().toLowerCase();
+  if (!kw) return { ok: false, msg: '키워드를 먼저 고르세요' };
+  if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(to)) return { ok: false, msg: '받을 메일 주소를 확인하세요' };
+  if (!i.subject.trim() || !i.body.trim()) return { ok: false, msg: '제목·본문을 입력하세요' };
+  const sb = supabaseAdmin();
+  const { data: acct } = await sb.from('mail_accounts').select('id,email,app_pw_enc,from_name,verified_at').eq('user_id', me.id).eq('id', i.accountId).maybeSingle();
+  if (!acct?.verified_at) return { ok: false, msg: '내 정보에서 메일 계정을 먼저 연결하세요' };
+  let pw: string; try { pw = decrypt(acct.app_pw_enc); } catch { return { ok: false, msg: '계정 복호화 실패 — 내 정보에서 다시 연결하세요' }; }
+  let doc: Doc;
+  try { const r = await search(kw, me.id); doc = buildDoc(r, { ...BRAND, owner: i.owner.trim() || me.name, phone: i.phone.trim() }, null, { basic: i.offer.basic.trim().slice(0, 40), rec: i.offer.rec.trim().slice(0, 40) }); }
+  catch (e: any) { return { ok: false, msg: `제안서 생성 실패 — ${e.message}` }; }
+  const code = randomBytes(6).toString('base64url').slice(0, 8);
+  const { error: pe } = await sb.from('proposals').insert({ code, title: `${kw} 상위노출 제안서 (테스트)`, target_url: '', kind: 'native', data: doc, owner_id: me.id });
+  if (pe) return { ok: false, msg: '제안서 저장 실패: ' + pe.message };
+  const token = randomBytes(16).toString('base64url'); const jobId = `t${Date.now().toString(36)}`;
+  // account_id 비움 → 일 상한 집계에서 제외. target_id 없음 → 대상 업체 발송 기록 아님
+  const { data: q, error: qe } = await sb.from('mail_queue').insert({ sender_id: me.id, account_id: null, target_id: null, to_email: to, store_name: '테스트 발송', keyword: kw, proposal_code: code, job_token: token, status: 'queued', error: '테스트' }).select('id').single();
+  if (qe || !q) return { ok: false, msg: qe?.message ?? '큐 등록 실패' };
+  const base = linkBase(); const mid = `wh.${q.id}.${randomBytes(4).toString('hex')}@inquirydesk.bid`;
+  const v = { 업체명: '테스트업체', 키워드: kw, 순위: '23위', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}` };
+  const subject = `[테스트] ` + fillVars(i.subject, v).slice(0, 190), body = fillVars(i.body, v);
+  await sb.from('mail_queue').update({ subject, body, message_id: `<${mid}>` }).eq('id', q.id);
+  revalidatePath('/mail');
+  return { ok: true, msg: `테스트 1건 → ${to}`, job: { job_id: jobId, sender_email: acct.email, password: pw, sender_name: acct.from_name || `참한기획 ${me.name}`, items: [{ id: q.id, to, subject, body, message_id: `<${mid}>`, store: '테스트 발송' }], gap_sec: 1, callback_url: `${siteBase()}/api/mail/agent-callback`, callback_token: token } };
+}
+
+async function prepareCore(me: { id: string; name: string }, i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string; accountId: number }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
+  const kw = i.keyword;
   const sb = supabaseAdmin();
   const { data: acct } = await sb.from('mail_accounts').select('id,email,app_pw_enc,from_name,verified_at,daily_limit').eq('user_id', me.id).eq('id', i.accountId).maybeSingle();
   if (!acct?.verified_at) return { ok: false, msg: '내 정보에서 메일 계정을 먼저 연결하세요' };

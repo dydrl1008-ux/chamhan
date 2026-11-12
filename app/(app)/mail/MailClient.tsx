@@ -9,7 +9,7 @@ import { fmtKST } from '@/lib/date/kst';
 import { fillVars, MAIL_VARS } from '@/lib/mail';
 import { agentHealth, agentPost, type AgentHealth } from '@/lib/snsAgent';
 import type { Doc } from '@/lib/proposalDoc';
-import { loadKeywords, loadCandidates, makeDoc, prepareSend, failQueued, saveTemplate, cancelQueued, replyPayload, ingestReplies, type Candidate, type AgentJob } from './actions';
+import { loadKeywords, loadCandidates, makeDoc, prepareSend, autoPrepare, testSend, failQueued, saveTemplate, cancelQueued, replyPayload, ingestReplies, type Candidate, type AgentJob } from './actions';
 
 type Hist = { id: number; target?: { phone: string; store_url: string } | null; to_email: string; store_name: string; keyword: string; status: string; error: string | null; queued_at: string; sent_at: string | null; opened_at: string | null; open_cnt: number; replied_at: string | null; proposal_code: string | null };
 type Acct = { id: number; email: string; provider: string; today: number; limit: number };
@@ -30,6 +30,10 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   const [subject, setSubject] = useState(tpl.subject); const [body, setBody] = useState(tpl.body);
   const [busy, setBusy] = useState(''); const [prog, setProg] = useState<Prog | null>(null); const [skipped, setSkipped] = useState<string[]>([]);
   const wrap = useRef<HTMLDivElement>(null); const pollRef = useRef<any>(null);
+  // 자동 발송 (키워드 여러 개를 순서대로) + 테스트 발송
+  const [autoOpen, setAutoOpen] = useState(false); const [autoSel, setAutoSel] = useState<Set<string>>(new Set()); const [perKw, setPerKw] = useState(30); const [autoMax, setAutoMax] = useState(0);
+  const [autoLog, setAutoLog] = useState<string[]>([]); const [autoRun, setAutoRun] = useState(false); const stopRef = useRef(false);
+  const [testTo, setTestTo] = useState(accounts[0]?.email ?? '');
 
   const eligible = (c: Candidate) => !!c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by;
   const reason = (c: Candidate) => !c.email ? '이메일 없음' : c.optout ? '수신거부' : c.replied ? '회신 업체' : c.ours ? c.ours : c.interest ? `${c.interest} 고객` : c.recent_by ? `${c.recent_by} ${c.recent_at ? fmtKST(c.recent_at) : ''} 발송` : '';
@@ -102,6 +106,58 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   };
   const stop = async () => { try { await agentPost('/mail/wh-stop', {}); notify('중단 요청', 'ok'); } catch { notify('SNS_Manager 연결 실패', 'bad'); } };
 
+  const alog = (m: string) => setAutoLog(l => [...l.slice(-200), `${new Date().toLocaleTimeString('ko-KR', { hour12: false })} ${m}`]);
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  /** SNS_Manager 작업이 끝날 때까지 대기 — 성공·실패 수 반환 */
+  const waitIdle = async (): Promise<Prog | null> => {
+    let last: Prog | null = null;
+    for (;;) {
+      await sleep(3000);
+      try { const s = await agentPost<Prog>('/mail/wh-status', {}, 5000); setProg(s); last = s; if (!s.running) return s; } catch { /* 잠깐 끊김 */ }
+      if (stopRef.current) { try { await agentPost('/mail/wh-stop', {}); } catch {} }
+    }
+  };
+  const runAuto = async () => {
+    const list = kws.filter(k => autoSel.has(k.keyword)).sort((a, b) => b.n - a.n).map(k => k.keyword);
+    if (!list.length) { notify('키워드를 고르세요', 'bad'); return; }
+    const h = await agentHealth(); setAgent(h);
+    if (!h.up || !h.mailWh) { notify(h.up ? 'SNS_Manager 구버전' : 'SNS_Manager 가 꺼져 있습니다', 'bad'); return; }
+    if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
+    if (!subject.trim() || !body.trim()) { notify('④ 제목·본문을 먼저 채우세요', 'bad'); return; }
+    const cap = autoMax > 0 ? autoMax : account.limit - account.today;
+    if (!confirm(`키워드 ${list.length}개를 순서대로 자동 발송합니다. 키워드당 최대 ${perKw}건 · 이번 실행 최대 ${cap}건 · ${account.email}. 이 탭을 닫으면 멈춥니다.`)) return;
+    stopRef.current = false; setAutoRun(true); setAutoLog([]); setBusy('auto');
+    let sent = 0, fail = 0;
+    for (const k of list) {
+      if (stopRef.current) { alog('중단'); break; }
+      const left = cap - sent; if (left <= 0) { alog(`이번 실행 한도 ${cap}건 도달 — 종료`); break; }
+      const n = Math.min(perKw, left); alog(`'${k}' 대상 ${n}건 준비…`);
+      const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id });
+      if (!p.ok || !p.job) { alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) break; continue; }
+      try {
+        const res = await agentPost('/mail/wh-send', p.job, 15_000);
+        if (!res?.ok) { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 거부: ' + (res?.error || '')); alog(`'${k}' SNS_Manager 거부 — ${res?.error || ''}`); break; }
+      } catch { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 연결 실패'); alog('SNS_Manager 연결 끊김 — 종료'); break; }
+      setProg({ running: true, total: p.job.items.length, done: 0, ok: 0, fail: 0, current: '', log: [] });
+      const s = await waitIdle(); sent += s?.ok ?? 0; fail += s?.fail ?? 0;
+      alog(`'${k}' 완료 — 성공 ${s?.ok ?? 0} · 실패 ${s?.fail ?? 0} (누적 ${sent})`);
+      await sleep(1500);
+    }
+    setAutoRun(false); setBusy(''); notify(`자동 발송 종료 — 성공 ${sent} · 실패 ${fail}`, fail ? 'bad' : 'ok'); r.refresh();
+  };
+  const doTest = async () => {
+    const k = loadedKw || [...autoSel][0] || kws[0]?.keyword || ''; if (!k) { notify('키워드를 먼저 불러오거나 고르세요', 'bad'); return; }
+    const h = await agentHealth(); setAgent(h);
+    if (!h.up || !h.mailWh) { notify(h.up ? 'SNS_Manager 구버전' : 'SNS_Manager 가 꺼져 있습니다', 'bad'); return; }
+    if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
+    setBusy('test');
+    const p = await testSend({ keyword: k, to: testTo, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id });
+    if (!p.ok || !p.job) { setBusy(''); notify(p.msg, 'bad'); return; }
+    try { const res = await agentPost('/mail/wh-send', p.job, 15_000); if (!res?.ok) { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 거부'); setBusy(''); notify('테스트 발송 실패: ' + (res?.error || ''), 'bad'); return; } }
+    catch { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 연결 실패'); setBusy(''); notify('SNS_Manager 에 연결할 수 없음', 'bad'); return; }
+    notify(`${p.msg} — '${k}' 제안서`, 'ok'); poll(1);
+  };
+
   const sample = rows.find(c => sel.has(c.id)) ?? rows[0];
   const vars = sample ? { 업체명: sample.store_name || '담당자', 키워드: loadedKw, 순위: sample.rank_now ? `${sample.rank_now}위` : '-', 담당자: owner || me.name, 연락처: phone, 제안서링크: '(발송 시 수신자마다 다른 제안서 링크)', 수신거부링크: '(수신자별 수신거부 링크)' } : null;
   const nSel = sel.size, nElig = rows.filter(eligible).length;
@@ -125,6 +181,40 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       {kws.length > 0 && <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3, marginLeft: 'auto' }}>전체 키워드 {kws.length}개 <span style={{ fontWeight: 400 }}>(이메일 업체 많은 순)</span>
         <select value={kws.some(k => k.keyword === loadedKw) ? loadedKw : ''} onChange={e => { if (!e.target.value) return; setKw(e.target.value); load(e.target.value); }} style={{ minWidth: 260 }}>
           <option value="">— 골라서 바로 불러오기</option>{kws.map(k => <option key={k.keyword} value={k.keyword}>{k.keyword} · {k.n}곳</option>)}</select></label>}
+    </div>
+
+    {/* 자동 발송 · 테스트 */}
+    <div className="card" style={{ padding: '12px 14px', display: 'grid', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <b style={{ fontSize: 13 }}>자동 발송</b><span className="cell-sub">키워드 여러 개를 골라두면 순서대로(이메일 업체 많은 순) 대상 추출 → 제안서 → 발송을 반복 · ④ 제목·본문 사용 · 탭을 열어둬야 함</span>
+        <button type="button" className="btn ghost xs" style={{ marginLeft: 'auto' }} onClick={() => setAutoOpen(o => !o)}>{autoOpen ? '접기' : '열기'}</button>
+      </div>
+      {autoOpen && <>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" className="btn ghost xs" onClick={() => setAutoSel(new Set(kws.map(k => k.keyword)))}>전체 {kws.length}개</button>
+          <button type="button" className="btn ghost xs" onClick={() => setAutoSel(new Set(kws.slice(0, 20).map(k => k.keyword)))}>상위 20개</button>
+          <button type="button" className="btn ghost xs" onClick={() => setAutoSel(new Set())}>해제</button>
+          <span className="cell-sub">선택 {autoSel.size}개 · 예상 대상 {kws.filter(k => autoSel.has(k.keyword)).reduce((a, k) => a + Math.min(k.n, perKw), 0)}건 (제외 규칙 적용 전)</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxHeight: 150, overflow: 'auto', padding: 4, background: 'var(--bg)', borderRadius: 8 }}>
+          {kws.map(k => <label key={k.keyword} style={{ fontSize: 12.5, display: 'inline-flex', gap: 4, alignItems: 'center', padding: '3px 8px', borderRadius: 999, border: '1px solid var(--line)', background: autoSel.has(k.keyword) ? '#DCFCE7' : '#fff', cursor: 'pointer' }}>
+            <input type="checkbox" checked={autoSel.has(k.keyword)} onChange={e => { const n = new Set(autoSel); e.target.checked ? n.add(k.keyword) : n.delete(k.keyword); setAutoSel(n); }} style={{ margin: 0 }} />{k.keyword} <span className="cell-sub">{k.n}</span></label>)}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>키워드당 최대<input type="number" value={perKw} onChange={e => setPerKw(Math.max(1, Number(e.target.value) || 1))} style={{ width: 90 }} /></label>
+          <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>이번 실행 최대 <span style={{ fontWeight: 400 }}>(0 = 오늘 남은 한도)</span><input type="number" value={autoMax} onChange={e => setAutoMax(Math.max(0, Number(e.target.value) || 0))} style={{ width: 110 }} /></label>
+          {!autoRun ? <button type="button" className="btn" disabled={!!busy || !autoSel.size || !account} onClick={runAuto} style={{ background: '#03C75A', borderColor: '#03C75A' }}>자동 발송 시작</button>
+            : <button type="button" className="btn" onClick={() => { stopRef.current = true; alog('중단 요청 — 현재 키워드 끝나면 멈춤'); }} style={{ background: '#E11D48', borderColor: '#E11D48' }}>중단</button>}
+          {account && <span className="cell-sub">{account.email} · 오늘 {account.today}/{account.limit}</span>}
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+            <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>테스트 받을 주소<input value={testTo} onChange={e => setTestTo(e.target.value)} placeholder="내 메일" style={{ width: 220 }} /></label>
+            <button type="button" className="btn ghost" disabled={!!busy || !account} onClick={doTest}>{busy === 'test' ? '보내는 중…' : '테스트 1건 발송'}</button>
+          </span>
+        </div>
+        <div className="cell-sub">테스트는 {loadedKw ? `'${loadedKw}'` : '고른 키워드 첫 번째'} 제안서로 제목 앞에 [테스트]를 붙여 보냄 · 일 상한·대상 업체 기록에 안 들어감</div>
+        {autoLog.length > 0 && <div style={{ maxHeight: 160, overflow: 'auto', fontFamily: 'monospace', fontSize: 11.5, background: 'var(--bg)', padding: 8, borderRadius: 8 }}>{autoLog.map((l, i) => <div key={i}>{l}</div>)}</div>}
+        {autoRun && prog && <div style={{ fontSize: 12.5 }}><span>현재 키워드 {prog.done}/{prog.total} · 성공 {prog.ok} · 실패 {prog.fail}</span> <span className="cell-sub">{prog.current}</span></div>}
+      </>}
     </div>
 
     {/* ② 대상 */}
@@ -157,7 +247,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     </div>}
 
     {/* ④ 제목/본문 + ⑤ 발송 */}
-    {loadedKw && rows.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 14 }}>
+    {(autoOpen || (loadedKw && rows.length > 0)) && <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 14 }}>
       <div className="card" style={{ padding: '12px 14px', display: 'grid', gap: 8 }}>
         <b style={{ fontSize: 13 }}>④ 제목 · 본문 <span className="cell-sub" style={{ fontWeight: 400 }}>변수: {MAIL_VARS.join(' ')}</span></b>
         <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="제목" />
