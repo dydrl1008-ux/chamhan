@@ -155,6 +155,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     const k = loadedKw || [...autoSel][0] || kws[0]?.keyword || ''; if (!k) { notify('키워드를 먼저 불러오거나 고르세요', 'bad'); return; }
     const h = await agentHealth(); setAgent(h);
     if (!h.up || !h.mailWh) { notify(h.up ? 'SNS_Manager 구버전' : 'SNS_Manager 가 꺼져 있습니다', 'bad'); return; }
+    if (useV3 && !h.mailHtml) { notify('이 SNS_Manager 는 이미지 발송 전 빌드 — build_exe_agent.bat 다시 돌려 새 exe(2026-11-12b)로 켜 주세요', 'bad'); return; }
     if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
     setBusy('test');
     const p = await testSend({ keyword: k, to: testTo, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3, quick });
@@ -206,7 +207,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     <PageHeader title="메일 발송" desc={`키워드 업체 중 이메일 있는 곳에 제안서 링크 발송 · 본인 PC(SNS_Manager)에서 본인 네이버/지메일 계정으로 · 계정당 하루 ${accounts[0]?.limit ?? 200}건 · 누가 보냈든 ${days}일 내 발송 제외`}
       actions={<span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         {accounts.length ? <select value={acctId} onChange={e => setAcctId(Number(e.target.value))} style={{ padding: '4px 8px', fontSize: 13 }}>{accounts.map(a => <option key={a.id} value={a.id}>{a.email} · 오늘 {a.today}/{a.limit}{a.today >= a.limit ? ' (상한)' : ''}</option>)}</select> : <a href="/me" className="btn ghost" style={{ padding: '4px 10px' }}>내 정보에서 메일 계정 연결 →</a>}
-        {agent === null ? <Status kind="off">SNS_Manager 확인 중</Status> : !agent.up ? <Status kind="bad">SNS_Manager 꺼짐</Status> : !agent.mailWh ? <Status kind="bad">SNS_Manager 구버전 (교체 필요)</Status> : <Status kind="ok">SNS_Manager 켜짐</Status>}
+        {agent === null ? <Status kind="off">SNS_Manager 확인 중</Status> : !agent.up ? <Status kind="bad">SNS_Manager 꺼짐</Status> : !agent.mailWh ? <Status kind="bad">SNS_Manager 구버전 (교체 필요)</Status> : <Status kind="ok">SNS_Manager 켜짐{agent.build ? ` · ${agent.build}` : ''}</Status>}
         <button type="button" className="btn ghost" style={{ padding: '4px 10px' }} onClick={() => checkReplies(true)}>회신 확인</button>
       </span>} />
 
