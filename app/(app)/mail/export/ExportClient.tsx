@@ -52,7 +52,7 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
   const doPlan = async () => { setBusy(true); const r = await manualPlan(total, per); setBusy(false); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok && r.plan) { setPlan(r.plan); setLog([`보낼 수 있는 대상 ${r.available}건 중 ${r.plan.reduce((a, p) => a + p.n, 0)}건 배분 (키워드당 최대 ${per})`]); } };
   const run = async () => {
     if (!plan?.length) return notify('먼저 「대상 확인」', 'bad');
-    if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건을 '발송됨(수동)'으로 기록하고 엑셀을 만듭니다. 실제 발송은 직접 하셔야 합니다. 진행할까요?`)) return;
+    if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건 엑셀을 만듭니다. 워크허브에는 기록되지 않습니다. 진행할까요?`)) return;
     setBusy(true); const rows: ManualRow[] = []; let no = 1; const lg: string[] = [];
     for (const p of plan) {
       const r = await manualExport({ keyword: p.keyword, n: p.n, owner, phone, offer: { basic, rec }, tpl, tplB, tplC, startNo: no });
@@ -87,7 +87,7 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       <div className="help">변수: {'{업체명} {키워드} {순위} {담당자} {연락처} {제안서링크} {수신거부링크}'}</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn ghost" disabled={busy} onClick={doPlan}>{busy ? '확인 중…' : '1. 대상 확인'}</button>
-        <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? '만드는 중…' : '2. 기록하고 엑셀 받기'}</button>
+        <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? '만드는 중…' : '2. 엑셀 받기'}</button>
         {plan && <span className="help">키워드 {plan.length}개 · {plan.reduce((a, p) => a + p.n, 0)}건</span>}
       </div>
       {plan && <div className="card" style={{ fontSize: 13, display: 'flex', gap: 6, flexWrap: 'wrap' }}>{plan.map(p => <span key={p.keyword} className="chip">{p.keyword} {p.n}</span>)}</div>}

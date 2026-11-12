@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { robots: { index: false, follow: false } };
 const BOT = /bot|crawl|spider|scrap|preview|facebookexternalhit|kakaotalk-scrap|slack|telegram|discord|whatsapp|yeti|daum|naver|headless|curl|wget|python|go-http/i;
 
-export default async function PublicProposal({ params, searchParams }: { params: { code: string }; searchParams: { unsub?: string; m?: string; preview?: string } }) {
+export default async function PublicProposal({ params, searchParams }: { params: { code: string }; searchParams: { unsub?: string; m?: string; e?: string; preview?: string } }) {
   const code = (params.code || '').slice(0, 16);
   const msg = (t: string, sub = '') => <div style={{ fontFamily: 'Pretendard, sans-serif', maxWidth: 480, margin: '80px auto', background: '#fff', padding: 32, borderRadius: 12, textAlign: 'center' }}><b style={{ fontSize: 18 }}>{t}</b>{sub && <p style={{ color: '#64748B', fontSize: 14 }}>{sub}</p>}</div>;
   if (!/^[A-Za-z0-9_-]{6,16}$/.test(code)) return msg('잘못된 링크입니다.');
@@ -18,7 +18,8 @@ export default async function PublicProposal({ params, searchParams }: { params:
   const mId = /^\d{1,12}$/.test(searchParams.m ?? '') ? Number(searchParams.m) : null;
   const mq = mId ? (await sb.from('mail_queue').select('id,to_email,proposal_code,opened_at,open_cnt,sender_id,store_name,keyword,target_id').eq('id', mId).maybeSingle()).data : null;
   if (searchParams.unsub === '1') {
-    const em = (mq?.to_email || pr.email || '').toLowerCase();
+    const eParam = (() => { try { const d = Buffer.from(searchParams.e ?? '', 'base64url').toString('utf8'); return /^[^\s@]+@[^\s@]+$/.test(d) ? d : ''; } catch { return ''; } })();   // 수동 발송(엑셀) 건: 큐 없이 메일주소만
+    const em = (mq?.to_email || eParam || pr.email || '').toLowerCase();
     if (em) await sb.from('email_optouts').upsert({ email: em, code }, { onConflict: 'email' });
     return msg('수신거부 처리되었습니다', '앞으로 이 주소로 안내 메일을 보내지 않습니다.');
   }

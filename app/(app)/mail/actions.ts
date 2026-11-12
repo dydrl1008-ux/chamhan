@@ -177,11 +177,11 @@ export async function cancelQueued(id: number): Promise<R> {
 // ───────── 수동 발송용 엑셀 내보내기 (총괄·대표) — 다른 계정으로 직접 보낼 때 ─────────
 export type ManualRow = { no: number; store: string; email: string; keyword: string; rank: string; subject: string; body: string; subjectB: string; bodyB: string; subjectC: string; bodyC: string; link: string; unsub: string };
 export type Tpl = { subject: string; body: string };
-const isLead = (me: { role: string }) => me.role === 'admin' || me.role === 'head';
+const isHeadOnly = (me: { role: string }) => me.role === 'head';   // 수동 발송 엑셀 = 총괄만
 
 /** 1단계: 키워드별로 보낼 수 있는 대상 수 (제외 규칙 적용) → 총 건수 맞춰 배분 */
 export async function manualPlan(total: number, perKeyword: number): Promise<R<{ plan: { keyword: string; n: number }[]; available: number }>> {
-  const me = await getProfile(); if (!me || !isLead(me)) return { ok: false, msg: '총괄·대표만' };
+  const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
   const sb = supabaseAdmin(); const { days } = await settings();
   const { data: kws, error } = await sb.rpc('mail_keywords_json'); if (error) return { ok: false, msg: error.message };
   const list = ((kws ?? []) as { keyword: string; n: number }[]).sort((a, b) => b.n - a.n);
@@ -196,9 +196,9 @@ export async function manualPlan(total: number, perKeyword: number): Promise<R<{
   return { ok: true, msg: `${plan.reduce((a, p) => a + p.n, 0)}건 · 키워드 ${plan.length}개`, plan, available };
 }
 
-/** 2단계: 키워드 1개 — 제안서(캐시 지수) 1개 만들고, 대상 n건을 '발송됨'으로 큐에 기록(중복 발송·열람 추적용) → 엑셀 행 반환 */
+/** 2단계: 키워드 1개 — 제안서(캐시 지수) 1개 만들고 대상 n건을 엑셀 행으로 반환. 워크허브에 발송 기록은 남기지 않음(총괄 요청) */
 export async function manualExport(i: { keyword: string; n: number; owner: string; phone: string; offer: { basic: string; rec: string }; tpl: Tpl; tplB: Tpl; tplC: Tpl; startNo: number }): Promise<R<{ rows: ManualRow[] }>> {
-  const me = await getProfile(); if (!me || !isLead(me)) return { ok: false, msg: '총괄·대표만' };
+  const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
   const kw = i.keyword.trim(); const sb = supabaseAdmin(); const { days } = await settings();
   const { data: cand, error } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); if (error) return { ok: false, msg: error.message };
   const picks = ((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by).slice(0, Math.max(1, i.n));
@@ -209,18 +209,13 @@ export async function manualExport(i: { keyword: string; n: number; owner: strin
   const code = randomBytes(6).toString('base64url').slice(0, 8);
   const { error: pe } = await sb.from('proposals').insert({ code, title: `${kw} 상위노출 제안서`, target_url: '', kind: 'native', data: doc, owner_id: me.id });
   if (pe) return { ok: false, msg: '제안서 저장 실패: ' + pe.message };
-  await sb.from('proposal_logs').insert({ user_id: me.id, keyword: kw, target: null, action: 'link', code });
-  const now = new Date().toISOString();
-  const { data: ins, error: qe } = await sb.from('mail_queue').insert(picks.map(c => ({ sender_id: me.id, account_id: null, target_id: c.id, to_email: c.email.toLowerCase(), store_name: c.store_name, keyword: kw, proposal_code: code, status: 'sent', sent_at: now, error: '수동 발송(엑셀)' }))).select('id,target_id');
-  if (qe) return { ok: false, msg: qe.message };
-  const byT = new Map(picks.map(c => [c.id, c])); const base = linkBase(); const rows: ManualRow[] = []; let no = i.startNo;
-  for (const q of (ins ?? []).sort((a, b) => a.id - b.id)) {
-    const c = byT.get(q.target_id!)!;
-    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}` };
+  const base = linkBase(); const rows: ManualRow[] = []; let no = i.startNo;
+  for (const c of picks) {
+    const em = c.email.toLowerCase(); const e = Buffer.from(em).toString('base64url');
+    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}`, 수신거부링크: `${base}/p/${code}?unsub=1&e=${e}` };
     const f = (t: Tpl) => [fillVars(t.subject, v).slice(0, 200), fillVars(t.body, v)] as const;
     const [s1, b1] = f(i.tpl), [s2, b2] = f(i.tplB), [s3, b3] = f(i.tplC);
-    rows.push({ no: no++, store: c.store_name, email: c.email.toLowerCase(), keyword: kw, rank: v.순위, subject: s1, body: b1, subjectB: s2, bodyB: b2, subjectC: s3, bodyC: b3, link: v.제안서링크, unsub: v.수신거부링크 });
-    await sb.from('mail_queue').update({ subject: s1, body: b1 }).eq('id', q.id);
+    rows.push({ no: no++, store: c.store_name, email: em, keyword: kw, rank: v.순위, subject: s1, body: b1, subjectB: s2, bodyB: b2, subjectC: s3, bodyC: b3, link: v.제안서링크, unsub: v.수신거부링크 });
   }
   return { ok: true, msg: `${kw} ${rows.length}건`, rows };
 }
