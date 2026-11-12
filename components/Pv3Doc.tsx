@@ -194,7 +194,7 @@ export default function Pv3Doc(p: Pv3Props) {
       </div>
       <div className="body" style={{ paddingTop: 26 }}>
         <div className="g3">
-          <div className="stat"><b>{rankText(k, s)}</b><span>「{kw}」 현재 순위<br />{s.rank ? s.band : `상위 ${k.n}개 안에 없음`}</span></div>
+          <div className="stat"><b>{rankText(k, s)}</b><span>「{kw}」 현재 순위<br />{s.rank ? (s.band === '상단' ? '1페이지 상단' : s.band) : `상위 ${k.n}개 안에 없음`}</span></div>
           {defend ? <div className="stat"><b className="green">{man(s.revenue.keep)}</b><span>지금 자리에서 지키는<br />월 매출 추정</span></div> : <div className="stat" style={{ background: C.redSoft, borderColor: C.redLine }}><b className="red">{LEAK_LABEL[s.leak]}</b><span style={{ color: C.sub }}>가장 먼저 풀 곳<br />(02 진단 참고)</span></div>}
           <div className="stat" style={{ borderColor: C.blueLine, background: C.blueSoft }}><b style={{ color: C.blue }}>+{man(s.revenue.gain)}</b><span style={{ color: C.sub }}>{defend ? '연관 키워드로 넓히면' : `${s.target}위권 진입 시`}<br />월 추가 매출 추정</span></div></div>
         <div style={{ marginTop: 14, borderRadius: 20, padding: '24px 26px', background: `linear-gradient(135deg,${C.blueSoft},${C.violetSoft})`, border: `1.5px solid ${C.blueLine}` }}>
@@ -205,7 +205,7 @@ export default function Pv3Doc(p: Pv3Props) {
             {([['지금', C.sub, C.bg, C.line, nowLine(k, s)], ['가장 먼저', C.blue, C.blueSoft, C.blueLine, <><b style={{ color: C.ink }}>{s.lead}</b>부터 시작합니다 ({P1.when}). {stages[0]}</>], ['대표님이 하실 일', C.green, C.greenSoft, C.greenLine, first]] as [string, string, string, string, React.ReactNode][]).map(([t, c, bg, ln, d]) => <div key={t} className="row" style={{ gridTemplateColumns: '1fr', gap: 4, background: bg, border: `1.5px solid ${ln}` }}><b style={{ color: c, fontSize: 15 }}>{t}</b><span style={{ fontSize: 18, lineHeight: 1.62 }}>{d}</span></div>)}</div></div>
         <div className="sec"><div className="eyebrow">이 제안서에 담긴 내용</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 22px', marginTop: 8 }}>
-            {[['02', '진단', `${s.store} 상품이 막힌 곳`], ['03', '시장', `「${kw}」의 수요와 돈`], ['04', '사는 사람', '무엇을 보고 사는지'], ['05', '광고 설계', '무엇을 어떤 순서로'], ['06', '1단계 상세', '실제로 하는 일과 준비물'], ['07', '2·3단계', '그 다음에 더하는 것'], ['08', '일정·역할', '언제 무엇이 진행되는지'], ['09', '예상 매출', '추정 매출과 계산 근거'], ['10', '문의', '카카오톡으로 시작하는 방법']].map(([n, t, d]) => <div key={n} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: `1px solid ${C.line}`, alignItems: 'baseline' }}><b style={{ color: C.blue, fontSize: 14, width: 22, flex: 'none' }}>{n}</b><b style={{ fontSize: 16.5, color: C.ink, whiteSpace: 'nowrap' }}>{t}</b><span style={{ fontSize: 14, color: C.mute, lineHeight: 1.4 }}>{d}</span></div>)}</div></div>
+            {[['02', '진단', defend ? `${s.store} 상품의 현재 자리` : `${s.store} 상품이 막힌 곳`], ['03', '시장', `「${kw}」의 수요와 돈`], ['04', '사는 사람', '무엇을 보고 사는지'], ['05', '광고 설계', '무엇을 어떤 순서로'], ['06', '1단계 상세', '실제로 하는 일과 준비물'], ['07', '2·3단계', '그 다음에 더하는 것'], ['08', '일정·역할', '언제 무엇이 진행되는지'], ['09', '예상 매출', '추정 매출과 계산 근거'], ['10', '문의', '카카오톡으로 시작하는 방법']].map(([n, t, d]) => <div key={n} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: `1px solid ${C.line}`, alignItems: 'baseline' }}><b style={{ color: C.blue, fontSize: 14, width: 22, flex: 'none' }}>{n}</b><b style={{ fontSize: 16.5, color: C.ink, whiteSpace: 'nowrap' }}>{t}</b><span style={{ fontSize: 14, color: C.mute, lineHeight: 1.4 }}>{d}</span></div>)}</div></div>
         {F(1)}</div></div>; }
 
     // ───────── 2. 진단 (업체별) ─────────
@@ -324,7 +324,7 @@ export default function Pv3Doc(p: Pv3Props) {
       {F(8)}</div></div>; }
 
     // ───────── 9. 예상 매출·조합 (업체별) ─────────
-    case 9: { const g6 = s.revenue.gain * 6; return <div className="pv3">{B(9)}<div className="body">
+    case 9: { const g6 = s.revenue.gain * 5.1, g6b = s.revenue.gain * 6.3; return   /* 아래 곡선 면적과 같은 값 (1개월차부터 서서히 오르는 가정) */ <div className="pv3">{B(9)}<div className="body">
       <div className="eyebrow">PROJECTION · 예상 매출</div>
       <h2>진행했을 때의<br />예상 매출</h2>
       <p className="lead">검색량과 순위별 클릭 비율로 계산한 추정치입니다. 실제 매출은 상품·시기에 따라 달라질 수 있어, 계산 근거를 함께 적었습니다.</p>
@@ -337,7 +337,7 @@ export default function Pv3Doc(p: Pv3Props) {
           <path d="M0,158 L98,104 L196,76 L294,64 L392,58 L490,54 L588,52 L588,160 L0,160 Z" fill="rgba(61,99,255,.2)" />
           <polyline fill="none" stroke="#6C8BFF" strokeWidth="4" strokeLinecap="round" points="0,158 98,104 196,76 294,64 392,58 490,54 588,52" />
           <polyline fill="none" stroke="#5EE0A8" strokeWidth="4" strokeLinecap="round" points="0,158 98,104 196,68 294,44 392,28 490,18 588,12" />
-          <text x="436" y="13" fontSize="14.5" fill="#5EE0A8" fontWeight="800" textAnchor="end">3단계까지 · 누적 {eok(g6 * 1.6)}</text><text x="586" y="80" fontSize="14.5" fill="#9DB1FF" fontWeight="800" textAnchor="end">1단계만 · 누적 {eok(g6)}</text>
+          <text x="470" y="13" fontSize="14.5" fill="#5EE0A8" fontWeight="800" textAnchor="end">3단계까지 · 6개월 누적 {eok(g6b)}</text><text x="586" y="80" fontSize="14.5" fill="#9DB1FF" fontWeight="800" textAnchor="end">1단계만 · 6개월 누적 {eok(g6)}</text>
           {[1, 2, 3, 4, 5, 6].map(i => <text key={i} x={i * 98 - (i === 6 ? 16 : 0)} y="184" fontSize="13.5" fill="#8A93A8" textAnchor="middle">{i}개월</text>)}</svg>
         <div style={{ fontSize: 13.5, color: '#8A93A8', marginTop: 8, lineHeight: 1.6 }}>{s.revenue.formula}. {s.revenue.basis}. 3단계 곡선은 후기·콘텐츠가 쌓여 검색량이 늘어난다는 가정입니다.</div></div>
       <div className="sec"><h3>진행 조합</h3><p style={{ fontSize: 17.5, color: C.sub, marginTop: 6 }}>1단계만 먼저 해 보시고, 결과를 본 뒤 넓히시는 것을 권해 드립니다.</p>
