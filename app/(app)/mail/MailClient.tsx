@@ -184,7 +184,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   };
   const connectAgent = async () => {
     const k = await agentKey(); if (!k.ok || !k.key) { notify(k.msg, 'bad'); return; }
-    try { const res = await agentPost('/mail/wh-auto', { enabled: true, base_url: k.base, key: k.key }, 8000); notify(res?.ok ? 'SNS_Manager 자동 끌어가기 켜짐' : '실패: ' + (res?.error || ''), res?.ok ? 'ok' : 'bad'); } catch { notify('SNS_Manager 연결 실패', 'bad'); }
+    try { const res = await agentPost('/mail/wh-auto', { enabled: true, base_url: k.base, key: k.key }, 8000); notify(res?.ok ? 'SNS_Manager 자동 발송 켜짐 — 1분 안에 서버 확인 시작' : '실패: ' + (res?.error || ''), res?.ok ? 'ok' : 'bad'); } catch { notify('SNS_Manager 연결 실패', 'bad'); }
     refreshAgentAuto();
   };
   const refreshAgentAuto = async () => { try { const h = await agentHealth(); setAgent(h); if (h.autoPull) { const st = await agentPost('/mail/wh-auto-status', {}, 5000); setAgentAuto({ enabled: !!st?.enabled, last: st?.last_pull || '', msg: st?.last_msg || '' }); } } catch {} };
@@ -250,15 +250,15 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
         <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, display: 'grid', gap: 8 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <b style={{ fontSize: 13 }}>PC에 맡기기 (브라우저 없이)</b>
-            <span className="cell-sub">고른 키워드를 서버에 등록 → 이 PC의 SNS_Manager 가 1분마다 가져가서 발송 · 하루 상한 차면 다음 날 자동으로 이어감</span>
+            <span className="cell-sub">고른 키워드를 서버에 등록해 두면 이 PC의 SNS_Manager 가 1분마다 서버에서 할 일을 받아 발송 · 브라우저 닫아도 됨 · 하루 상한 차면 다음 날 자동으로 이어감</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-              {agent?.autoPull ? (agentAuto?.enabled ? <Status kind="ok">끌어가기 켜짐{agentAuto.last ? ` · ${agentAuto.last}` : ''}</Status> : <Status kind="off">끌어가기 꺼짐</Status>) : <Status kind="bad">SNS_Manager 교체 필요</Status>}
+              {agent?.autoPull ? (agentAuto?.enabled ? <Status kind="ok">SNS_Manager 자동 발송 켜짐{agentAuto.last ? ` · 마지막 확인 ${agentAuto.last}` : ''}</Status> : <Status kind="off">SNS_Manager 자동 발송 꺼짐</Status>) : <Status kind="bad">SNS_Manager 교체 필요</Status>}
               <button type="button" className="btn ghost xs" onClick={connectAgent}>연결</button>
               <button type="button" className="btn" disabled={!!busy || !autoSel.size || !account} onClick={handOff}>{busy === 'camp' ? '등록 중…' : '이 PC에 맡기기'}</button>
             </span>
           </div>
           {agentAuto?.msg && <div className="cell-sub">SNS_Manager: {agentAuto.msg}</div>}
-          {camps.length > 0 && <table><thead><tr><th>등록</th><th>키워드</th><th>진행</th><th>상태</th><th>마지막 가져감</th><th></th></tr></thead><tbody>
+          {camps.length > 0 && <table><thead><tr><th>등록</th><th>키워드</th><th>진행</th><th>상태</th><th>마지막 확인</th><th></th></tr></thead><tbody>
             {camps.map(c => <tr key={c.id}>
               <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{fmtKST(c.created_at)}</td>
               <td style={{ fontSize: 12.5 }} title={c.keywords.join(', ')}>{c.keywords.slice(0, 4).join(', ')}{c.keywords.length > 4 ? ` 외 ${c.keywords.length - 4}` : ''}</td>
