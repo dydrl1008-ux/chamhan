@@ -188,7 +188,7 @@ export default function Pv3Doc(p: Pv3Props) {
       <div className="hero">
         <div className="hb"><span className="brand">{brand.name}</span><span>광고 설계 제안서 · {k.date}</span></div>
         <span className="pill">{s.store} 대표님께 드리는 맞춤 설계안</span>
-        <h1 style={{ fontSize: hl.length > 40 ? 37 : hl.length > 28 ? 41 : 46 }}>{hl}</h1>
+        <h1 style={{ fontSize: hl.length > 40 ? 37 : hl.length > 28 ? 41 : 46 }}>{hl.includes(', ') ? hl.split(', ').map((t, i, a) => <span key={i} style={{ display: 'block' }}>{t}{i < a.length - 1 ? ',' : ''}</span>) : hl}</h1>
         <p className="hlead">「{kw}」 상위 {k.n}개 상품의 실제 데이터{g ? <>와 월 검색량 <b>{won(g)}회</b>{k.volume.related.length ? '(연관 키워드 포함)' : ''}</> : null}를 기준으로, <b>{s.store} 상품 하나만 놓고</b> 설계한 제안서입니다.</p>
         {(s.image || s.title) && <div className="pcard">
           {s.image && <img src={s.image} alt="" style={{ width: 92, height: 92, borderRadius: 13, objectFit: 'cover', border: `1px solid ${C.line}`, flex: 'none' }} />}
