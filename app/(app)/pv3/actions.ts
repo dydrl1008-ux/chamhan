@@ -133,3 +133,23 @@ export async function removeKnowledge(id: number): Promise<R> {
   const me = await getProfile(); if (!me || !lead(me)) return { ok: false, msg: '총괄·대표만' };
   await supabaseAdmin().from('knowledge').delete().eq('id', id); revalidatePath('/pv3'); return { ok: true, msg: '삭제' };
 }
+
+/** 메일 대상 있는 키워드 전부(이메일 업체 많은 순) × 업체 n곳 — 한 번에 워커 큐에. 전날 저녁에 눌러두면 아침엔 준비 끝 */
+export async function prepareAll(n: number, maxKw = 60): Promise<R<{ kws: number; stores: number; skipped: string[] }>> {
+  const me = await getProfile(); if (!me || !lead(me)) return { ok: false, msg: '총괄·대표만' };
+  const sb = supabaseAdmin();
+  const { data: kws, error } = await sb.rpc('mail_keywords_json'); if (error) return { ok: false, msg: error.message };
+  const list = ((kws ?? []) as { keyword: string; n: number }[]).sort((a, b) => b.n - a.n).slice(0, Math.max(1, Math.min(200, maxKw)));
+  let kwN = 0, stN = 0; const skipped: string[] = [];
+  for (const k of list) {
+    const { data: ex } = await sb.from('pv3_keywords').select('ai_status,images,updated_at').eq('keyword', k.keyword).maybeSingle();
+    if (ex && ['queued', 'done', 'fallback'].includes(ex.ai_status) && Date.now() - new Date(ex.updated_at).getTime() < 24 * 3600e3) {
+      // 키워드는 있음 → 업체만 보충
+      const { count } = await sb.from('pv3_stores').select('id', { count: 'exact', head: true }).eq('keyword', k.keyword);
+      if ((count ?? 0) >= n) continue;
+    }
+    const r = await buildKeyword(k.keyword, n); if (r.ok) { kwN++; stN += r.stores ?? 0; } else skipped.push(`${k.keyword}: ${r.msg}`);
+  }
+  revalidatePath('/pv3');
+  return { ok: true, msg: `키워드 ${kwN}개 · 업체 ${stN}곳 워커 큐에 올림${skipped.length ? ` · 건너뜀 ${skipped.length}` : ''} — 워커·렌더는 자동, 수거는 렌더 스크립트가 2분마다`, kws: kwN, stores: stN, skipped };
+}

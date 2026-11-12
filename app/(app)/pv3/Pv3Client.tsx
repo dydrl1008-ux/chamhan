@@ -5,7 +5,7 @@ import { notify } from '@/components/Toast';
 import { Section, Status } from '@/components/ui';
 import { fmtKST } from '@/lib/date/kst';
 import { LEAK_LABEL } from '@/lib/proposalV3';
-import { buildKeyword, collect, rerender, storesOf, removeKw, saveSetting, addKnowledge, collectKnowledge, distillPrinciples, removeKnowledge, type KwRow, type KnRow } from './actions';
+import { buildKeyword, prepareAll, collect, rerender, storesOf, removeKw, saveSetting, addKnowledge, collectKnowledge, distillPrinciples, removeKnowledge, type KwRow, type KnRow } from './actions';
 
 const AI: Record<string, [string, 'ok' | 'wait' | 'bad' | 'off']> = { none: ['요청 전', 'off'], queued: ['워커 작업 중', 'wait'], done: ['글 완료', 'ok'], fallback: ['기본 문장', 'bad'] };
 type StoreRow = { id: number; store_name: string; leak: string; rank: number | null; ai: boolean; images: number; headline: string };
@@ -26,6 +26,7 @@ export default function Pv3Client({ rows, kakao: k0, style: s0, knowledge, princ
       <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>업체 수 (메일 대상 중)<input type="number" value={n} onChange={e => setN(Number(e.target.value) || 0)} style={{ width: 110 }} /></label>
       <button className="btn" disabled={busy || !kw.trim()} onClick={() => go(() => buildKeyword(kw, n))}>{busy ? '처리 중…' : '① 키워드 만들기'}</button>
       <button className="btn ghost" disabled={busy} onClick={() => go(collect)}>② 워커 결과 수거 + 렌더 요청</button>
+      <button className="btn ghost" disabled={busy} onClick={() => { if (confirm(`메일 대상 있는 키워드 전부(최대 60개) × 업체 ${n}곳을 워커 큐에 올립니다. 몇 시간 걸립니다 (전날 저녁 추천). 진행?`)) go(() => prepareAll(n)); }} style={{ marginLeft: 'auto' }}>메일 키워드 전체 미리 준비</button>
       <span className="help">업체 0 이면 키워드 공통 4장만 · 수거는 워커가 끝난 뒤 (보통 2~5분)</span>
     </div>
 
