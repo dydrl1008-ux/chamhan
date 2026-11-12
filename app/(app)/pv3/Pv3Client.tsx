@@ -5,7 +5,7 @@ import { notify } from '@/components/Toast';
 import { Section, Status } from '@/components/ui';
 import { fmtKST } from '@/lib/date/kst';
 import { LEAK_LABEL } from '@/lib/proposalV3';
-import { buildKeyword, prepareAll, collect, rerender, storesOf, removeKw, saveSetting, addKnowledge, collectKnowledge, distillPrinciples, removeKnowledge, type KwRow, type KnRow } from './actions';
+import { buildKeyword, prepareAll, collect, rerender, storesOf, workerRaw, removeKw, saveSetting, addKnowledge, collectKnowledge, distillPrinciples, removeKnowledge, type KwRow, type KnRow } from './actions';
 
 const AI: Record<string, [string, 'ok' | 'wait' | 'bad' | 'off']> = { none: ['요청 전', 'off'], queued: ['워커 작업 중', 'wait'], done: ['글 완료', 'ok'], fallback: ['기본 문장', 'bad'] };
 type StoreRow = { id: number; store_name: string; leak: string; rank: number | null; ai: boolean; images: number; headline: string };
@@ -13,7 +13,7 @@ type StoreRow = { id: number; store_name: string; leak: string; rank: number | n
 export default function Pv3Client({ rows, kakao: k0, style: s0, knowledge, principles }: { rows: KwRow[]; kakao: string; style: string; knowledge: KnRow[]; principles: { id: number; text: string; category: string }[] }) {
   const r = useRouter(); const [busy, start] = useTransition();
   const [kw, setKw] = useState(''); const [n, setN] = useState(30);
-  const [open, setOpen] = useState<string | null>(null); const [stores, setStores] = useState<Record<string, StoreRow[]>>({});
+  const [open, setOpen] = useState<string | null>(null); const [stores, setStores] = useState<Record<string, StoreRow[]>>({}); const [raw, setRaw] = useState<Record<string, { id: number; title: string; status: string; result: string }[]>>({});
   const [kakao, setKakao] = useState(k0); const [style, setStyle] = useState(s0);
   const [kt, setKt] = useState(''); const [ku, setKu] = useState(''); const [kr, setKr] = useState('');
   const go = (f: () => Promise<{ ok: boolean; msg: string }>) => start(async () => { const x = await f(); notify(x.msg, x.ok ? 'ok' : 'bad'); r.refresh(); });
@@ -42,7 +42,11 @@ export default function Pv3Client({ rows, kakao: k0, style: s0, knowledge, princ
               {[1, 2, 3, 4, 5, 6, 7, 8].map(p => <a key={p} href={view('keyword', x.keyword, p)} target="_blank" rel="noreferrer" className="btn ghost xs" style={{ padding: '2px 6px', marginRight: 2 }} title={`${p}장 미리보기 (업체 정보 없는 버전)`}>{p}</a>)}
               <button className="btn ghost xs" style={{ marginLeft: 6 }} disabled={busy} onClick={() => go(() => buildKeyword(x.keyword, n, true))}>다시 계산</button>
               <button className="btn ghost xs" style={{ marginLeft: 4 }} disabled={busy} onClick={() => go(() => rerender(x.keyword))}>다시 렌더</button>
+              <button className="btn ghost xs" style={{ marginLeft: 4 }} onClick={async () => { if (raw[x.keyword]) { setRaw(r => { const n = { ...r }; delete n[x.keyword]; return n; }); return; } const w = await workerRaw(x.keyword); if (w.ok) setRaw(r => ({ ...r, [x.keyword]: w.items! })); }}>워커 원문</button>
               <button className="btn ghost xs" style={{ marginLeft: 4 }} disabled={busy} onClick={() => { if (confirm(`'${x.keyword}' 삭제?`)) go(() => removeKw(x.keyword)); }}>삭제</button></td></tr>
+          {raw[x.keyword] && <tr key={x.keyword + '_r'}><td colSpan={8} style={{ background: '#FFFBEB', padding: 10 }}>
+            {raw[x.keyword].length === 0 ? <span className="help">워커 작업 없음</span> : raw[x.keyword].map(t => <details key={t.id} open style={{ marginBottom: 8 }}><summary style={{ cursor: 'pointer', fontSize: 12.5 }}><b>#{t.id}</b> {t.title} · <Status kind={t.status === 'done' ? 'ok' : /fail|reject|cancel/.test(t.status) ? 'bad' : 'wait'}>{t.status}</Status></summary><pre style={{ whiteSpace: 'pre-wrap', fontSize: 11.5, margin: '6px 0 0', maxHeight: 320, overflow: 'auto', background: '#fff', padding: 8, borderRadius: 6 }}>{t.result || '(결과 없음)'}</pre></details>)}
+          </td></tr>}
           {open === x.keyword && <tr key={x.keyword + '_s'}><td colSpan={8} style={{ background: 'var(--bg)', padding: 10 }}>
             {!stores[x.keyword] ? <span className="help">불러오는 중…</span> : stores[x.keyword].length === 0 ? <span className="help">업체 없음</span> : <table><thead><tr><th>업체</th><th>순위</th><th>새는 곳</th><th>헤드라인 (워커)</th><th>이미지</th><th></th></tr></thead><tbody>
               {stores[x.keyword].map(s => <tr key={s.id}><td><b>{s.store_name}</b></td><td>{s.rank ?? '-'}</td><td>{LEAK_LABEL[s.leak as keyof typeof LEAK_LABEL] ?? s.leak}</td><td style={{ fontSize: 12.5, maxWidth: 420 }}>{s.ai ? s.headline : <span className="cell-sub">워커 작업 중</span>}</td><td>{s.images >= 4 ? <Status kind="ok">{s.images}장</Status> : <span className="cell-sub">{s.images}/4</span>}</td>

@@ -2,7 +2,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { search } from '@/lib/nsc';
 import { keywordVolumes, adConfigured } from '@/lib/naverAd';
-import { computeKeyword, computeStore, fallbackKwAi, fallbackStoreAi, parseLoose, nounEnd, LEAK_LABEL, man, type KwData, type StoreData, type KwAi, type StoreAi } from '@/lib/proposalV3';
+import { computeKeyword, computeStore, matchProduct, fallbackKwAi, fallbackStoreAi, parseLoose, nounEnd, LEAK_LABEL, AXIS_LABEL, man, type KwData, type StoreData, type KwAi, type StoreAi } from '@/lib/proposalV3';
+import type { Product } from '@/lib/nsc';
 
 export const PV3_TITLE = '[제안서v3]';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
@@ -29,7 +30,7 @@ const RULES = `규칙
 - 리딩 무기·단계 배치는 [실데이터]의 plan 그대로. 바꾸지 말고 '왜 이 순서인지'만 이 상품 데이터로 쓴다.`;
 
 export function kwInstruction(k: KwData, s: StoreData, kn: { knowledge: any[]; principles: any[]; style: string }, who: string) {
-  const real = { keyword: k.keyword, volume: k.volume, top10: k.top10.map(t => ({ rank: t.rank, reviews: t.reviews, price: t.price, click: t.click })), stats: k.stats, contentMarket: k.contentMarket, revenue: { aov: k.revenue.aov, lossMonthly: Math.round(k.revenue.loss) }, sampleStore: { rank: s.rank, reviews: s.reviews, price: s.price, leak: LEAK_LABEL[s.leak], why: s.why, lead: s.lead, plan: s.plan, skip: s.skip } };
+  const real = { keyword: k.keyword, volume: k.volume, top10: k.top10.map(t => ({ rank: t.rank, title: t.title.slice(0, 40), reviews: t.reviews, price: t.price, click: t.click, ad: t.ad || undefined })), stats: k.stats, axes10: k.axes10, contentMarket: k.contentMarket, revenue: { aov: k.revenue.aov, lossMonthly: Math.round(k.revenue.loss) }, sampleStore: { rank: s.rank, reviews: s.reviews, price: s.price, leak: LEAK_LABEL[s.leak], why: s.why, lead: s.lead, plan: s.plan, skip: s.skip } };
   const L: string[] = [];
   L.push(`「${k.keyword}」 광고 제안서의 키워드 공통 글을 JSON으로 써 주세요. (요청: ${who})`); L.push('');
   L.push(RULES); L.push('');
@@ -46,10 +47,14 @@ export function kwInstruction(k: KwData, s: StoreData, kn: { knowledge: any[]; p
 export function storeBatchInstruction(k: KwData, rows: { id: number; s: StoreData }[], who: string) {
   const L: string[] = [];
   L.push(`「${k.keyword}」 제안서의 업체별 도입부 ${rows.length}개를 JSON 배열로 써 주세요. (요청: ${who})`); L.push('');
-  L.push(RULES); L.push('- 업체마다 다른 문장. 업체명·순위·리뷰·가격을 인용해 다른 업체에 붙이면 말이 안 되는 문장으로. 업체명은 store 값 그대로.'); L.push('');
+  L.push(RULES);
+  L.push('- 업체마다 완전히 다른 문장. 그 업체의 숫자(순위·리뷰·가격·지수)와 상품명에서 읽히는 특징(소재·용량·구성·타겟)을 반드시 인용한다. 다른 업체에 그대로 붙여도 말이 되는 문장은 실패.');
+  L.push('- leak(새는 구간)·lead(리딩 무기)·why(근거)는 코드 판정이다. 그 판정을 뒤집지 말고 그 업체 데이터로 설득력 있게 풀어쓴다. 방어·확장(1페이지 상단) 업체는 "새는/묻힌" 표현 금지 — 지키기·넓히기 관점.');
+  L.push('- 상품명(title)이 있으면 거기서 보이는 특징을 1개 이상 문장에 녹인다 (예: "10cm 두께" "3단 접이식" "유기농"). 없는 특징은 지어내지 않는다.');
+  L.push('- have: 상위 10 대비 이미 갖춘 것 3개 (근거 숫자 포함, 25자 내). leak: 비는 것 3개 (25자 내). 없으면 빈 배열 대신 데이터에서 찾은 중립 사실.'); L.push('');
   L.push(`[키워드 공통] 월 검색 ${k.volume.group.toLocaleString('ko-KR')}회 · 상위 10 평균가 ${k.stats.avgPrice10.toLocaleString('ko-KR')}원 · 상위 10 리뷰 중앙값 ${k.stats.medianReview10.toLocaleString('ko-KR')}개 · 상위 10 클릭지수 평균 ${k.stats.avgClick10}`); L.push('');
   L.push('[업체 실데이터]');
-  rows.forEach(r => L.push(JSON.stringify({ id: r.id, store: r.s.store, rank: r.s.rank, reviews: r.s.reviews, price: r.s.price, leak: LEAK_LABEL[r.s.leak], why: r.s.why, lead: r.s.lead, gainMonthly: man(r.s.revenue.gain) })));
+  rows.forEach(r => L.push(JSON.stringify({ id: r.id, store: r.s.store, title: r.s.title || undefined, rank: r.s.rank, band: r.s.band, reviews: r.s.reviews, price: r.s.price, ad: r.s.ad || undefined, axes: r.s.axes ? Object.fromEntries((Object.keys(r.s.axes) as (keyof typeof AXIS_LABEL)[]).map(a => [AXIS_LABEL[a], `${r.s.axes![a]} (상위10 ${k.axes10[a]})`])) : undefined, keepCnt: r.s.keepCnt ?? undefined, openDays: r.s.openDays ?? undefined, leak: LEAK_LABEL[r.s.leak], why: r.s.why, lead: r.s.lead, plan: r.s.plan.map(p => `${p.phase}단계 ${p.title}: ${p.weapons.join('·')}`), gainMonthly: man(r.s.revenue.gain), keepMonthly: r.s.revenue.keep ? man(r.s.revenue.keep) : undefined })));
   L.push('');
   L.push('[출력 JSON — 배열, 업체 id 순서대로 전부]');
   L.push(JSON.stringify({ items: [{ id: 0, headline: '업체명 포함, 강점 인정 뒤 그러나로 꺾는 헤드라인 (40자, 명사 끝)', thesis: '제안서를 관통하는 한 줄 (32자, 명사 끝)', have: ['가진 것 1 (25자)', '가진 것 2', '가진 것 3'], leak: ['새는 곳 1 (25자)', '새는 곳 2', '새는 곳 3'] }] }));
@@ -84,10 +89,12 @@ export async function requestKwAi(kw: string, k: KwData, sample: StoreData, me: 
 }
 
 /** 업체들 계산·저장 + 묶음 워커 요청 (40개씩) */
-export async function ensureStores(kw: string, k: KwData, targets: { target_id: number | null; store: string; rank: number | null; reviews: number | null; price: number | null; link?: string }[], me: { id: string; name: string }): Promise<R<{ ids: number[]; queued: number }>> {
+export async function ensureStores(kw: string, k: KwData, targets: { target_id: number | null; store: string; rank: number | null; reviews: number | null; price: number | null; link?: string; productUrl?: string | null }[], me: { id: string; name: string }): Promise<R<{ ids: number[]; queued: number }>> {
   const db = sb(); const ids: number[] = []; const fresh: { id: number; s: StoreData }[] = [];
+  const { data: nsc } = await db.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods: Product[] = ((nsc?.data as any)?.products ?? []) as Product[];
   for (const t of targets) {
-    const s = computeStore(k, { store: t.store, rank: t.rank, reviews: t.reviews, price: t.price, link: t.link });
+    const product = matchProduct(prods, { store: t.store, productUrl: t.productUrl, rank: t.rank });
+    const s = computeStore(k, { store: t.store, rank: t.rank, reviews: t.reviews, price: t.price, link: t.link, product });
     if (t.target_id) {
       const { data: ex } = await db.from('pv3_stores').select('id,ai,created_at').eq('keyword', kw).eq('target_id', t.target_id).maybeSingle();
       if (ex && Date.now() - new Date(ex.created_at).getTime() < 7 * 86400e3) { await db.from('pv3_stores').update({ data: s }).eq('id', ex.id); ids.push(ex.id); if (!ex.ai) fresh.push({ id: ex.id, s }); continue; }
@@ -148,10 +155,12 @@ export { nounEnd };
 export async function autoPrepareV3(kw: string, me: { id: string; name: string }, picks: { target_id: number; store: string; rank: number | null; reviews: number | null; link?: string }[], quick = false): Promise<{ ready: boolean; msg: string }> {
   const ek = await ensureKeyword(kw, me); if (!ek.ok || !ek.k) return { ready: false, msg: ek.msg };
   const k = ek.k; const db = sb();
-  const { data: nsc } = await db.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods: any[] = (nsc?.data as any)?.products ?? [];
-  const targets = picks.map(c => { const p = c.rank ? prods.find(x => Number(x.rank) === c.rank) : null; return { target_id: c.target_id, store: c.store || '귀사', rank: c.rank, reviews: c.reviews ?? (p ? Number(p.reviewCount) : null), price: p ? Number(p.lowPrice) || null : null, link: c.link }; });
+  const { data: mt } = picks.length ? await db.from('mail_targets').select('id,product_url').in('id', picks.map(c => c.target_id)) : { data: [] as any[] };
+  const purl = new Map((mt ?? []).map((x: any) => [x.id, x.product_url as string | null]));
+  const targets = picks.map(c => ({ target_id: c.target_id, store: c.store || '귀사', rank: c.rank, reviews: c.reviews, price: null as number | null, link: c.link, productUrl: purl.get(c.target_id) ?? null }));
   const es = targets.length ? await ensureStores(kw, k, targets, me) : { msg: '', queued: 0, ids: [] as number[] };
-  const sample = targets.length ? computeStore(k, targets[0]) : computeStore(k, { store: '귀사', rank: null, reviews: null, price: null });
+  const { data: nsc0 } = await db.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods0: Product[] = ((nsc0?.data as any)?.products ?? []) as Product[];
+  const sample = targets.length ? computeStore(k, { ...targets[0], product: matchProduct(prods0, { store: targets[0].store, productUrl: targets[0].productUrl, rank: targets[0].rank }) }) : computeStore(k, { store: '귀사', rank: null, reviews: null, price: null });
   await requestKwAi(kw, k, sample, me, ek.fresh);
   await ingestAi();
   if (quick) {   // 빠른 모드: 워커 안 기다리고 기본 문장으로 바로 렌더 (워커 글 나오면 다음 발송부터 그걸 씀 — 이미지는 '다시 렌더' 필요)

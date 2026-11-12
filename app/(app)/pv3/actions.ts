@@ -5,7 +5,7 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { settings, eligible, type Candidate } from '@/lib/mailSend';
 import { ensureKeyword, ensureStores, requestKwAi, ingestAi, queueRender } from '@/lib/pv3Tasks';
-import { computeStore, parseLoose, type KwData, type StoreData } from '@/lib/proposalV3';
+import { computeStore, matchProduct, parseLoose, type KwData, type StoreData } from '@/lib/proposalV3';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 const lead = (me: { role: string }) => me.role === 'admin' || me.role === 'head';
 
@@ -27,12 +27,12 @@ export async function buildKeyword(keyword: string, n: number, force = false): P
   const k = ek.k; const sb = supabaseAdmin(); const { days } = await settings();
   const { data: cand, error } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); if (error) return { ok: false, msg: error.message };
   const picks = ((cand ?? []) as Candidate[]).filter(eligible).slice(0, Math.max(0, Math.min(300, n)));
-  // 상위 100 안에 있으면 지수 데이터에서 리뷰·가격·클릭 보강
-  const { data: nsc } = await sb.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle();
-  const prods: any[] = (nsc?.data as any)?.products ?? [];
-  const targets = picks.map(c => { const p = c.rank_now ? prods.find(x => Number(x.rank) === c.rank_now) : null; return { target_id: c.id, store: c.store_name || '귀사', rank: c.rank_now, reviews: c.review_cnt ?? (p ? Number(p.reviewCount) : null), price: p ? Number(p.lowPrice) || null : null, link: c.store_url }; });
+  const { data: mt } = picks.length ? await sb.from('mail_targets').select('id,product_url').in('id', picks.map(c => c.id)) : { data: [] as any[] };
+  const purl = new Map((mt ?? []).map((x: any) => [x.id, x.product_url as string | null]));
+  const targets = picks.map(c => ({ target_id: c.id, store: c.store_name || '귀사', rank: c.rank_now, reviews: c.review_cnt, price: null as number | null, link: c.store_url, productUrl: purl.get(c.id) ?? null }));
   const es = targets.length ? await ensureStores(kw, k, targets, me) : { ok: true, msg: '업체 없음', ids: [] as number[], queued: 0 };
-  const sample = targets.length ? computeStore(k, { store: targets[0].store, rank: targets[0].rank, reviews: targets[0].reviews, price: targets[0].price }) : computeStore(k, { store: '귀사', rank: null, reviews: null, price: null });
+  const { data: nsc } = await sb.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods = ((nsc?.data as any)?.products ?? []) as any[];
+  const sample = targets.length ? computeStore(k, { ...targets[0], product: matchProduct(prods, { store: targets[0].store, productUrl: targets[0].productUrl, rank: targets[0].rank }) }) : computeStore(k, { store: '귀사', rank: null, reviews: null, price: null });
   const ra = await requestKwAi(kw, k, sample, me, force || ek.fresh);
   revalidatePath('/pv3');
   return { ok: true, msg: `「${kw}」 ${ek.msg} · ${es.msg} · 키워드 글 ${ra.msg}`, stores: es.ids?.length ?? 0 };
@@ -152,4 +152,16 @@ export async function prepareAll(n: number, maxKw = 60): Promise<R<{ kws: number
   }
   revalidatePath('/pv3');
   return { ok: true, msg: `키워드 ${kwN}개 · 업체 ${stN}곳 워커 큐에 올림${skipped.length ? ` · 건너뜀 ${skipped.length}` : ''} — 워커·렌더는 자동, 수거는 렌더 스크립트가 2분마다`, kws: kwN, stores: stN, skipped };
+}
+
+/** 워커 원문 (키워드 글 + 업체 묶음) — 글 품질 확인·지시문 조정용 */
+export async function workerRaw(keyword: string): Promise<R<{ items: { id: number; title: string; status: string; result: string }[] }>> {
+  const me = await getProfile(); if (!me || !lead(me)) return { ok: false, msg: '총괄·대표만' };
+  const sb = supabaseAdmin();
+  const { data: k } = await sb.from('pv3_keywords').select('ai_task_id').eq('keyword', keyword).maybeSingle();
+  const { data: ss } = await sb.from('pv3_stores').select('ai_task_id').eq('keyword', keyword).not('ai_task_id', 'is', null);
+  const ids = [...new Set([k?.ai_task_id, ...(ss ?? []).map(s => s.ai_task_id)].filter(Boolean))] as number[];
+  if (!ids.length) return { ok: true, msg: '', items: [] };
+  const { data } = await sb.from('ai_tasks').select('id,title,status,result').in('id', ids).order('id');
+  return { ok: true, msg: '', items: (data ?? []).map(t => ({ id: t.id, title: t.title, status: t.status, result: (t.result ?? '').slice(0, 6000) })) };
 }

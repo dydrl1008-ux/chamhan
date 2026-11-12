@@ -23,6 +23,9 @@ export default async function Pv3View({ searchParams }: { searchParams: { kind?:
   }
   const { data: kk } = await sb.from('ai_settings').select('value').eq('key', 'kakao_open').maybeSingle();
   const brand = { name: BRAND.name, owner: owner || '담당자', phone, email: BRAND.email, kakao: kk?.value || 'https://open.kakao.com/o/saz4cuKi' };
-  return <html lang="ko"><head><meta charSet="utf-8" /><style dangerouslySetInnerHTML={{ __html: `html,body{margin:0;background:#F4F1EA}` + PV3_CSS }} /></head>
+  return <html lang="ko"><head><meta charSet="utf-8" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Noto+Serif+KR:wght@600;900&display=swap" />
+    <style dangerouslySetInnerHTML={{ __html: PV3_CSS + `\nhtml,body{margin:0;background:#F4F1EA}` }} /></head>
     <body><div id="pv3-page"><Pv3Doc k={k} ka={ka} s={s} sa={sa} brand={brand} page={page} /></div></body></html>;
 }
