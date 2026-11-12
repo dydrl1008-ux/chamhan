@@ -106,7 +106,7 @@ export default function Pv3Doc(p: Pv3Props) {
         <div className="lead" style={{ fontSize: 18, marginBottom: 14, color: '#AEB6C6' }}>검색 시장에서 매달 오가는 돈 · 추정</div>
         <div style={{ display: 'grid', gap: 12 }}>
           {[['1페이지 전체 (1~40위)', k.revenue.market, 100, '#1F6F5F'], ['상위 10개가 가져가는 몫', k.revenue.loss, ratio(k.revenue.loss / Math.max(1, k.revenue.market)), '#2E8B74'], ['3위 진입 시 가져올 몫', k.volume.group * k.revenue.conv * k.revenue.aov * ctr(3), ratio(ctr(3) / 0.634), '#7FD1B9']].map(([l, v, w, c], i) => <div key={i}><div style={{ fontSize: 16, color: '#8E99AD', marginBottom: 6 }}>{l as string}</div><div style={{ height: 44, borderRadius: 10, background: c as string, width: `${w}%`, display: 'flex', alignItems: 'center', paddingLeft: 16, fontWeight: 800, fontSize: 21, color: i === 2 ? '#052E16' : '#fff', whiteSpace: 'nowrap' }}>{i === 2 ? '+' : ''}{eok(v as number)}</div></div>)}</div></div>
-      <div className="box" style={{ marginTop: 18 }}><div style={{ fontSize: 17.5, lineHeight: 1.7, color: '#334155' }}><b>근거</b> — 월 검색 {g.toLocaleString('ko-KR')}회 × 순위별 클릭 점유 × 전환 {k.revenue.conv * 100}% × 객단가 {k.revenue.aov.toLocaleString('ko-KR')}원(상위 10 평균) · 추정{k.volume.related.length ? ` · 연관: ${k.volume.related.map(r => r.keyword).join(' · ')}` : ''}</div></div>
+      <div className="box" style={{ marginTop: 18 }}><div style={{ fontSize: 17.5, lineHeight: 1.7, color: '#334155' }}><b>근거</b> — 월 검색 {g.toLocaleString('ko-KR')}회 × 순위별 클릭 점유 × 전환 {(k.revenue.conv * 100).toFixed(1)}% × 객단가 {k.revenue.aov.toLocaleString('ko-KR')}원(상위 10 평균) · 추정{k.volume.related.length ? ` · 연관: ${k.volume.related.map(r => r.keyword).join(' · ')}` : ''}</div></div>
       <Foot k={k} s={s} n={4} /></div>; }
 
     case 5: return <div className="pv3">

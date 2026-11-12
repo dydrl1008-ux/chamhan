@@ -132,9 +132,9 @@ export function computeStore(k: KwData, t: { store: string; rank: number | null;
     revenue = { gain, gainMax: gain * 2, formula: '광고 도달 × 클릭률 × 전환율 × 객단가', basis: '월 도달 15만 · 클릭률 1.2% · 검색 대비 전환 0.6배 가정 · 추정' };
   } else if (leak === 'trust' || leak === 'conversion') {
     const gain = base * (ctr(target) - cur) * 0.7;
-    revenue = { gain, gainMax: base * (ctr(1) - cur), formula: '검색량 × 순위별 클릭 점유 × 전환율 × 객단가 (전환 개선 전 70%)', basis: `월 검색 ${k.volume.group.toLocaleString('ko-KR')}회 · 전환 ${CONV * 100}% · 객단가 ${k.revenue.aov.toLocaleString('ko-KR')}원 · 추정` };
+    revenue = { gain, gainMax: base * (ctr(1) - cur), formula: '검색량 × 순위별 클릭 점유 × 전환율 × 객단가 (전환 개선 전 70%)', basis: `월 검색 ${k.volume.group.toLocaleString('ko-KR')}회 · 전환 ${(CONV * 100).toFixed(1)}% · 객단가 ${k.revenue.aov.toLocaleString('ko-KR')}원 · 추정` };
   } else {
-    revenue = { gain: base * (ctr(target) - cur), gainMax: base * (ctr(1) - cur), formula: '검색량 × 순위별 클릭 점유 × 전환율 × 객단가', basis: `월 검색 ${k.volume.group.toLocaleString('ko-KR')}회 · 전환 ${CONV * 100}% · 객단가 ${k.revenue.aov.toLocaleString('ko-KR')}원(상위 10 평균) · 추정` };
+    revenue = { gain: base * (ctr(target) - cur), gainMax: base * (ctr(1) - cur), formula: '검색량 × 순위별 클릭 점유 × 전환율 × 객단가', basis: `월 검색 ${k.volume.group.toLocaleString('ko-KR')}회 · 전환 ${(CONV * 100).toFixed(1)}% · 객단가 ${k.revenue.aov.toLocaleString('ko-KR')}원(상위 10 평균) · 추정` };
   }
   return { store: t.store, rank, reviews, price, click: t.click ?? null, link: t.link ?? '', leak, stage: LEAK_STAGE[leak], why, lead, plan, skip, target, revenue, gapReview, gapPrice };
 }
@@ -165,7 +165,7 @@ export function fallbackStoreAi(k: KwData, s: StoreData): StoreAi {
   return {
     headline: `「${k.keyword}」 ${r}, ${LEAK_LABEL[s.leak]} 구간에서 새는 ${s.store}`,
     thesis: s.leak === 'defend' ? '지금 자리를 지키며 브랜드 검색을 자산으로' : `${LEAK_LABEL[s.leak]}부터 막는 순서`,
-    have: s.why.filter(w => /이상|낮은|보유|충분/.test(w)).slice(0, 3),
+    have: (() => { const h = s.why.filter(w => /이상|낮은|보유|충분/.test(w)).slice(0, 3); return h.length ? h : [`월 검색 ${k.volume.group.toLocaleString('ko-KR')}회 시장 안에 있는 상품`]; })(),
     leak: s.why.filter(w => !/이상|낮은|보유|충분/.test(w)).slice(0, 3),
   };
 }
