@@ -9,7 +9,7 @@ import { fmtKST } from '@/lib/date/kst';
 import { fillVars, MAIL_VARS } from '@/lib/mail';
 import { agentHealth, agentPost, type AgentHealth } from '@/lib/snsAgent';
 import type { Doc } from '@/lib/proposalDoc';
-import { loadKeywords, loadCandidates, makeDoc, prepareSend, autoPrepare, testSend, failQueued, saveTemplate, cancelQueued, replyPayload, ingestReplies, type Candidate, type AgentJob } from './actions';
+import { loadKeywords, loadCandidates, makeDoc, prepareSend, autoPrepare, testSend, failQueued, saveTemplate, cancelQueued, replyPayload, ingestReplies, listCampaigns, createCampaign, setCampaign, agentKey, type Candidate, type AgentJob, type Campaign } from './actions';
 
 type Hist = { id: number; target?: { phone: string; store_url: string } | null; to_email: string; store_name: string; keyword: string; status: string; error: string | null; queued_at: string; sent_at: string | null; opened_at: string | null; open_cnt: number; replied_at: string | null; proposal_code: string | null };
 type Acct = { id: number; email: string; provider: string; today: number; limit: number };
@@ -34,6 +34,12 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   const [autoOpen, setAutoOpen] = useState(false); const [autoSel, setAutoSel] = useState<Set<string>>(new Set()); const [perKw, setPerKw] = useState(30); const [autoMax, setAutoMax] = useState(0);
   const [autoLog, setAutoLog] = useState<string[]>([]); const [autoRun, setAutoRun] = useState(false); const stopRef = useRef(false);
   const [testTo, setTestTo] = useState(accounts[0]?.email ?? '');
+  const DONE_KEY = 'wh.mail.autoDone'; const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const [autoDone, setAutoDone] = useState<string[]>(() => { try { const j = JSON.parse(localStorage.getItem(DONE_KEY) || '{}'); return j.d === today ? (j.kws ?? []) : []; } catch { return []; } });
+  const markDone = (k: string) => setAutoDone(d => { const n = [...new Set([...d, k])]; try { localStorage.setItem(DONE_KEY, JSON.stringify({ d: today, kws: n })); } catch {} return n; });
+  const resetDone = () => { setAutoDone([]); try { localStorage.removeItem(DONE_KEY); } catch {} };
+  const [camps, setCamps] = useState<Campaign[]>([]); const [agentAuto, setAgentAuto] = useState<{ enabled: boolean; last: string; msg: string } | null>(null);
+  const loadCamps = async () => { const x = await listCampaigns(); if (x.ok) setCamps(x.rows!); };
 
   const eligible = (c: Candidate) => !!c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by;
   const reason = (c: Candidate) => !c.email ? '이메일 없음' : c.optout ? '수신거부' : c.replied ? '회신 업체' : c.ours ? c.ours : c.interest ? `${c.interest} 고객` : c.recent_by ? `${c.recent_by} ${c.recent_at ? fmtKST(c.recent_at) : ''} 발송` : '';
@@ -118,8 +124,8 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     }
   };
   const runAuto = async () => {
-    const list = kws.filter(k => autoSel.has(k.keyword)).sort((a, b) => b.n - a.n).map(k => k.keyword);
-    if (!list.length) { notify('키워드를 고르세요', 'bad'); return; }
+    const list = kws.filter(k => autoSel.has(k.keyword) && !autoDone.includes(k.keyword)).sort((a, b) => b.n - a.n).map(k => k.keyword);
+    if (!list.length) { notify(autoDone.length ? '고른 키워드는 오늘 이미 다 돌았습니다 — 「처음부터」로 초기화' : '키워드를 고르세요', 'bad'); return; }
     const h = await agentHealth(); setAgent(h);
     if (!h.up || !h.mailWh) { notify(h.up ? 'SNS_Manager 구버전' : 'SNS_Manager 가 꺼져 있습니다', 'bad'); return; }
     if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
@@ -133,14 +139,14 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       const left = cap - sent; if (left <= 0) { alog(`이번 실행 한도 ${cap}건 도달 — 종료`); break; }
       const n = Math.min(perKw, left); alog(`'${k}' 대상 ${n}건 준비…`);
       const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id });
-      if (!p.ok || !p.job) { alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) break; continue; }
+      if (!p.ok || !p.job) { alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) break; markDone(k); continue; }
       try {
         const res = await agentPost('/mail/wh-send', p.job, 15_000);
         if (!res?.ok) { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 거부: ' + (res?.error || '')); alog(`'${k}' SNS_Manager 거부 — ${res?.error || ''}`); break; }
       } catch { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 연결 실패'); alog('SNS_Manager 연결 끊김 — 종료'); break; }
       setProg({ running: true, total: p.job.items.length, done: 0, ok: 0, fail: 0, current: '', log: [] });
       const s = await waitIdle(); sent += s?.ok ?? 0; fail += s?.fail ?? 0;
-      alog(`'${k}' 완료 — 성공 ${s?.ok ?? 0} · 실패 ${s?.fail ?? 0} (누적 ${sent})`);
+      markDone(k); alog(`'${k}' 완료 — 성공 ${s?.ok ?? 0} · 실패 ${s?.fail ?? 0} (누적 ${sent})`);
       await sleep(1500);
     }
     setAutoRun(false); setBusy(''); notify(`자동 발송 종료 — 성공 ${sent} · 실패 ${fail}`, fail ? 'bad' : 'ok'); r.refresh();
@@ -157,6 +163,33 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     catch { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 연결 실패'); setBusy(''); notify('SNS_Manager 에 연결할 수 없음', 'bad'); return; }
     notify(`${p.msg} — '${k}' 제안서`, 'ok'); poll(1);
   };
+
+  /** B. 캠페인 등록 + 이 PC의 SNS_Manager 에 끌어가기 키 전달 */
+  const handOff = async () => {
+    const list = kws.filter(k => autoSel.has(k.keyword)).sort((a, b) => b.n - a.n).map(k => k.keyword);
+    if (!list.length) { notify('키워드를 고르세요', 'bad'); return; }
+    if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
+    if (!subject.trim() || !body.trim()) { notify('④ 제목·본문을 먼저 채우세요', 'bad'); return; }
+    const h = await agentHealth(); setAgent(h);
+    if (!h.up) { notify('SNS_Manager 가 꺼져 있습니다', 'bad'); return; }
+    if (!h.autoPull) { notify('SNS_Manager 가 자동 끌어가기 없는 구버전 — 새 exe 로 교체 후 다시', 'bad'); return; }
+    if (!confirm(`키워드 ${list.length}개를 이 PC의 SNS_Manager 에 맡깁니다. 브라우저를 닫아도 PC·SNS_Manager 가 켜져 있으면 계속 발송합니다 (키워드당 ${perKw}건 · 하루 ${autoMax > 0 ? autoMax + '건' : '계정 상한'}).`)) return;
+    setBusy('camp');
+    const c = await createCampaign({ keywords: list, perKw, dailyCap: autoMax, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id });
+    if (!c.ok) { setBusy(''); notify(c.msg, 'bad'); return; }
+    const k = await agentKey(); if (!k.ok || !k.key) { setBusy(''); notify(k.msg, 'bad'); return; }
+    try { const res = await agentPost('/mail/wh-auto', { enabled: true, base_url: k.base, key: k.key }, 8000); if (!res?.ok) notify('SNS_Manager 설정 실패: ' + (res?.error || ''), 'bad'); else notify(c.msg, 'ok'); }
+    catch { notify('SNS_Manager 연결 실패 — 캠페인은 등록됨. SNS_Manager 켜고 「연결」 누르세요', 'bad'); }
+    setBusy(''); loadCamps(); refreshAgentAuto();
+  };
+  const connectAgent = async () => {
+    const k = await agentKey(); if (!k.ok || !k.key) { notify(k.msg, 'bad'); return; }
+    try { const res = await agentPost('/mail/wh-auto', { enabled: true, base_url: k.base, key: k.key }, 8000); notify(res?.ok ? 'SNS_Manager 자동 끌어가기 켜짐' : '실패: ' + (res?.error || ''), res?.ok ? 'ok' : 'bad'); } catch { notify('SNS_Manager 연결 실패', 'bad'); }
+    refreshAgentAuto();
+  };
+  const refreshAgentAuto = async () => { try { const h = await agentHealth(); setAgent(h); if (h.autoPull) { const st = await agentPost('/mail/wh-auto-status', {}, 5000); setAgentAuto({ enabled: !!st?.enabled, last: st?.last_pull || '', msg: st?.last_msg || '' }); } } catch {} };
+  useEffect(() => { loadCamps(); refreshAgentAuto(); const t = setInterval(() => { loadCamps(); refreshAgentAuto(); }, 60_000); return () => clearInterval(t); // eslint-disable-next-line
+  }, []);
 
   const sample = rows.find(c => sel.has(c.id)) ?? rows[0];
   const vars = sample ? { 업체명: sample.store_name || '담당자', 키워드: loadedKw, 순위: sample.rank_now ? `${sample.rank_now}위` : '-', 담당자: owner || me.name, 연락처: phone, 제안서링크: '(발송 시 수신자마다 다른 제안서 링크)', 수신거부링크: '(수신자별 수신거부 링크)' } : null;
@@ -212,6 +245,32 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
           </span>
         </div>
         <div className="cell-sub">테스트는 {loadedKw ? `'${loadedKw}'` : '고른 키워드 첫 번째'} 제안서로 제목 앞에 [테스트]를 붙여 보냄 · 일 상한·대상 업체 기록에 안 들어감</div>
+        {autoDone.length > 0 && <div className="cell-sub">오늘 이미 끝난 키워드 {autoDone.length}개는 건너뜀 (이어하기) · <button type="button" className="btn ghost xs" onClick={resetDone}>처음부터</button></div>}
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <b style={{ fontSize: 13 }}>PC에 맡기기 (브라우저 없이)</b>
+            <span className="cell-sub">고른 키워드를 서버에 등록 → 이 PC의 SNS_Manager 가 1분마다 가져가서 발송 · 하루 상한 차면 다음 날 자동으로 이어감</span>
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+              {agent?.autoPull ? (agentAuto?.enabled ? <Status kind="ok">끌어가기 켜짐{agentAuto.last ? ` · ${agentAuto.last}` : ''}</Status> : <Status kind="off">끌어가기 꺼짐</Status>) : <Status kind="bad">SNS_Manager 교체 필요</Status>}
+              <button type="button" className="btn ghost xs" onClick={connectAgent}>연결</button>
+              <button type="button" className="btn" disabled={!!busy || !autoSel.size || !account} onClick={handOff}>{busy === 'camp' ? '등록 중…' : '이 PC에 맡기기'}</button>
+            </span>
+          </div>
+          {agentAuto?.msg && <div className="cell-sub">SNS_Manager: {agentAuto.msg}</div>}
+          {camps.length > 0 && <table><thead><tr><th>등록</th><th>키워드</th><th>진행</th><th>상태</th><th>마지막 가져감</th><th></th></tr></thead><tbody>
+            {camps.map(c => <tr key={c.id}>
+              <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{fmtKST(c.created_at)}</td>
+              <td style={{ fontSize: 12.5 }} title={c.keywords.join(', ')}>{c.keywords.slice(0, 4).join(', ')}{c.keywords.length > 4 ? ` 외 ${c.keywords.length - 4}` : ''}</td>
+              <td style={{ fontSize: 12.5 }}>{c.progress?.done?.length ?? 0}/{c.keywords.length} 키워드 · {c.progress?.sent ?? 0}건{c.progress?.log?.length ? <div className="cell-sub" title={c.progress.log.join('\n')}>{c.progress.log[c.progress.log.length - 1]}</div> : null}</td>
+              <td><Status kind={c.status === 'active' ? 'ok' : c.status === 'paused' ? 'wait' : 'off'}>{c.status === 'active' ? '진행' : c.status === 'paused' ? '정지' : '완료'}</Status></td>
+              <td className="cell-sub">{c.last_pull_at ? fmtKST(c.last_pull_at) : '-'}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>
+                {c.status === 'active' && <button type="button" className="btn ghost xs" onClick={async () => { const x = await setCampaign(c.id, 'paused'); notify(x.msg, x.ok ? 'ok' : 'bad'); loadCamps(); }}>정지</button>}
+                {c.status === 'paused' && <button type="button" className="btn ghost xs" onClick={async () => { const x = await setCampaign(c.id, 'active'); notify(x.msg, x.ok ? 'ok' : 'bad'); loadCamps(); }}>재개</button>}
+                <button type="button" className="btn ghost xs" style={{ marginLeft: 4 }} onClick={async () => { if (!confirm('삭제할까요? 이미 나간 메일은 그대로입니다.')) return; const x = await setCampaign(c.id, 'delete'); notify(x.msg, x.ok ? 'ok' : 'bad'); loadCamps(); }}>삭제</button>
+              </td></tr>)}
+          </tbody></table>}
+        </div>
         {autoLog.length > 0 && <div style={{ maxHeight: 160, overflow: 'auto', fontFamily: 'monospace', fontSize: 11.5, background: 'var(--bg)', padding: 8, borderRadius: 8 }}>{autoLog.map((l, i) => <div key={i}>{l}</div>)}</div>}
         {autoRun && prog && <div style={{ fontSize: 12.5 }}><span>현재 키워드 {prog.done}/{prog.total} · 성공 {prog.ok} · 실패 {prog.fail}</span> <span className="cell-sub">{prog.current}</span></div>}
       </>}
