@@ -109,7 +109,7 @@ export async function ensureStores(kw: string, k: KwData, targets: { target_id: 
   const db = sb(); const ids: number[] = []; const fresh: { id: number; s: StoreData }[] = [];
   const { data: nsc } = await db.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods: Product[] = ((nsc?.data as any)?.products ?? []) as Product[];
   const tids = targets.map(t => t.target_id).filter((x): x is number => !!x);
-  const { data: exRows } = tids.length ? await db.from('pv3_stores').select('id,target_id,ai,data,created_at').eq('keyword', kw).in('target_id', tids) : { data: [] as any[] };
+  const { data: exRows } = tids.length ? await db.from('pv3_stores').select('id,target_id,ai,ai_task_id,data,created_at').eq('keyword', kw).in('target_id', tids) : { data: [] as any[] };
   const exBy = new Map<number, any>((exRows ?? []).map((r: any) => [r.target_id, r]));
   const toInsert: { keyword: string; target_id: number | null; store_name: string; data: StoreData }[] = [];
   for (const t of targets) {
@@ -119,7 +119,8 @@ export async function ensureStores(kw: string, k: KwData, targets: { target_id: 
     if (!ex) { toInsert.push({ keyword: kw, target_id: t.target_id, store_name: t.store, data: s }); continue; }
     const ai = ex.ai as StoreAi | null; const od = ex.data as StoreData | null; const old = Date.now() - new Date(ex.created_at).getTime() > 7 * 86400e3;
     const changed = !od || od.dv !== PV3_DATA_VER || od.leak !== s.leak || od.lead !== s.lead || JSON.stringify(od.plan) !== JSON.stringify(s.plan) || Math.abs((od.rank ?? 999) - (s.rank ?? 999)) >= 5 || (!od.title && !!s.title);
-    if (!ai || ai._v !== PV3_AI_VER || changed || old) {   // 글 구조가 예전 것 · 판정/순위가 크게 바뀜 · 7일 지남 → 데이터·글·이미지 새로
+    const waiting = !ai && !!ex.ai_task_id && !changed && !old;   // 워커 글을 기다리는 중 — 다시 요청하지 않는다 (호출될 때마다 작업이 새로 쌓이던 문제)
+    if (!waiting && (!ai || ai._v !== PV3_AI_VER || changed || old)) {   // 글 구조가 예전 것 · 판정/순위가 크게 바뀜 · 7일 지남 → 데이터·글·이미지 새로
       await db.from('pv3_stores').update({ store_name: t.store, data: s, ai: null, ai_task_id: null, images: [], created_at: new Date().toISOString() }).eq('id', ex.id); fresh.push({ id: ex.id, s });
     }
     ids.push(ex.id);
