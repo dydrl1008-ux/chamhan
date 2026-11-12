@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
-import { calc, hangul, type QData, type QItem, type QRow, type Supplier, type Suppliers } from '@/lib/quote';
+import { calc, hangul, supOf, SUP_VAT, type SupKey, type QData, type QItem, type QRow, type Supplier, type Suppliers } from '@/lib/quote';
 import { saveQuote, deleteQuote, saveSuppliers } from './actions';
 
 const INK = '#0A1024', SUB = '#55607A', MUTE = '#8A93A8', LINE = '#E3E7F0', SOFT = '#F4F6FB', BLUE = '#2B5BFF', BLUESOFT = '#EEF2FF', BLUELINE = '#C5D3FF';
@@ -25,7 +25,7 @@ export default function QuoteClient({ rows, suppliers, canEditSupplier, me }: { 
   const router = useRouter(); const sheet = useRef<HTMLDivElement>(null);
   const [id, setId] = useState<number | null>(null); const [d, setD] = useState<QData>(blank); const [busy, setBusy] = useState('');
   const [sup, setSup] = useState<Suppliers>(suppliers); const [showSup, setShowSup] = useState(false);
-  const c = useMemo(() => calc(d), [d]); const S = d.vat === 'none' ? sup.novat : sup.main;
+  const c = useMemo(() => calc(d), [d]); const sk = supOf(d); const S = sup[sk];
   const set = (p: Partial<QData>) => setD(x => ({ ...x, ...p }));
   const setItem = (i: number, p: Partial<QItem>) => setD(x => ({ ...x, items: x.items.map((it, j) => j === i ? { ...it, ...p } : it) }));
   const png = async () => { if (!sheet.current) return null; const { toPng } = await import('html-to-image'); return toPng(sheet.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true }); };
@@ -58,9 +58,9 @@ export default function QuoteClient({ rows, suppliers, canEditSupplier, me }: { 
           <label><span style={lab}>거래처명 (○○ 귀하)</span><input style={inp} value={d.client} onChange={e => set({ client: e.target.value })} placeholder="예: 슈퍼포우" /></label>
           <label><span style={lab}>견적일자</span><input style={inp} type="date" value={d.date} onChange={e => set({ date: e.target.value })} /></label>
         </div>
-        <div><span style={lab}>부가세</span>
-          <div style={{ display: 'flex', gap: 6 }}>{([['excl', '10% 별도'], ['none', '없음 (리코프리)']] as [QData['vat'], string][]).map(([v, t]) => <button key={v} className={d.vat === v ? 'btn xs' : 'btn ghost xs'} onClick={() => set({ vat: v })}>{t}</button>)}</div>
-          <div className="help" style={{ marginTop: 4 }}>{d.vat === 'none' ? `부가세 없는 견적 — 공급자·입금계좌가 ${sup.novat.name}로 나갑니다` : `공급자 ${sup.main.name} · 단가는 부가세 별도 금액으로 입력`}</div></div>
+        <div><span style={lab}>공급자 (부가세)</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{(['main', 'adfree', 'novat'] as SupKey[]).map(k => <button key={k} className={sk === k ? 'btn xs' : 'btn ghost xs'} onClick={() => set({ sup: k, vat: SUP_VAT[k] })}>{sup[k].name} · {SUP_VAT[k] === 'none' ? '부가세 없음' : '10% 별도'}</button>)}</div>
+          <div className="help" style={{ marginTop: 4 }}>{d.vat === 'none' ? `부가세 없는 견적 — 공급자·입금계좌가 ${S.name}로 나갑니다` : `공급자 ${S.name} · 단가는 부가세 별도 금액으로 입력`}{!S.account ? ' · 입금계좌가 비어 있습니다 (공급자 정보 설정에서 입력)' : ''}</div></div>
         <div><span style={lab}>품목</span>
           <div style={{ display: 'grid', gap: 8 }}>{d.items.map((it, i) => <div key={i} style={{ border: '1px solid var(--line, #d9dde6)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 28px', gap: 6 }}><input style={inp} value={it.name} onChange={e => setItem(i, { name: e.target.value })} placeholder="품명 (예: 강아지덴탈껌 xs)" /><button className="btn ghost xs" onClick={() => setD(x => ({ ...x, items: x.items.length > 1 ? x.items.filter((_, j) => j !== i) : [blankItem()] }))} title="삭제">×</button></div>
@@ -77,7 +77,7 @@ export default function QuoteClient({ rows, suppliers, canEditSupplier, me }: { 
         </div>
         <div className="help">「이미지 복사」 후 카톡 대화창에서 Ctrl+V 하면 바로 붙습니다. 복사·저장할 때 목록에도 자동으로 남습니다.</div>
         {canEditSupplier && <div><button className="btn ghost xs" onClick={() => setShowSup(v => !v)}>{showSup ? '공급자 정보 닫기' : '공급자 정보 설정'}</button>
-          {showSup && <div style={{ display: 'grid', gap: 12, marginTop: 10 }}>{(['main', 'novat'] as (keyof Suppliers)[]).map(k => <div key={k} style={{ border: '1px solid var(--line, #d9dde6)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}><b style={{ fontSize: 13 }}>{k === 'main' ? '부가세 있는 견적 (세금계산서)' : '부가세 없는 견적'}</b>
+          {showSup && <div style={{ display: 'grid', gap: 12, marginTop: 10 }}>{(['main', 'adfree', 'novat'] as (keyof Suppliers)[]).map(k => <div key={k} style={{ border: '1px solid var(--line, #d9dde6)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}><b style={{ fontSize: 13 }}>{sup[k].name} — {SUP_VAT[k] === 'none' ? '부가세 없음' : '10% 별도'}</b>
             {SUP_FIELDS.map(([f, t]) => <label key={f} style={{ display: 'grid', gridTemplateColumns: '92px 1fr', gap: 6, alignItems: 'center', fontSize: 12 }}><span>{t}</span><input style={inp} value={sup[k][f]} onChange={e => setSup(x => ({ ...x, [k]: { ...x[k], [f]: e.target.value } }))} /></label>)}</div>)}
             <button className="btn xs" onClick={async () => { const r = await saveSuppliers(sup); notify(r.msg, r.ok ? 'ok' : 'bad'); }}>공급자 정보 저장</button></div>}</div>}
       </div>
@@ -134,8 +134,8 @@ export default function QuoteClient({ rows, suppliers, canEditSupplier, me }: { 
     {/* ── 저장된 견적서 ── */}
     <div className="card"><b>저장된 견적서 {rows.length}건</b>
       {rows.length === 0 ? <div className="help" style={{ marginTop: 8 }}>아직 없습니다 — 이미지 복사·저장을 하면 여기에 남습니다.</div> :
-        <table style={{ width: '100%', marginTop: 10 }}><thead><tr><th style={{ textAlign: 'left' }}>거래처</th><th>합계</th><th>부가세</th><th>작성</th><th>수정일</th><th /></tr></thead><tbody>
-          {rows.map(r => <tr key={r.id} style={id === r.id ? { background: 'rgba(47,91,255,.06)' } : {}}><td><b>{r.title}</b><div className="cell-sub">{(r.data.items ?? []).filter(i => i.name).map(i => i.name).slice(0, 3).join(', ')}</div></td><td className="num">{won(r.total)}원</td><td style={{ textAlign: 'center' }}>{r.data.vat === 'none' ? '없음' : '별도'}</td><td style={{ textAlign: 'center' }}>{r.owner || me}</td><td style={{ textAlign: 'center' }}>{new Date(r.updated_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</td>
+        <table style={{ width: '100%', marginTop: 10 }}><thead><tr><th style={{ textAlign: 'left' }}>거래처</th><th>합계</th><th>공급자 · 부가세</th><th>작성</th><th>수정일</th><th /></tr></thead><tbody>
+          {rows.map(r => <tr key={r.id} style={id === r.id ? { background: 'rgba(47,91,255,.06)' } : {}}><td><b>{r.title}</b><div className="cell-sub">{(r.data.items ?? []).filter(i => i.name).map(i => i.name).slice(0, 3).join(', ')}</div></td><td className="num">{won(r.total)}원</td><td style={{ textAlign: 'center' }}>{sup[supOf(r.data)].name} · {r.data.vat === 'none' ? '없음' : '별도'}</td><td style={{ textAlign: 'center' }}>{r.owner || me}</td><td style={{ textAlign: 'center' }}>{new Date(r.updated_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</td>
             <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><button className="btn ghost xs" onClick={() => open(r)}>열기</button> <button className="btn ghost xs" onClick={() => del(r)}>삭제</button></td></tr>)}</tbody></table>}
     </div>
   </div>;

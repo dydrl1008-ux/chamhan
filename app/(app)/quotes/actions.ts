@@ -16,7 +16,7 @@ export async function listQuotes(): Promise<R<{ rows: QRow[]; suppliers: Supplie
   const ids = [...new Set((data ?? []).map(r => r.owner_id))]; const { data: ps } = ids.length ? await sb.from('profiles').select('id,name').in('id', ids) : { data: [] as any[] };
   const nm = new Map((ps ?? []).map((p: any) => [p.id, p.name as string]));
   const { data: st } = await sb.from('ai_settings').select('value').eq('key', 'quote_supplier').maybeSingle();
-  let suppliers = DEFAULT_SUPPLIERS; try { if (st?.value) { const j = JSON.parse(String(st.value)); suppliers = { main: { ...DEFAULT_SUPPLIERS.main, ...(j.main ?? {}) }, novat: { ...DEFAULT_SUPPLIERS.novat, ...(j.novat ?? {}) } }; } } catch { /* 기본값 */ }
+  let suppliers = DEFAULT_SUPPLIERS; try { if (st?.value) { const j = JSON.parse(String(st.value)); suppliers = { main: { ...DEFAULT_SUPPLIERS.main, ...(j.main ?? {}) }, adfree: { ...DEFAULT_SUPPLIERS.adfree, ...(j.adfree ?? {}) }, novat: { ...DEFAULT_SUPPLIERS.novat, ...(j.novat ?? {}) } }; } } catch { /* 기본값 */ }
   return { ok: true, msg: '', rows: (data ?? []).map(r => ({ id: r.id, title: r.title, total: Number(r.total), updated_at: r.updated_at, owner: nm.get(r.owner_id) ?? '', data: r.data as QData })), suppliers, canEditSupplier: lead(me) };
 }
 export async function saveQuote(id: number | null, data: QData, total: number): Promise<R<{ id: number }>> {
