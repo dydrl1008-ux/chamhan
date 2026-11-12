@@ -69,11 +69,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/rank-watch">순위 체크</NavLink>
         </NavGroup>
 
-        <NavGroup title="영업 · 리드" hrefs={['/calls', '/leads', '/proposals', '/mail', '/missions', '/sales-stats', '/renewals', '/notifications']}>
+        <NavGroup title="영업 · 리드" hrefs={['/calls', '/leads', '/proposals', '/mail', '/mail/export', '/missions', '/sales-stats', '/renewals', '/notifications']}>
           {!p.is_mgmt && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
           {lead && <NavLink href="/leads">콜 리스트 관리</NavLink>}
           <NavLink href="/proposals">키워드 제안서</NavLink>
           <NavLink href="/mail">메일 발송</NavLink>
+          {lead && <NavLink href="/mail/export">수동 발송 엑셀</NavLink>}
           {lead && <NavLink href="/missions">경쟁사 미션</NavLink>}
           {(mgr || mgmt) && <NavLink href="/sales-stats">콜 성과</NavLink>}
           <NavLink href="/renewals">이탈 고객</NavLink>
