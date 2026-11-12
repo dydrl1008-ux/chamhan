@@ -38,11 +38,11 @@ export async function v3ImagesFor(keyword: string, targetIds: number[]): Promise
   return out;
 }
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-/** 본문 텍스트 + 이미지 8장 → 메일 HTML (링크 없음 · 수신거부만) */
-export function v3Html(body: string, urls: string[], unsub: string) {
-  const text = esc(body).replace(/\n/g, '<br>');
+/** 본문 텍스트 + 이미지 8장 → 메일 HTML. 본문은 쓴 그대로(URL 은 링크로) · 이미지는 본문 뒤 · 수신거부는 본문에 {수신거부링크} 넣었을 때만 */
+export function v3Html(body: string, urls: string[]) {
+  const text = esc(body).replace(/(https?:\/\/[^\s<>"']+)/g, '<a href="$1" style="color:#03C75A">$1</a>').replace(/\n/g, '<br>');
   const imgs = urls.map((u, i) => `<img src="${u}" alt="제안서 ${i + 1}" width="640" style="display:block;width:100%;max-width:640px;height:auto;margin:0 0 6px;border:0">`).join('');
-  return `<div style="font-family:'Malgun Gothic',Apple SD Gothic Neo,sans-serif;font-size:14px;line-height:1.7;color:#222;max-width:640px">${text}<div style="margin:18px 0 10px">${imgs}</div><div style="font-size:12px;color:#888;margin-top:14px">수신을 원치 않으시면 <a href="${unsub}" style="color:#888">여기</a>를 눌러주세요.</div></div>`;
+  return `<div style="font-family:'Malgun Gothic',Apple SD Gothic Neo,sans-serif;font-size:14px;line-height:1.7;color:#222;max-width:640px">${text}<div style="margin:18px 0 10px">${imgs}</div></div>`;
 }
 
 export async function prepareCore(me: { id: string; name: string }, i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string; accountId: number; campaignId?: number | null; v3?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
@@ -91,7 +91,7 @@ export async function prepareCore(me: { id: string; name: string }, i: { keyword
     const v3 = v3map?.get(c.id);
     const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: v3 ? '' : `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}` };
     const subject = fillVars(i.subject, v).slice(0, 200), body = fillVars(i.body, v);
-    items.push({ id: q.id, to: c.email.toLowerCase(), subject, body, message_id: `<${mid}>`, store: c.store_name, ...(v3 ? { html: v3Html(body, v3.urls, v.수신거부링크) } : {}) });
+    items.push({ id: q.id, to: c.email.toLowerCase(), subject, body, message_id: `<${mid}>`, store: c.store_name, ...(v3 ? { html: v3Html(body, v3.urls) } : {}) });
     return sb.from('mail_queue').update({ subject, body, message_id: `<${mid}>` }).eq('id', q.id);
   }));
   items.sort((a, b) => a.id - b.id);

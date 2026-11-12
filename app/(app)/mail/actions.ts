@@ -112,7 +112,7 @@ export async function testSend(i: { keyword: string; to: string; subject: string
       if (pr.ready) { const { data: st2 } = await sb.from('pv3_stores').select('target_id').eq('keyword', kw).not('target_id', 'is', null).limit(50); m = await v3ImagesFor(kw, (st2 ?? []).map(x => x.target_id!)); first = [...m.values()][0]; }
       if (!first) return { ok: false, msg: pr.msg + ' · 준비되면 다시 「테스트 1건 발송」' };
     }
-    v.제안서링크 = ''; html = v3Html(fillVars(i.body, v), first.urls, v.수신거부링크);
+    v.제안서링크 = ''; html = v3Html(fillVars(i.body, v), first.urls);
   }
   const subject = `[테스트] ` + fillVars(i.subject, v).slice(0, 190), body = fillVars(i.body, v);
   await sb.from('mail_queue').update({ subject, body, message_id: `<${mid}>` }).eq('id', q.id);
