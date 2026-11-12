@@ -71,4 +71,5 @@ export async function middleware(req: NextRequest) {
 }
 
 // p/ = 고객에게 보내는 제안서 추적 링크 (로그인·IP 제한 없이 열려야 함)
-export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico|api/cron|api/mail/agent-callback|p/|.*\\.(?:png|jpg|svg|ico)$).*)'] };
+// api/pv3·api/mail/pull·pv3/view = 워커 PC·SNS_Manager 가 토큰/키로 호출 (세션·IP 차단 없이, 각 라우트가 자체 검증)
+export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico|api/cron|api/mail/agent-callback|api/mail/pull|api/pv3|pv3/view|p/|.*\\.(?:png|jpg|svg|ico)$).*)'] };
