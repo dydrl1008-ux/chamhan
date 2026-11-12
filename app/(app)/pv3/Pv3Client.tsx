@@ -1,14 +1,15 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { Fragment, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { Section, Status } from '@/components/ui';
 import { fmtKST } from '@/lib/date/kst';
 import { LEAK_LABEL } from '@/lib/proposalV3';
-import { buildKeyword, prepareAll, collect, rerender, storesOf, workerRaw, removeKw, saveSetting, addKnowledge, collectKnowledge, distillPrinciples, removeKnowledge, type KwRow, type KnRow } from './actions';
+import { buildKeyword, prepList, collect, rerender, storesOf, workerRaw, removeKw, saveSetting, addKnowledge, collectKnowledge, distillPrinciples, removeKnowledge, type KwRow, type KnRow } from './actions';
 
-const AI: Record<string, [string, 'ok' | 'wait' | 'bad' | 'off']> = { none: ['요청 전', 'off'], queued: ['워커 작업 중', 'wait'], done: ['글 완료', 'ok'], fallback: ['기본 문장', 'bad'] };
-type StoreRow = { id: number; store_name: string; leak: string; rank: number | null; ai: boolean; images: number; headline: string };
+const AI: Record<string, [string, 'ok' | 'wait' | 'bad' | 'off']> = { none: ['요청 전', 'off'], queued: ['워커 작업 중', 'wait'], done: ['워커 글', 'ok'], fallback: ['기본 문장', 'wait'] };
+const SRC: Record<string, [string, 'ok' | 'wait' | 'bad' | 'off']> = { worker: ['워커 글', 'ok'], fallback: ['기본 문장 (워커 대기)', 'wait'], final: ['기본 문장', 'off'], '': ['워커 작업 중', 'wait'] };
+type StoreRow = { id: number; store_name: string; leak: string; lead: string; rank: number | null; matched: boolean; src: string; ready: boolean; headline: string };
 
 export default function Pv3Client({ rows, kakao: k0, style: s0, knowledge, principles }: { rows: KwRow[]; kakao: string; style: string; knowledge: KnRow[]; principles: { id: number; text: string; category: string }[] }) {
   const r = useRouter(); const [busy, start] = useTransition();
@@ -16,51 +17,73 @@ export default function Pv3Client({ rows, kakao: k0, style: s0, knowledge, princ
   const [open, setOpen] = useState<string | null>(null); const [stores, setStores] = useState<Record<string, StoreRow[]>>({}); const [raw, setRaw] = useState<Record<string, { id: number; title: string; status: string; result: string }[]>>({});
   const [kakao, setKakao] = useState(k0); const [style, setStyle] = useState(s0);
   const [kt, setKt] = useState(''); const [ku, setKu] = useState(''); const [kr, setKr] = useState('');
+  const [bulk, setBulk] = useState<{ running: boolean; log: string[] }>({ running: false, log: [] }); const stopRef = useRef(false);
   const go = (f: () => Promise<{ ok: boolean; msg: string }>) => start(async () => { const x = await f(); notify(x.msg, x.ok ? 'ok' : 'bad'); r.refresh(); });
-  const toggle = async (keyword: string) => { if (open === keyword) { setOpen(null); return; } setOpen(keyword); if (!stores[keyword]) { const x = await storesOf(keyword); if (x.ok) setStores(s => ({ ...s, [keyword]: x.rows! })); } };
-  const view = (kind: 'keyword' | 'store', ref: string | number, page: number) => `/pv3/view?kind=${kind}&ref=${encodeURIComponent(String(ref))}&page=${page}`;
+  const loadStores = async (keyword: string) => { const x = await storesOf(keyword); if (x.ok) setStores(s => ({ ...s, [keyword]: x.rows! })); };
+  const toggle = async (keyword: string) => { if (open === keyword) { setOpen(null); return; } setOpen(keyword); await loadStores(keyword); };
+  const view = (kind: 'keyword' | 'store', ref: string | number, page: number | 'all') => `/pv3/view?kind=${kind}&ref=${encodeURIComponent(String(ref))}&page=${page}`;
+  /** 메일 대상 키워드를 차례로 준비 (키워드 하나씩 서버 호출 — 탭을 열어 둬야 함) */
+  const prepareAll = async () => {
+    const pl = await prepList(n); if (!pl.ok || !pl.list) { notify(pl.msg, 'bad'); return; }
+    if (!pl.list.length) { notify('오늘 준비할 키워드가 없습니다 (이미 준비됨)', 'ok'); return; }
+    if (!confirm(`${pl.msg}. 키워드마다 업체 최대 ${n}곳씩 계산하고 워커에 글을 요청합니다. 이 탭을 열어 두세요. 진행할까요?`)) return;
+    stopRef.current = false; const log: string[] = []; setBulk({ running: true, log });
+    for (let i = 0; i < pl.list.length; i++) {
+      if (stopRef.current) { log.push('중단'); break; }
+      const k = pl.list[i]; const x = await buildKeyword(k.keyword, n); log.push(`${i + 1}/${pl.list.length} ${x.ok ? '✓' : '✕'} ${x.msg}`); setBulk({ running: true, log: [...log] });
+    }
+    setBulk({ running: false, log: [...log, '끝 — 워커가 글을 쓰면 렌더 PC가 이미지를 만듭니다 (수거는 2분마다 자동)'] }); r.refresh();
+  };
 
   return <div style={{ display: 'grid', gap: 16 }}>
-    <div className="card" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', padding: '12px 14px' }}>
-      <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>키워드<input value={kw} onChange={e => setKw(e.target.value)} placeholder="예: 토퍼" style={{ width: 200 }} onKeyDown={e => { if (e.key === 'Enter' && kw.trim()) go(() => buildKeyword(kw, n)); }} /></label>
-      <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>업체 수 (메일 대상 중)<input type="number" value={n} onChange={e => setN(Number(e.target.value) || 0)} style={{ width: 110 }} /></label>
-      <button className="btn" disabled={busy || !kw.trim()} onClick={() => go(() => buildKeyword(kw, n))}>{busy ? '처리 중…' : '① 키워드 만들기'}</button>
-      <button className="btn ghost" disabled={busy} onClick={() => go(collect)}>② 워커 결과 수거 + 렌더 요청</button>
-      <button className="btn ghost" disabled={busy} onClick={() => { if (confirm(`메일 대상 있는 키워드 전부(최대 60개) × 업체 ${n}곳을 워커 큐에 올립니다. 몇 시간 걸립니다 (전날 저녁 추천). 진행?`)) go(() => prepareAll(n)); }} style={{ marginLeft: 'auto' }}>메일 키워드 전체 미리 준비</button>
-      <span className="help">업체 0 이면 키워드 공통 4장만 · 수거는 워커가 끝난 뒤 (보통 2~5분)</span>
+    <div className="card" style={{ display: 'grid', gap: 10, padding: '12px 14px' }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>키워드<input value={kw} onChange={e => setKw(e.target.value)} placeholder="예: 토퍼" style={{ width: 200 }} onKeyDown={e => { if (e.key === 'Enter' && kw.trim()) go(() => buildKeyword(kw, n)); }} /></label>
+        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>업체 수 (메일 대상 중)<input type="number" value={n} onChange={e => setN(Number(e.target.value) || 0)} style={{ width: 110 }} /></label>
+        <button className="btn" disabled={busy || bulk.running || !kw.trim()} onClick={() => go(() => buildKeyword(kw, n))}>{busy ? '처리 중…' : '키워드 만들기'}</button>
+        <button className="btn ghost" disabled={busy} onClick={() => go(collect)}>워커 결과 수거 + 렌더 요청</button>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>{bulk.running ? <button className="btn" style={{ background: '#E11D48', borderColor: '#E11D48' }} onClick={() => { stopRef.current = true; }}>중단</button> : <button className="btn ghost" disabled={busy} onClick={prepareAll}>메일 키워드 전체 미리 준비</button>}</span>
+      </div>
+      <span className="help">메일 발송에서 「맞춤 제안서 이미지로」를 켜면 필요한 키워드는 자동으로 만들어집니다. 여기서는 미리 만들어 두거나 결과를 확인합니다. 수거·렌더는 워커 PC의 pv3_render.py 가 2분마다 자동으로 합니다.</span>
+      {bulk.log.length > 0 && <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, background: 'var(--bg)', padding: 10, borderRadius: 8, margin: 0, maxHeight: 180, overflow: 'auto' }}>{bulk.log.join('\n')}</pre>}
     </div>
 
-    <Section title={`키워드 ${rows.length}개`} flush>
-      {rows.length === 0 ? <div style={{ padding: 16, color: 'var(--muted)' }}>아직 없음</div> : <table><thead><tr><th>키워드</th><th className="num">월 검색</th><th>기본 판정</th><th>키워드 글</th><th>업체 (글/이미지)</th><th>공통 이미지</th><th>갱신</th><th></th></tr></thead><tbody>
-        {rows.map(x => { const st = AI[x.ai_status] ?? [x.ai_status, 'off']; return <>
-          <tr key={x.keyword} style={{ cursor: 'pointer' }} onClick={() => toggle(x.keyword)}>
-            <td><b>{x.keyword}</b></td><td className="num">{x.volume ? x.volume.toLocaleString('ko-KR') : '-'}</td><td>{LEAK_LABEL[x.leak as keyof typeof LEAK_LABEL] ?? '-'}</td>
+    <Section title={`키워드 ${rows.length}개`} sub="행을 누르면 업체별 판정·글·이미지 상태" flush>
+      {rows.length === 0 ? <div style={{ padding: 16, color: 'var(--muted)' }}>아직 없음</div> : <table><thead><tr><th>키워드</th><th className="num">월 검색</th><th>키워드 글</th><th>공통 장</th><th>업체</th><th>업체 글 (워커)</th><th>발송 가능</th><th>갱신</th><th></th></tr></thead><tbody>
+        {rows.map(x => { const st = AI[x.ai_status] ?? [x.ai_status, 'off']; return <Fragment key={x.keyword}>
+          <tr style={{ cursor: 'pointer' }} onClick={() => toggle(x.keyword)}>
+            <td><b>{x.keyword}</b></td><td className="num">{x.volume ? x.volume.toLocaleString('ko-KR') : '-'}</td>
             <td><Status kind={st[1]}>{st[0]}</Status>{x.ai_task_id && <span className="cell-sub"> #{x.ai_task_id}</span>}</td>
-            <td>{x.stores}곳 ({x.storesAi}/{x.storesImg})</td><td>{x.images.length >= 4 ? <Status kind="ok">{x.images.length}장</Status> : <span className="cell-sub">{x.images.length}/4</span>}</td>
+            <td>{x.ready ? <Status kind="ok">완료</Status> : <span className="cell-sub">대기</span>}</td>
+            <td>{x.stores}곳</td><td>{x.storesAi}곳 <span className="cell-sub">({x.storesWorker})</span></td>
+            <td>{x.ready && x.storesImg > 0 ? <b style={{ color: 'var(--ok-ink)' }}>{x.storesImg}곳</b> : <span className="cell-sub">{x.storesImg}곳</span>}</td>
             <td className="cell-sub">{fmtKST(x.updated_at)}</td>
             <td style={{ whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map(p => <a key={p} href={view('keyword', x.keyword, p)} target="_blank" rel="noreferrer" className="btn ghost xs" style={{ padding: '2px 6px', marginRight: 2 }} title={`${p}장 미리보기 (업체 정보 없는 버전)`}>{p}</a>)}
-              <button className="btn ghost xs" style={{ marginLeft: 6 }} disabled={busy} onClick={() => go(() => buildKeyword(x.keyword, n, true))}>다시 계산</button>
+              <a href={view('keyword', x.keyword, 'all')} target="_blank" rel="noreferrer" className="btn ghost xs">공통 장 보기</a>
+              <button className="btn ghost xs" style={{ marginLeft: 4 }} disabled={busy} onClick={() => go(async () => { const y = await buildKeyword(x.keyword, n, true); await loadStores(x.keyword); return y; })}>다시 계산</button>
               <button className="btn ghost xs" style={{ marginLeft: 4 }} disabled={busy} onClick={() => go(() => rerender(x.keyword))}>다시 렌더</button>
               <button className="btn ghost xs" style={{ marginLeft: 4 }} onClick={async () => { if (raw[x.keyword]) { setRaw(r => { const n = { ...r }; delete n[x.keyword]; return n; }); return; } const w = await workerRaw(x.keyword); if (w.ok) setRaw(r => ({ ...r, [x.keyword]: w.items! })); }}>워커 원문</button>
               <button className="btn ghost xs" style={{ marginLeft: 4 }} disabled={busy} onClick={() => { if (confirm(`'${x.keyword}' 삭제?`)) go(() => removeKw(x.keyword)); }}>삭제</button></td></tr>
-          {raw[x.keyword] && <tr key={x.keyword + '_r'}><td colSpan={8} style={{ background: '#FFFBEB', padding: 10 }}>
-            {raw[x.keyword].length === 0 ? <span className="help">워커 작업 없음</span> : raw[x.keyword].map(t => <details key={t.id} open style={{ marginBottom: 8 }}><summary style={{ cursor: 'pointer', fontSize: 12.5 }}><b>#{t.id}</b> {t.title} · <Status kind={t.status === 'done' ? 'ok' : /fail|reject|cancel/.test(t.status) ? 'bad' : 'wait'}>{t.status}</Status></summary><pre style={{ whiteSpace: 'pre-wrap', fontSize: 11.5, margin: '6px 0 0', maxHeight: 320, overflow: 'auto', background: '#fff', padding: 8, borderRadius: 6 }}>{t.result || '(결과 없음)'}</pre></details>)}
+          {raw[x.keyword] && <tr><td colSpan={9} style={{ background: '#FFFBEB', padding: 10 }}>
+            {raw[x.keyword].length === 0 ? <span className="help">워커 작업 없음</span> : raw[x.keyword].map(t => <details key={t.id} style={{ marginBottom: 8 }}><summary style={{ cursor: 'pointer', fontSize: 12.5 }}><b>#{t.id}</b> {t.title} · <Status kind={t.status === 'done' ? 'ok' : /fail|reject|cancel/.test(t.status) ? 'bad' : 'wait'}>{t.status}</Status></summary><pre style={{ whiteSpace: 'pre-wrap', fontSize: 11.5, margin: '6px 0 0', maxHeight: 320, overflow: 'auto', background: '#fff', padding: 8, borderRadius: 6 }}>{t.result || '(결과 없음)'}</pre></details>)}
           </td></tr>}
-          {open === x.keyword && <tr key={x.keyword + '_s'}><td colSpan={8} style={{ background: 'var(--bg)', padding: 10 }}>
-            {!stores[x.keyword] ? <span className="help">불러오는 중…</span> : stores[x.keyword].length === 0 ? <span className="help">업체 없음</span> : <table><thead><tr><th>업체</th><th>순위</th><th>새는 곳</th><th>헤드라인 (워커)</th><th>이미지</th><th></th></tr></thead><tbody>
-              {stores[x.keyword].map(s => <tr key={s.id}><td><b>{s.store_name}</b></td><td>{s.rank ?? '-'}</td><td>{LEAK_LABEL[s.leak as keyof typeof LEAK_LABEL] ?? s.leak}</td><td style={{ fontSize: 12.5, maxWidth: 420 }}>{s.ai ? s.headline : <span className="cell-sub">워커 작업 중</span>}</td><td>{s.images >= 4 ? <Status kind="ok">{s.images}장</Status> : <span className="cell-sub">{s.images}/4</span>}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{[1, 2, 5, 7].map(p => <a key={p} href={view('store', s.id, p)} target="_blank" rel="noreferrer" className="btn ghost xs" style={{ padding: '2px 6px', marginRight: 2 }}>{p}</a>)}</td></tr>)}
+          {open === x.keyword && <tr><td colSpan={9} style={{ background: 'var(--bg)', padding: 10 }}>
+            {!stores[x.keyword] ? <span className="help">불러오는 중…</span> : stores[x.keyword].length === 0 ? <span className="help">업체 없음 — 메일 대상에 이 키워드 업체가 없거나 업체 수 0 으로 만든 경우</span> : <table><thead><tr><th>업체</th><th>순위</th><th>막힌 곳</th><th>가장 먼저 할 광고</th><th>상품 매칭</th><th>헤드라인</th><th>글</th><th>이미지</th><th></th></tr></thead><tbody>
+              {stores[x.keyword].map(s => { const sc = SRC[s.src] ?? SRC['']; return <tr key={s.id}><td><b>{s.store_name}</b></td><td>{s.rank ?? '밖'}</td><td>{LEAK_LABEL[s.leak as keyof typeof LEAK_LABEL] ?? s.leak}</td><td style={{ fontSize: 12.5 }}>{s.lead}</td>
+                <td>{s.matched ? <Status kind="ok">상위 100 안</Status> : <span className="cell-sub" title="지수 데이터(상위 100)에서 이 스토어 상품을 못 찾음 — 순위·리뷰는 수집값 사용, 지수 비교는 빠짐">못 찾음</span>}</td>
+                <td style={{ fontSize: 12.5, maxWidth: 380 }}>{s.headline || <span className="cell-sub">—</span>}</td><td><Status kind={sc[1]}>{sc[0]}</Status></td>
+                <td>{s.ready ? <Status kind="ok">완료</Status> : <span className="cell-sub">대기</span>}</td>
+                <td style={{ whiteSpace: 'nowrap' }}><a href={view('store', s.id, 'all')} target="_blank" rel="noreferrer" className="btn ghost xs" title="받는 사람이 보게 될 10장 전체 (화면 미리보기)">제안서 보기</a></td></tr>; })}
             </tbody></table>}
           </td></tr>}
-        </>; })}
+        </Fragment>; })}
       </tbody></table>}
     </Section>
 
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
       <div className="card" style={{ display: 'grid', gap: 8, padding: '12px 14px' }}>
         <b style={{ fontSize: 13 }}>설정</b>
-        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>카카오톡 오픈채팅 링크 (8장 마지막)<div style={{ display: 'flex', gap: 6 }}><input value={kakao} onChange={e => setKakao(e.target.value)} placeholder="https://open.kakao.com/o/…" style={{ flex: 1 }} /><button className="btn ghost" disabled={busy} onClick={() => go(() => saveSetting('kakao_open', kakao))}>저장</button></div></label>
+        <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>카카오톡 오픈채팅 링크 (제안서 마지막 장)<div style={{ display: 'flex', gap: 6 }}><input value={kakao} onChange={e => setKakao(e.target.value)} placeholder="https://open.kakao.com/o/…" style={{ flex: 1 }} /><button className="btn ghost" disabled={busy} onClick={() => go(() => saveSetting('kakao_open', kakao))}>저장</button></div></label>
         <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>문체 레퍼런스 (회신 잘 왔던 제안서 문구 — 워커가 이 톤을 따름)<textarea value={style} onChange={e => setStyle(e.target.value)} rows={6} style={{ fontSize: 13 }} /><button className="btn ghost" disabled={busy} onClick={() => go(() => saveSetting('style_ref', style))} style={{ justifySelf: 'start' }}>저장</button></label>
       </div>
       <div className="card" style={{ display: 'grid', gap: 8, padding: '12px 14px' }}>

@@ -47,7 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavGroup title="도구" hrefs={['/secret-index', '/product-name', '/pv3']}>
           <NavLink href="/secret-index">시크릿 지수</NavLink>
           <NavLink href="/product-name">상품명 만들기</NavLink>
-          {lead && <NavLink href="/pv3">제안서 v3 · 광고 설계</NavLink>}
+          {lead && <NavLink href="/pv3">맞춤 제안서 · 광고 설계</NavLink>}
         </NavGroup>
 
         <NavGroup title="근태 · 계획" hrefs={['/attendance', '/leave', '/plans']}>

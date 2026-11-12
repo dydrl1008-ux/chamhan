@@ -2,7 +2,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { search } from '@/lib/nsc';
 import { keywordVolumes, adConfigured } from '@/lib/naverAd';
-import { computeKeyword, computeStore, matchProduct, fallbackKwAi, fallbackStoreAi, parseLoose, nounEnd, LEAK_LABEL, AXIS_LABEL, man, type KwData, type StoreData, type KwAi, type StoreAi } from '@/lib/proposalV3';
+import { computeKeyword, computeStore, matchProduct, fallbackKwAi, fallbackStoreAi, fallbackStages, parseLoose, nounEnd, hasPages, LEAK_LABEL, AXIS_LABEL, PV3_AI_VER, PV3_DATA_VER, PV3_STORE_PAGES, PV3_COMMON_PAGES, type KwData, type StoreData, type KwAi, type StoreAi } from '@/lib/proposalV3';
 import type { Product } from '@/lib/nsc';
 
 export const PV3_TITLE = '[제안서v3]';
@@ -20,45 +20,59 @@ async function pickKnowledge(keyword: string, leak: string, limit = 5) {
   return { knowledge: scored, principles: pr ?? [], style: st?.value ?? '' };
 }
 
-// ── 지시문 (짧게 — 상품명 때 교훈: 긴 규칙 X, 실데이터 + 출력 틀) ──
+// ── 지시문 (짧게 — 긴 규칙 X, 실데이터 + 출력 틀) ──
 const RULES = `규칙
 - 코드 실행·파일 작성 없이 글만. 순수 JSON 한 덩어리로만 답한다 (설명·코드펜스 금지). 값 안에 큰따옴표 금지.
-- 모든 문장은 명사(체언)로 끝낸다. '~다/~습니다/~입니다/~요' 금지. 예: '리뷰는 쌓였는데 검색 초입에서 안 잡히는 상태'
-- [실데이터]에 있는 숫자만 쓴다. 없는 값 추정·날조 금지. 평균값을 특정 경쟁사 수치처럼 쓰지 않는다.
-- 매체명·슬롯명·작업 방식 세부 금지. 채널은 [무기] 이름 그대로만. 보장·단정·과장 금지 ('안전' 금지).
-- AI 냄새 금지: 극대화·최적화·효과적으로·또한·뿐만 아니라·나아가·적극적으로. 짧은 문장과 긴 문장을 섞는다. 대표에게 보내는 컨설턴트 문어체.
-- 리딩 무기·단계 배치는 [실데이터]의 plan 그대로. 바꾸지 말고 '왜 이 순서인지'만 이 상품 데이터로 쓴다.`;
+- 문체 두 가지를 구분한다. ① 제목류(틀에 '명사 끝'이라고 적힌 칸)는 명사로 끝낸다 — 예: '리뷰는 쌓였는데 검색 초입에서 안 잡히는 상태'. ② 설명류(틀에 '존댓말'이라고 적힌 칸)는 '~습니다/~입니다'로 끝나는 정중한 문장으로 쓴다. 반말·'~다' 평서체 금지.
+- [실데이터]에 있는 숫자만 쓴다. 없는 값 추정·날조 금지. 평균값을 특정 경쟁 상품의 수치처럼 쓰지 않는다. 매출 금액은 쓰지 않는다(시스템이 따로 표시).
+- 매체명·상품(슬롯)명·작업 수량·작업 방식 세부 금지. 광고 채널은 [실데이터]에 적힌 이름 그대로만 쓴다. 보장·단정·과장 금지 ('무조건' '확실' '100%' '안전' 금지). 수수료·대행 비용 언급 금지.
+- AI 말투 금지: 극대화·최적화·효과적으로·또한·뿐만 아니라·나아가·적극적으로. 짧은 문장과 긴 문장을 섞는다. 셀러(스토어 대표)가 읽고 바로 이해하는 쉬운 말로 쓴다.`;
 
-export function kwInstruction(k: KwData, s: StoreData, kn: { knowledge: any[]; principles: any[]; style: string }, who: string) {
-  const real = { keyword: k.keyword, volume: k.volume, top10: k.top10.map(t => ({ rank: t.rank, title: t.title.slice(0, 40), reviews: t.reviews, price: t.price, click: t.click, ad: t.ad || undefined })), stats: k.stats, axes10: k.axes10, contentMarket: k.contentMarket, revenue: { aov: k.revenue.aov, lossMonthly: Math.round(k.revenue.loss) }, sampleStore: { rank: s.rank, reviews: s.reviews, price: s.price, leak: LEAK_LABEL[s.leak], why: s.why, lead: s.lead, plan: s.plan, skip: s.skip } };
+/** 키워드 공통 글 (시장·사는 사람·콘텐츠) — 특정 업체 얘기는 넣지 않는다 */
+export function kwInstruction(k: KwData, kn: { knowledge: any[]; principles: any[]; style: string }, who: string) {
+  const real = { keyword: k.keyword, monthlySearch: k.volume.group, mainSearch: k.volume.main, related: k.volume.related, adCompetition: k.volume.comp || undefined, top10: k.top10.map(t => ({ rank: t.rank, title: t.title.slice(0, 44), reviews: t.reviews, price: t.price, click: t.click, ad: t.ad || undefined })), top10Avg: { price: k.stats.avgPrice10, medianReview: k.stats.medianReview10, click: k.stats.avgClick10 }, rank11to40AvgClick: k.stats.avgClickMid, newIn90daysPct: k.stats.newRate, contentMarket: k.contentMarket };
   const L: string[] = [];
-  L.push(`「${k.keyword}」 광고 제안서의 키워드 공통 글을 JSON으로 써 주세요. (요청: ${who})`); L.push('');
-  L.push(RULES); L.push('');
-  L.push('[무기] 쇼핑 상위노출 · 자동완성·연관검색어 · 쇼핑검색광고(CPC) · 파워링크(CPC) · 쿠팡 유입 세팅 · 상품명·상세페이지 개선 · 맘카페 보장형 · 카페 배포 · 블로그 체험단·기자단 · 지식인 · 인스타 체험단·인플루언서 · 스레드 · 당근 · 유튜브 · 메타 광고 · AI 영상·숏폼 · 광고 소재 제작 · 상세페이지 카피'); L.push('');
+  L.push(`네이버쇼핑 키워드 「${k.keyword}」 광고 제안서에 들어갈 '키워드 공통' 글을 JSON으로 써 주세요. 이 키워드를 파는 여러 스토어에 공통으로 보여 줄 내용이라, 특정 업체 이야기는 넣지 않습니다. (요청: ${who})`); L.push('');
+  L.push(RULES); L.push('- 상위 10개 상품명(title)에서 이 상품군의 특징(소재·용량·용도·타깃)을 읽고, 그 상품을 사는 사람의 실제 상황으로 구체적으로 쓴다. 어느 키워드에나 붙일 수 있는 말(예: 좋은 상품을 찾는 고객)은 실패.'); L.push('');
   if (kn.knowledge.length) { L.push('[참고 지식 — 이 키워드에 실제로 해당되는 것만 논리로 녹이고, 안 맞으면 무시]'); kn.knowledge.forEach((x, i) => L.push(`${i + 1}. ${x.title}: ${x.summary} ${(x.insights ?? []).slice(0, 3).map((t: string) => '· ' + t).join(' ')}`)); L.push(''); }
   if (kn.principles.length) { L.push('[원칙]'); kn.principles.forEach(p => L.push('- ' + p.text)); L.push(''); }
   if (kn.style) { L.push('[문체 레퍼런스 — 이 톤을 따른다]'); L.push(kn.style.slice(0, 1200)); L.push(''); }
   L.push('[실데이터]'); L.push(JSON.stringify(real)); L.push('');
-  L.push('[출력 JSON — 이 틀 그대로, 글자수는 안내]');
-  L.push(JSON.stringify({ buyer: { who: '검색하는 사람·상황 (20자)', truth: '속으로 느끼는 욕구·불안 (45자)', moment: '구매를 결정짓는 순간 (40자)' }, reframe: { weak: '이 키워드 시장에서 흔한 약점 한 줄 (35자)', flip: '그 약점을 무기로 뒤집는 한 줄 (40자)' }, narrative: { diagnosis: '현황+그러나 (30자)', insight: '구매자 진실 (30자)', strategy: '그래서 가는 길 (30자)' }, stages: ['1단계 왜 이 무기부터인지 (60자)', '2단계 (60자)', '3단계 (60자)'], contents: [{ fmt: '형식 (카페 체험기/블로그 비교글/숏폼/당근 동네생활/상세페이지 카피/인스타 카드뉴스/지식인 Q&A 중 서로 다르게 5개)', idea: '이 키워드 상품만의 앵글 (40자)' }], skipWhy: ['안 쓰는 무기 1 이유 (40자)', '안 쓰는 무기 2 이유 (40자)'] }));
+  L.push('[출력 JSON — 이 틀 그대로. 괄호 안은 안내이니 지우고 내용을 쓴다]');
+  L.push(JSON.stringify({
+    marketRead: '이 키워드 시장을 읽은 2문장 (존댓말, 130자 내, 실데이터 숫자 1~2개 인용. 예: 리뷰 수와 순위가 일치하지 않는다는 점, 가격대, 신규 진입 정도)',
+    buyer: { who: '이 키워드를 검색하는 사람과 그 상황 (26자 내, 명사 끝)', truth: '그 사람이 속으로 걱정하거나 바라는 것 (40자 내, 명사 끝)', moment: '구매를 결정하는 순간 (36자 내, 명사 끝)' },
+    reframe: { weak: '이 시장에서 파는 쪽이 겪는 어려움 한 줄 (36자 내, 명사 끝)', flip: '그 어려움을 기회로 뒤집어 본 한 줄 (40자 내, 명사 끝)' },
+    narrative: { diagnosis: '시장 현황 한 줄 (28자 내, 명사 끝)', insight: '구매자에 대한 발견 한 줄 (28자 내, 명사 끝)', strategy: '그래서 필요한 광고 방향 한 줄 (28자 내, 명사 끝)' },
+    contents: [{ fmt: '형식 — 카페 체험기/블로그 비교글/숏폼/당근 동네생활/상세페이지 카피/인스타 카드뉴스/지식인 Q&A 중 서로 다른 5개', idea: '이 상품군에서만 나오는 콘텐츠 앵글 (36자 내, 명사 끝)', why: '이 콘텐츠가 받는 구매 단계 (20자 내, 명사 끝)' }],
+  }));
   return L.join('\n').slice(0, 9000);
 }
 
+/** 업체별 글 묶음 — 헤드라인·한 줄·진단 문단·가진 것/새는 것·단계별 이유 */
 export function storeBatchInstruction(k: KwData, rows: { id: number; s: StoreData }[], who: string) {
   const L: string[] = [];
-  L.push(`「${k.keyword}」 제안서의 업체별 도입부 ${rows.length}개를 JSON 배열로 써 주세요. (요청: ${who})`); L.push('');
+  L.push(`네이버쇼핑 키워드 「${k.keyword}」 광고 제안서의 '업체별' 글 ${rows.length}개를 JSON으로 써 주세요. 각 스토어 대표가 자기 상품 얘기라고 느끼게 쓰는 것이 목표입니다. (요청: ${who})`); L.push('');
   L.push(RULES);
-  L.push('- 업체마다 완전히 다른 문장. 그 업체의 숫자(순위·리뷰·가격·지수)와 상품명에서 읽히는 특징(소재·용량·구성·타겟)을 반드시 인용한다. 다른 업체에 그대로 붙여도 말이 되는 문장은 실패.');
-  L.push('- leak(새는 구간)·lead(리딩 무기)·why(근거)는 코드 판정이다. 그 판정을 뒤집지 말고 그 업체 데이터로 설득력 있게 풀어쓴다. 방어·확장(1페이지 상단) 업체는 "새는/묻힌" 표현 금지 — 지키기·넓히기 관점.');
-  L.push('- 상품명(title)이 있으면 거기서 보이는 특징을 1개 이상 문장에 녹인다 (예: "10cm 두께" "3단 접이식" "유기농"). 없는 특징은 지어내지 않는다.');
-  L.push('- have: 상위 10 대비 이미 갖춘 것 3개 (근거 숫자 포함, 25자 내). leak: 비는 것 3개 (25자 내). 없으면 빈 배열 대신 데이터에서 찾은 중립 사실.'); L.push('');
-  L.push(`[키워드 공통] 월 검색 ${k.volume.group.toLocaleString('ko-KR')}회 · 상위 10 평균가 ${k.stats.avgPrice10.toLocaleString('ko-KR')}원 · 상위 10 리뷰 중앙값 ${k.stats.medianReview10.toLocaleString('ko-KR')}개 · 상위 10 클릭지수 평균 ${k.stats.avgClick10}`); L.push('');
+  L.push('- 업체마다 완전히 다른 문장. 그 업체의 숫자(순위·리뷰·가격·지수)와 상품명(title)에서 읽히는 특징(소재·용량·구성·타깃)을 반드시 인용한다. 다른 업체에 그대로 붙여도 말이 되는 문장은 실패. 없는 특징은 지어내지 않는다.');
+  L.push('- leak(먼저 풀 구간)·lead(가장 먼저 할 광고)·plan(단계)·facts(가진 것 good / 비어 있는 것 bad)는 시스템 판정이다. 뒤집지 말고, 그 업체 데이터로 왜 그런지 풀어 쓴다. good 에 있는 것을 약점처럼, bad 에 있는 것을 강점처럼 쓰지 않는다.');
+  L.push("- leak 이 '방어·확장'인 업체(이미 1페이지 상단)는 '새는/묻힌/막힌' 표현 금지 — 지키기·넓히기 관점으로 쓴다.");
+  L.push('- stages 는 plan 의 1·2·3단계를 왜 그 순서로 하는지, 각 단계 1~2문장. 그 단계의 광고 이름을 1개 이상 넣는다.'); L.push('');
+  L.push(`[키워드 공통] 월 검색 ${k.volume.group.toLocaleString('ko-KR')}회 · 상위 10 평균가 ${k.stats.avgPrice10.toLocaleString('ko-KR')}원 · 상위 10 리뷰 중앙값 ${k.stats.medianReview10.toLocaleString('ko-KR')}개 · 상위 10 지수 평균(5점 만점) 클릭지수 ${k.axes10.hit} / 판매지수 ${k.axes10.sale} / 적합도 ${k.axes10.quality} / 리뷰지수 ${k.axes10.review}${k.volume.related.length ? ` · 연관 키워드 ${k.volume.related.map(r => r.keyword).join(', ')}` : ''}`); L.push('');
   L.push('[업체 실데이터]');
-  rows.forEach(r => L.push(JSON.stringify({ id: r.id, store: r.s.store, title: r.s.title || undefined, rank: r.s.rank, band: r.s.band, reviews: r.s.reviews, price: r.s.price, ad: r.s.ad || undefined, axes: r.s.axes ? Object.fromEntries((Object.keys(r.s.axes) as (keyof typeof AXIS_LABEL)[]).map(a => [AXIS_LABEL[a], `${r.s.axes![a]} (상위10 ${k.axes10[a]})`])) : undefined, keepCnt: r.s.keepCnt ?? undefined, openDays: r.s.openDays ?? undefined, leak: LEAK_LABEL[r.s.leak], why: r.s.why, lead: r.s.lead, plan: r.s.plan.map(p => `${p.phase}단계 ${p.title}: ${p.weapons.join('·')}`), gainMonthly: man(r.s.revenue.gain), keepMonthly: r.s.revenue.keep ? man(r.s.revenue.keep) : undefined })));
+  rows.forEach(r => L.push(JSON.stringify({ id: r.id, store: r.s.store, title: r.s.title || undefined, rank: r.s.rank ?? `상위 ${k.n}개 안에 없음`, band: r.s.band, reviews: r.s.reviews ?? undefined, price: r.s.price ?? undefined, ad: r.s.ad || undefined, axes: r.s.axes ? Object.fromEntries((['hit', 'sale', 'quality', 'review'] as (keyof typeof AXIS_LABEL)[]).map(a => [AXIS_LABEL[a], r.s.axes![a]])) : undefined, keepCnt: r.s.keepCnt ?? undefined, openDays: r.s.openDays ?? undefined, leak: LEAK_LABEL[r.s.leak], facts: { good: r.s.good, bad: r.s.bad }, lead: r.s.lead, targetRank: r.s.target, plan: r.s.plan.map(p => `${p.phase}단계 ${p.title}(${p.when}): ${p.weapons.join(', ')}`) })));
   L.push('');
-  L.push('[출력 JSON — 배열, 업체 id 순서대로 전부]');
-  L.push(JSON.stringify({ items: [{ id: 0, headline: '업체명 포함, 강점 인정 뒤 그러나로 꺾는 헤드라인 (40자, 명사 끝)', thesis: '제안서를 관통하는 한 줄 (32자, 명사 끝)', have: ['가진 것 1 (25자)', '가진 것 2', '가진 것 3'], leak: ['새는 곳 1 (25자)', '새는 곳 2', '새는 곳 3'] }] }));
-  return L.join('\n').slice(0, 14000);
+  L.push('[출력 JSON — items 배열에 위 업체 id 를 빠짐없이. 괄호 안은 안내이니 지우고 내용을 쓴다]');
+  L.push(JSON.stringify({ items: [{ id: 0,
+    headline: '업체명 포함 헤드라인. 가진 것을 인정한 뒤 문제를 짚는 한 줄 (44자 내, 명사 끝)',
+    thesis: '이 제안을 관통하는 한 줄 (30자 내, 명사 끝)',
+    summary: '진단 2~3문장 (존댓말, 140자 내). 이 업체 숫자와 상품명 특징을 인용해 지금 상태와 가장 큰 문제를 설명',
+    have: ['이미 가진 것 — facts.good 을 이 상품 말로 다시 쓴 것. 근거 숫자 포함 (30자 내, 명사 끝)', '둘', '셋'],
+    leak: ['비어 있는 것 — facts.bad 를 이 상품 말로 다시 쓴 것. 근거 숫자 포함 (30자 내, 명사 끝)', '둘', '셋'],
+    stages: ['1단계를 왜 가장 먼저 하는지 (존댓말 1~2문장, 90자 내)', '2단계를 왜 그 다음에 하는지 (존댓말, 90자 내)', '3단계에서 무엇이 쌓이는지 (존댓말, 90자 내)'] }] }));
+  L.push('');
+  L.push('[형식 참고 — 문장을 따라 쓰지 말 것, 길이·말투만 참고] {"id":1,"headline":"리뷰 7,240개를 쌓고도 「토퍼」 23위에 묻힌 슬립랩","thesis":"상품은 준비된 상태, 부족한 건 노출 한 칸","summary":"슬립랩 7cm 메모리폼 토퍼는 리뷰 7,240개에 판매지수도 상위 10개 수준입니다. 그런데 순위가 23위라 「토퍼」를 검색한 사람 대부분이 이 상품을 보지 못하고 있습니다.","have":["리뷰 7,240개 — 상위 10 중앙값 이상","59,000원 — 상위 10 평균보다 낮은 가격","판매지수 3.6 — 상위 10 평균 이상"],"leak":["23위 — 클릭이 거의 닿지 않는 자리","클릭지수 1.5 — 상위 10 평균 3.5의 절반 이하","3단 접이식이라는 장점이 검색에서 안 보이는 상태"],"stages":["리뷰와 가격은 이미 갖췄으니 쇼핑 상위노출로 5위권 자리부터 만듭니다. 보이기만 하면 비교에서 밀리지 않는 상품입니다.","순위가 자리 잡으면 맘카페 보장형과 카페 배포로 후기를 더해, 올라간 자리의 클릭이 구매로 이어지게 합니다.","스레드와 인스타 콘텐츠로 슬립랩 이름을 기억하게 만들어, 다시 검색하고 다시 사는 고객을 쌓습니다."]}');
+  return L.join('\n').slice(0, 15000);
 }
 
 // ── 키워드 데이터 준비 (nsc 캐시 + 검색광고 API) + 워커 요청 ──
@@ -66,7 +80,7 @@ export async function ensureKeyword(keyword: string, me: { id: string; name: str
   const kw = keyword.trim().replace(/\s+/g, ' '); if (!kw) return { ok: false, msg: '키워드 없음' };
   const db = sb();
   const { data: ex } = await db.from('pv3_keywords').select('keyword,data,ai,ai_status,updated_at').eq('keyword', kw).maybeSingle();
-  const stale = !ex || force || Date.now() - new Date(ex.updated_at).getTime() > 24 * 3600e3;
+  const stale = !ex || force || (ex.data as KwData | null)?.dv !== PV3_DATA_VER || Date.now() - new Date(ex.updated_at).getTime() > 24 * 3600e3;
   if (!stale) return { ok: true, msg: '캐시', k: ex!.data as KwData, fresh: false };
   let r; try { r = await search(kw, me.id); } catch (e: any) { return { ok: false, msg: `지수 조회 실패: ${e.message}` }; }
   let vols: any[] = []; if (adConfigured()) { try { vols = await keywordVolumes([kw]); } catch { /* 검색량 없이 진행 */ } }
@@ -75,79 +89,136 @@ export async function ensureKeyword(keyword: string, me: { id: string; name: str
   return { ok: true, msg: '계산', k, fresh: true };
 }
 
-/** 키워드 공통 글 워커 요청 (없거나 force 일 때). sample = 대표 업체 1곳(퍼널 판정 예시) */
-export async function requestKwAi(kw: string, k: KwData, sample: StoreData, me: { id: string; name: string }, force = false): Promise<R<{ taskId?: number }>> {
+/** 키워드 공통 글 워커 요청 (없거나, 글 구조 버전이 바뀌었거나, force 일 때) */
+export async function requestKwAi(kw: string, k: KwData, me: { id: string; name: string }, force = false): Promise<R<{ taskId?: number }>> {
   const db = sb();
-  const { data: ex } = await db.from('pv3_keywords').select('ai_status,ai_task_id').eq('keyword', kw).maybeSingle();
-  if (ex && !force && (ex.ai_status === 'queued' || ex.ai_status === 'done')) return { ok: true, msg: '이미 요청됨', taskId: ex.ai_task_id ?? undefined };
-  const kn = await pickKnowledge(kw, sample.leak);
-  const instruction = kwInstruction(k, sample, kn, me.name);
-  const { data, error } = await db.from('ai_tasks').insert({ kind: 'order', agent: 'chief', title: `${PV3_TITLE} ${kw}`.slice(0, 80), instruction, source: 'workhub', requested_by: me.name, requested_by_id: me.id, status: 'queued' }).select('id').single();
+  const { data: ex } = await db.from('pv3_keywords').select('ai,ai_status,ai_task_id').eq('keyword', kw).maybeSingle();
+  const cur = (ex?.ai as KwAi | null)?._v === PV3_AI_VER;
+  if (ex && !force && (ex.ai_status === 'queued' || (ex.ai_status === 'done' && cur) || (ex.ai_status === 'fallback' && cur && ex.ai_task_id))) return { ok: true, msg: '이미 요청됨', taskId: ex.ai_task_id ?? undefined };
+  const kn = await pickKnowledge(kw, k.kwLeak);
+  const { data, error } = await db.from('ai_tasks').insert({ kind: 'order', agent: 'chief', title: `${PV3_TITLE} ${kw}`.slice(0, 80), instruction: kwInstruction(k, kn, me.name), source: 'workhub', requested_by: me.name, requested_by_id: me.id, status: 'queued' }).select('id').single();
   if (error) return { ok: false, msg: error.message };
   await db.from('pv3_keywords').update({ ai_task_id: data.id, ai_status: 'queued' }).eq('keyword', kw);
   return { ok: true, msg: `AI 작업 #${data.id}`, taskId: data.id };
 }
 
-/** 업체들 계산·저장 + 묶음 워커 요청 (40개씩) */
+const BATCH = 12;   // 업체 묶음 크기 — 워커 1건이 2~3분 안에 끝나는 크기
+/** 업체들 계산·저장 + 묶음 워커 요청. 이미 있고 판정이 그대로면 건드리지 않음(글 속 숫자와 데이터가 어긋나지 않게) */
 export async function ensureStores(kw: string, k: KwData, targets: { target_id: number | null; store: string; rank: number | null; reviews: number | null; price: number | null; link?: string; productUrl?: string | null }[], me: { id: string; name: string }): Promise<R<{ ids: number[]; queued: number }>> {
   const db = sb(); const ids: number[] = []; const fresh: { id: number; s: StoreData }[] = [];
   const { data: nsc } = await db.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods: Product[] = ((nsc?.data as any)?.products ?? []) as Product[];
+  const tids = targets.map(t => t.target_id).filter((x): x is number => !!x);
+  const { data: exRows } = tids.length ? await db.from('pv3_stores').select('id,target_id,ai,data,created_at').eq('keyword', kw).in('target_id', tids) : { data: [] as any[] };
+  const exBy = new Map<number, any>((exRows ?? []).map((r: any) => [r.target_id, r]));
+  const toInsert: { keyword: string; target_id: number | null; store_name: string; data: StoreData }[] = [];
   for (const t of targets) {
     const product = matchProduct(prods, { store: t.store, productUrl: t.productUrl, rank: t.rank });
     const s = computeStore(k, { store: t.store, rank: t.rank, reviews: t.reviews, price: t.price, link: t.link, product });
-    if (t.target_id) {
-      const { data: ex } = await db.from('pv3_stores').select('id,ai,created_at').eq('keyword', kw).eq('target_id', t.target_id).maybeSingle();
-      if (ex && Date.now() - new Date(ex.created_at).getTime() < 7 * 86400e3) { await db.from('pv3_stores').update({ data: s }).eq('id', ex.id); ids.push(ex.id); if (!ex.ai) fresh.push({ id: ex.id, s }); continue; }
-      if (ex) await db.from('pv3_stores').delete().eq('id', ex.id);
+    const ex = t.target_id ? exBy.get(t.target_id) : null;
+    if (!ex) { toInsert.push({ keyword: kw, target_id: t.target_id, store_name: t.store, data: s }); continue; }
+    const ai = ex.ai as StoreAi | null; const od = ex.data as StoreData | null; const old = Date.now() - new Date(ex.created_at).getTime() > 7 * 86400e3;
+    const changed = !od || od.dv !== PV3_DATA_VER || od.leak !== s.leak || od.lead !== s.lead || JSON.stringify(od.plan) !== JSON.stringify(s.plan) || Math.abs((od.rank ?? 999) - (s.rank ?? 999)) >= 5 || (!od.title && !!s.title);
+    if (!ai || ai._v !== PV3_AI_VER || changed || old) {   // 글 구조가 예전 것 · 판정/순위가 크게 바뀜 · 7일 지남 → 데이터·글·이미지 새로
+      await db.from('pv3_stores').update({ store_name: t.store, data: s, ai: null, ai_task_id: null, images: [], created_at: new Date().toISOString() }).eq('id', ex.id); fresh.push({ id: ex.id, s });
     }
-    const { data: ins } = await db.from('pv3_stores').insert({ keyword: kw, target_id: t.target_id, store_name: t.store, data: s }).select('id').single();
-    if (ins) { ids.push(ins.id); fresh.push({ id: ins.id, s }); }
+    ids.push(ex.id);
+  }
+  if (toInsert.length) {
+    const { data: ins, error } = await db.from('pv3_stores').insert(toInsert).select('id,target_id,data');
+    if (error) return { ok: false, msg: '업체 저장 실패: ' + error.message };
+    (ins ?? []).forEach((r: any) => { ids.push(r.id); fresh.push({ id: r.id, s: r.data as StoreData }); });
   }
   let queued = 0;
-  for (let i = 0; i < fresh.length; i += 40) {
-    const batch = fresh.slice(i, i + 40);
+  for (let i = 0; i < fresh.length; i += BATCH) {
+    const batch = fresh.slice(i, i + BATCH);
     const { data, error } = await db.from('ai_tasks').insert({ kind: 'order', agent: 'chief', title: `${PV3_TITLE} ${kw} 업체 ${batch.length}곳`.slice(0, 80), instruction: storeBatchInstruction(k, batch, me.name), source: 'workhub', requested_by: me.name, requested_by_id: me.id, status: 'queued' }).select('id').single();
     if (!error && data) { await db.from('pv3_stores').update({ ai_task_id: data.id }).in('id', batch.map(b => b.id)); queued += batch.length; }
   }
   return { ok: true, msg: `업체 ${ids.length}곳 · AI 요청 ${queued}곳`, ids, queued };
 }
 
-// ── 워커 결과 수거 (화면 열 때·크론에서 호출) ──
-const fixNoun = (s: string) => String(s || '').trim().replace(/[.。]\s*$/, '');   // 끝 마침표만 정리 (명사 종결은 워커 규칙·폴백으로)
+// ── 워커 결과 수거 (발송 준비·화면·렌더 스크립트의 주기 호출) ──
+const BAD = /수수료|대행\s*비용|무조건|확실히|100\s*%|안전하/;                 // 들어가면 안 되는 표현 → 그 업체는 기본 문장으로
+const str = (v: unknown, max: number) => String(v ?? '').replace(/["“”]/g, "'").replace(/\s+/g, ' ').trim().slice(0, max);
+const noDot = (t: string) => t.replace(/[.。]\s*$/, '');
+const arr = (v: unknown, n: number, max: number) => (Array.isArray(v) ? v : []).map(x => noDot(str(x, max))).filter(Boolean).slice(0, n);
+const DONE_BAD = ['failed', 'rejected', 'cancelled'];
+function toKwAi(j: any, k: KwData): KwAi | null {
+  if (!j?.buyer?.who || !Array.isArray(j?.contents) || j.contents.length < 3) return null;
+  const fb = fallbackKwAi(k);
+  const ai: KwAi = {
+    marketRead: str(j.marketRead, 220) || fb.marketRead,
+    buyer: { who: noDot(str(j.buyer.who, 60)), truth: noDot(str(j.buyer.truth, 80)) || fb.buyer.truth, moment: noDot(str(j.buyer.moment, 80)) || fb.buyer.moment },
+    reframe: { weak: noDot(str(j.reframe?.weak, 80)) || fb.reframe.weak, flip: noDot(str(j.reframe?.flip, 90)) || fb.reframe.flip },
+    narrative: { diagnosis: noDot(str(j.narrative?.diagnosis, 60)) || fb.narrative.diagnosis, insight: noDot(str(j.narrative?.insight, 60)) || fb.narrative.insight, strategy: noDot(str(j.narrative?.strategy, 60)) || fb.narrative.strategy },
+    contents: j.contents.slice(0, 5).map((c: any) => ({ fmt: noDot(str(c?.fmt, 14)), idea: noDot(str(c?.idea, 70)), why: noDot(str(c?.why, 40)) || undefined })).filter((c: any) => c.fmt && c.idea),
+    _src: 'worker', _v: PV3_AI_VER,
+  };
+  return BAD.test(JSON.stringify(ai)) ? null : ai;
+}
+function toStoreAi(it: any, k: KwData, s: StoreData): StoreAi | null {
+  if (!it?.headline) return null;
+  const fb = fallbackStoreAi(k, s); const st = (Array.isArray(it.stages) ? it.stages : []).map((x: unknown) => str(x, 200)).filter(Boolean);
+  const headline = noDot(str(it.headline, 70));
+  const ai: StoreAi = {
+    headline: headline.length >= 8 && headline.length <= 64 ? headline : fb.headline, thesis: noDot(str(it.thesis, 50)) || fb.thesis, summary: str(it.summary, 260) || fb.summary,
+    have: (() => { const a = arr(it.have, 3, 60); return a.length ? a : fb.have; })(), leak: (() => { const a = arr(it.leak, 3, 60); return a.length ? a : fb.leak; })(),
+    stages: st.length >= 3 ? st.slice(0, 3) : fallbackStages(k, s), first: fb.first, skipWhy: fb.skipWhy, _src: 'worker', _v: PV3_AI_VER,
+  };
+  return BAD.test(JSON.stringify({ ...ai, first: '', skipWhy: [] })) ? null : ai;
+}
 export async function ingestAi(): Promise<{ kw: number; stores: number }> {
   const db = sb(); let kwN = 0, stN = 0;
-  const { data: ks } = await db.from('pv3_keywords').select('keyword,data,ai_task_id').eq('ai_status', 'queued').not('ai_task_id', 'is', null).limit(50);
+  // 키워드: 워커 대기 중(queued) 또는 기본 문장으로 먼저 나간 것(fallback + 작업 번호 남아 있음)
+  const { data: ks } = await db.from('pv3_keywords').select('keyword,data,ai,ai_status,ai_task_id').in('ai_status', ['queued', 'fallback']).not('ai_task_id', 'is', null).limit(80);
   for (const k of ks ?? []) {
     const { data: t } = await db.from('ai_tasks').select('status,result').eq('id', k.ai_task_id).maybeSingle(); if (!t) continue;
-    if (t.status === 'done') {
-      const j = parseLoose(t.result);
-      if (j?.buyer && j?.stages) { const ai: KwAi = { buyer: j.buyer, reframe: j.reframe ?? { weak: '', flip: '' }, narrative: j.narrative ?? { diagnosis: '', insight: '', strategy: '' }, stages: (j.stages ?? []).map(fixNoun), contents: (j.contents ?? []).slice(0, 5), skipWhy: j.skipWhy ?? [] }; await db.from('pv3_keywords').update({ ai, ai_status: 'done' }).eq('keyword', k.keyword); kwN++; }
-      else { await db.from('pv3_keywords').update({ ai: fallbackKwAi(k.data as KwData), ai_status: 'fallback' }).eq('keyword', k.keyword); kwN++; }
-    } else if (['failed', 'rejected', 'cancelled'].includes(t.status)) { await db.from('pv3_keywords').update({ ai: fallbackKwAi(k.data as KwData), ai_status: 'fallback' }).eq('keyword', k.keyword); kwN++; }
+    if (t.status !== 'done' && !DONE_BAD.includes(t.status)) continue;   // 아직 작업 중
+    const ai = t.status === 'done' ? toKwAi(parseLoose(t.result), k.data as KwData) : null;
+    if (ai) { await db.from('pv3_keywords').update({ ai, ai_status: 'done', images: [] }).eq('keyword', k.keyword); kwN++; }   // 기본 문장으로 렌더된 이미지는 비움 → 다시 렌더
+    else { const had = k.ai_status === 'fallback' && k.ai; await db.from('pv3_keywords').update(had ? { ai_task_id: null } : { ai: { ...fallbackKwAi(k.data as KwData), _src: 'final', _v: PV3_AI_VER }, ai_status: 'fallback', ai_task_id: null }).eq('keyword', k.keyword); if (!had) kwN++; }
   }
-  const { data: ss } = await db.from('pv3_stores').select('id,keyword,data,ai_task_id').is('ai', null).not('ai_task_id', 'is', null).limit(400);
+  // 업체: 글이 아직 없거나, 기본 문장으로 먼저 나간 것
+  const { data: ss } = await db.from('pv3_stores').select('id,keyword,data,ai,ai_task_id').not('ai_task_id', 'is', null).or('ai.is.null,ai->>_src.eq.fallback').limit(600);
   const byTask = new Map<number, any[]>(); (ss ?? []).forEach(s => { const a = byTask.get(s.ai_task_id) ?? []; a.push(s); byTask.set(s.ai_task_id, a); });
+  const kCache = new Map<string, KwData | null>();
   for (const [taskId, rows] of byTask) {
     const { data: t } = await db.from('ai_tasks').select('status,result').eq('id', taskId).maybeSingle(); if (!t) continue;
-    const { data: kd } = await db.from('pv3_keywords').select('data').eq('keyword', rows[0].keyword).maybeSingle(); const k = kd?.data as KwData | undefined; if (!k) continue;
-    let items: any[] | null = null;
-    if (t.status === 'done') { const j = parseLoose(t.result); items = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : null; }
-    else if (!['failed', 'rejected', 'cancelled'].includes(t.status)) continue;
+    if (t.status !== 'done' && !DONE_BAD.includes(t.status)) continue;
+    const kwName = rows[0].keyword as string;
+    if (!kCache.has(kwName)) { const { data: kd } = await db.from('pv3_keywords').select('data').eq('keyword', kwName).maybeSingle(); kCache.set(kwName, (kd?.data as KwData) ?? null); }
+    const k = kCache.get(kwName); if (!k) continue;
+    const j = t.status === 'done' ? parseLoose(t.result) : null; const items: any[] | null = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : null;
     for (const s of rows) {
-      const it = items?.find(x => Number(x.id) === s.id);
-      const ai: StoreAi = it?.headline ? { headline: fixNoun(it.headline), thesis: fixNoun(it.thesis ?? ''), have: (it.have ?? []).slice(0, 3), leak: (it.leak ?? []).slice(0, 3) } : fallbackStoreAi(k, s.data as StoreData);
-      await db.from('pv3_stores').update({ ai }).eq('id', s.id); stN++;
+      const ai = toStoreAi(items?.find(x => Number(x?.id) === s.id), k, s.data as StoreData);
+      if (ai) await db.from('pv3_stores').update({ ai, ...(s.ai ? { images: [] } : {}) }).eq('id', s.id);                               // 기본 문장 → 워커 글로 교체 시 다시 렌더
+      else if (!s.ai) await db.from('pv3_stores').update({ ai: { ...fallbackStoreAi(k, s.data as StoreData), _src: 'final', _v: PV3_AI_VER } }).eq('id', s.id);
+      else await db.from('pv3_stores').update({ ai: { ...(s.ai as StoreAi), _src: 'final' } }).eq('id', s.id);                           // 워커 실패 — 기본 문장 확정
+      stN++;
     }
   }
   return { kw: kwN, stores: stN };
 }
 
-/** 렌더 작업 등록 (키워드 공통 7장 / 업체 2장) */
+/** 렌더 작업 등록 (키워드 공통 장 / 업체별 장) */
 export async function queueRender(kind: 'keyword' | 'store', ref: string) {
   const db = sb();
   const { data: ex } = await db.from('pv3_render_jobs').select('id').eq('kind', kind).eq('ref', ref).in('status', ['queued', 'running']).maybeSingle();
   if (ex) return ex.id;
   const { data } = await db.from('pv3_render_jobs').insert({ kind, ref }).select('id').single(); return data?.id;
+}
+/** 글이 준비된 키워드·업체 중 현재 디자인 이미지가 없는 것을 렌더 큐에 (최근 14일 안에 만든 것만) */
+export async function queueMissingRenders(onlyKeyword?: string): Promise<number> {
+  const db = sb(); let n = 0; const since = new Date(Date.now() - 14 * 86400e3).toISOString();
+  let kq = db.from('pv3_keywords').select('keyword,images,data').in('ai_status', ['done', 'fallback']).gte('updated_at', since); if (onlyKeyword) kq = kq.eq('keyword', onlyKeyword);
+  const { data: ks } = await kq.limit(300);
+  for (const k of ks ?? []) {
+    if ((k.data as KwData | null)?.dv !== PV3_DATA_VER) continue;   // 예전 구조 — 다시 계산(발송·만들기)되면 그때 렌더
+    if (!hasPages(k.images, PV3_COMMON_PAGES)) { await queueRender('keyword', k.keyword); n++; }
+    const { data: ss } = await db.from('pv3_stores').select('id,images,data').eq('keyword', k.keyword).not('ai', 'is', null).gte('created_at', since).limit(500);
+    for (const s of ss ?? []) if ((s.data as StoreData | null)?.dv === PV3_DATA_VER && !hasPages(s.images, PV3_STORE_PAGES)) { await queueRender('store', String(s.id)); n++; }
+  }
+  return n;
 }
 export { nounEnd };
 
@@ -159,26 +230,23 @@ export async function autoPrepareV3(kw: string, me: { id: string; name: string }
   const purl = new Map((mt ?? []).map((x: any) => [x.id, x.product_url as string | null]));
   const targets = picks.map(c => ({ target_id: c.target_id, store: c.store || '귀사', rank: c.rank, reviews: c.reviews, price: null as number | null, link: c.link, productUrl: purl.get(c.target_id) ?? null }));
   const es = targets.length ? await ensureStores(kw, k, targets, me) : { msg: '', queued: 0, ids: [] as number[] };
-  const { data: nsc0 } = await db.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods0: Product[] = ((nsc0?.data as any)?.products ?? []) as Product[];
-  const sample = targets.length ? computeStore(k, { ...targets[0], product: matchProduct(prods0, { store: targets[0].store, productUrl: targets[0].productUrl, rank: targets[0].rank }) }) : computeStore(k, { store: '귀사', rank: null, reviews: null, price: null });
-  await requestKwAi(kw, k, sample, me, ek.fresh);
+  await requestKwAi(kw, k, me, ek.fresh);
   await ingestAi();
-  if (quick) {   // 빠른 모드: 워커 안 기다리고 기본 문장으로 바로 렌더 (워커 글 나오면 다음 발송부터 그걸 씀 — 이미지는 '다시 렌더' 필요)
-    const { data: k0 } = await db.from('pv3_keywords').select('ai_status').eq('keyword', kw).maybeSingle();
-    if (k0 && k0.ai_status !== 'done') await db.from('pv3_keywords').update({ ai: fallbackKwAi(k, sample), ai_status: 'fallback' }).eq('keyword', kw);
+  if (quick) {   // 빠른 모드: 워커를 기다리지 않고 기본 문장으로 먼저 렌더. 워커 글이 나오면 자동으로 교체·다시 렌더
+    const { data: k0 } = await db.from('pv3_keywords').select('ai,ai_status').eq('keyword', kw).maybeSingle();
+    if (k0 && k0.ai_status !== 'done' && !(k0.ai_status === 'fallback' && (k0.ai as KwAi | null)?._v === PV3_AI_VER)) await db.from('pv3_keywords').update({ ai: { ...fallbackKwAi(k), _src: 'fallback', _v: PV3_AI_VER }, ai_status: 'fallback' }).eq('keyword', kw);
     const { data: s0 } = await db.from('pv3_stores').select('id,data').eq('keyword', kw).is('ai', null).in('id', es.ids ?? []);
-    for (const st of s0 ?? []) await db.from('pv3_stores').update({ ai: fallbackStoreAi(k, st.data as StoreData) }).eq('id', st.id);
+    for (const st of s0 ?? []) await db.from('pv3_stores').update({ ai: { ...fallbackStoreAi(k, st.data as StoreData), _src: 'fallback', _v: PV3_AI_VER } }).eq('id', st.id);
   }
-  const { data: kr } = await db.from('pv3_keywords').select('ai_status,images').eq('keyword', kw).maybeSingle();
-  if (kr && ['done', 'fallback'].includes(kr.ai_status) && (kr.images ?? []).length < 4) await queueRender('keyword', kw);
-  const { data: ss } = await db.from('pv3_stores').select('id,images').eq('keyword', kw).not('ai', 'is', null).in('id', es.ids ?? []);
-  for (const s of ss ?? []) if ((s.images ?? []).length < 4) await queueRender('store', String(s.id));
-  const ready = !!kr && (kr.images ?? []).length >= 4 && (ss ?? []).some(s => (s.images ?? []).length >= 4);
-  return { ready, msg: ready ? '준비됨' : `'${kw}' 제안서 v3 준비 중 — 워커 글·이미지 생성 요청함 (보통 5~10분, 워커 PC 켜져 있어야 함)` };
+  await queueMissingRenders(kw);
+  const { data: kr } = await db.from('pv3_keywords').select('images').eq('keyword', kw).maybeSingle();
+  const { data: ss } = await db.from('pv3_stores').select('id,images').eq('keyword', kw).in('id', es.ids ?? []);
+  const ready = !!kr && hasPages(kr.images, PV3_COMMON_PAGES) && (ss ?? []).some(s => hasPages(s.images, PV3_STORE_PAGES));
+  return { ready, msg: ready ? '준비됨' : `'${kw}' 제안서 준비 중 — 글·이미지 생성 요청함 (${quick ? '빠른 모드 1~3분' : '보통 5~10분'}, 워커 PC 켜져 있어야 함)` };
 }
 
 /** 메일 화면용 진행 상태 */
-export async function v3Status(kw: string): Promise<{ kwData: boolean; kwAi: string; kwTask: number | null; kwTaskStatus: string; kwImg: number; stores: number; storesAi: number; storesImg: number; renderLast: string | null; renderQueue: number }> {
+export async function v3Status(kw: string): Promise<{ kwData: boolean; kwAi: string; kwTask: number | null; kwTaskStatus: string; kwReady: boolean; stores: number; storesAi: number; storesWorker: number; storesImg: number; renderLast: string | null; renderQueue: number }> {
   const db = sb();
   const { data: k } = await db.from('pv3_keywords').select('ai_status,ai_task_id,images').eq('keyword', kw).maybeSingle();
   let kwTaskStatus = '';
@@ -186,5 +254,5 @@ export async function v3Status(kw: string): Promise<{ kwData: boolean; kwAi: str
   const { data: ss } = await db.from('pv3_stores').select('ai,images').eq('keyword', kw);
   const { data: rl } = await db.from('ai_settings').select('value').eq('key', 'pv3_render_last').maybeSingle();
   const { count } = await db.from('pv3_render_jobs').select('id', { count: 'exact', head: true }).in('status', ['queued', 'running']);
-  return { kwData: !!k, kwAi: k?.ai_status ?? 'none', kwTask: k?.ai_task_id ?? null, kwTaskStatus, kwImg: (k?.images ?? []).length, stores: ss?.length ?? 0, storesAi: (ss ?? []).filter(s => s.ai).length, storesImg: (ss ?? []).filter(s => (s.images ?? []).length >= 4).length, renderLast: rl?.value ?? null, renderQueue: count ?? 0 };
+  return { kwData: !!k, kwAi: k?.ai_status ?? 'none', kwTask: k?.ai_task_id ?? null, kwTaskStatus, kwReady: !!k && hasPages(k.images, PV3_COMMON_PAGES), stores: ss?.length ?? 0, storesAi: (ss ?? []).filter(s => s.ai).length, storesWorker: (ss ?? []).filter(s => (s.ai as StoreAi | null)?._src === 'worker').length, storesImg: (ss ?? []).filter(s => hasPages(s.images, PV3_STORE_PAGES)).length, renderLast: rl?.value ?? null, renderQueue: count ?? 0 };
 }

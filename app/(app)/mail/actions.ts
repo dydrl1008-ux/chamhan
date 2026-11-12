@@ -117,7 +117,7 @@ export async function testSend(i: { keyword: string; to: string; subject: string
   const subject = `[테스트] ` + fillVars(i.subject, v).slice(0, 190), body = fillVars(i.body, v);
   await sb.from('mail_queue').update({ subject, body, message_id: `<${mid}>` }).eq('id', q.id);
   revalidatePath('/mail');
-  return { ok: true, msg: `테스트 1건 → ${to}${html ? ' (v3 이미지 8장)' : ''}`, job: { job_id: jobId, sender_email: acct.email, password: pw, sender_name: acct.from_name || `참한기획 ${me.name}`, items: [{ id: q.id, to, subject, body, message_id: `<${mid}>`, store: '테스트 발송', ...(html ? { html } : {}) }], gap_sec: 1, callback_url: `${siteBase()}/api/mail/agent-callback`, callback_token: token } };
+  return { ok: true, msg: `테스트 1건 → ${to}${html ? ' (맞춤 제안서 이미지 포함)' : ''}`, job: { job_id: jobId, sender_email: acct.email, password: pw, sender_name: acct.from_name || `참한기획 ${me.name}`, items: [{ id: q.id, to, subject, body, message_id: `<${mid}>`, store: '테스트 발송', ...(html ? { html } : {}) }], gap_sec: 1, callback_url: `${siteBase()}/api/mail/agent-callback`, callback_token: token } };
 }
 
 /** SNS_Manager 가 안 받았거나 실패한 건 정리 (브라우저가 에이전트 호출 실패 시) */

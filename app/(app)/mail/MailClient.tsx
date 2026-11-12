@@ -194,7 +194,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   }, []);
   const v3kw = loadedKw || [...autoSel][0] || '';
   useEffect(() => { if (!useV3 || !v3kw) { setV3st(null); return; } let on = true; const f = async () => { const x = await v3StatusOf(v3kw); if (on) setV3st(x); }; f(); const t = setInterval(f, 20_000); return () => { on = false; clearInterval(t); }; }, [useV3, v3kw]);
-  useEffect(() => { if (pendTest && v3st && v3st.kwImg >= 4 && v3st.storesImg > 0 && !busy) { setPendTest(false); doTest(); } // eslint-disable-next-line
+  useEffect(() => { if (pendTest && v3st && v3st.kwReady && v3st.storesImg > 0 && !busy) { setPendTest(false); doTest(); } // eslint-disable-next-line
   }, [v3st, pendTest]);
 
   const sample = rows.find(c => sel.has(c.id)) ?? rows[0];
@@ -242,7 +242,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>키워드당 최대<input type="number" value={perKw} onChange={e => setPerKw(Math.max(1, Number(e.target.value) || 1))} style={{ width: 90 }} /></label>
           <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>이번 실행 최대 <span style={{ fontWeight: 400 }}>(0 = 오늘 남은 한도)</span><input type="number" value={autoMax} onChange={e => setAutoMax(Math.max(0, Number(e.target.value) || 0))} style={{ width: 110 }} /></label>
-          <label style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }} title="제안서 v3 화면에서 이미지가 준비된 업체만 발송 · 본문에 이미지 8장 인라인 · 제안서 링크 없음"><input type="checkbox" checked={useV3} onChange={e => setUseV3(e.target.checked)} style={{ width: 'auto', margin: 0 }} /> 제안서 v3 이미지로 (링크 없음)</label>
+          <label style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }} title="업체별 맞춤 제안서 이미지(10장)를 본문에 넣어 발송 · 준비 안 된 키워드는 자동으로 만들고, 준비된 업체만 나감 · 제안서 링크 없음"><input type="checkbox" checked={useV3} onChange={e => setUseV3(e.target.checked)} style={{ width: 'auto', margin: 0 }} /> 맞춤 제안서 이미지로 (링크 없음)</label>
           {useV3 && <label style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }} title="워커 글을 안 기다리고 코드 기본 문장으로 바로 렌더 (1~2분). 워커 글이 나오면 다음 발송부터 자동 반영"><input type="checkbox" checked={quick} onChange={e => setQuick(e.target.checked)} style={{ width: 'auto', margin: 0 }} /> 빠른 모드 (워커 안 기다림)</label>}
           {!autoRun ? <button type="button" className="btn" disabled={!!busy || !autoSel.size || !account} onClick={runAuto} style={{ background: '#03C75A', borderColor: '#03C75A' }}>자동 발송 시작</button>
             : <button type="button" className="btn" onClick={() => { stopRef.current = true; alog('중단 요청 — 현재 키워드 끝나면 멈춤'); }} style={{ background: '#E11D48', borderColor: '#E11D48' }}>중단</button>}
@@ -257,11 +257,11 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
           <b>v3 '{v3kw}'</b>
           {!v3st ? <span className="cell-sub">확인 중…</span> : !v3st.kwData ? <span className="cell-sub">아직 안 만듦 — 보내기/테스트 누르면 자동 준비</span> : <>
             <span>지수 ✓</span>
-            <span>업체 {v3st.stores}곳 (글 {v3st.storesAi} · 이미지 {v3st.storesImg})</span>
+            <span>업체 {v3st.stores}곳 (글 {v3st.storesAi}{v3st.storesWorker < v3st.storesAi ? ` · 그중 워커 글 ${v3st.storesWorker}` : ''} · 이미지 {v3st.storesImg})</span>
             <span>키워드 글 {v3st.kwAi === 'done' ? '✓' : v3st.kwAi === 'fallback' ? '기본 문장' : v3st.kwTask ? `워커 #${v3st.kwTask} ${v3st.kwTaskStatus === 'running' ? '작업 중' : v3st.kwTaskStatus === 'queued' ? '대기' : v3st.kwTaskStatus}` : '요청 전'}</span>
-            <span>공통 이미지 {v3st.kwImg}/4</span>
-            <span className="cell-sub">렌더 PC {v3st.renderLast ? `${fmtKST(v3st.renderLast)} 연결 · 큐 ${v3st.renderQueue}` : '연결 안 됨 (pv3_render.py 실행 필요)'}</span>
-            {v3st.kwImg >= 4 && v3st.storesImg > 0 && <Status kind="ok">보낼 수 있음</Status>}{pendTest && <Status kind="wait">준비되면 자동 테스트 발송</Status>}
+            <span>공통 이미지 {v3st.kwReady ? '✓' : '대기'}</span>
+            <span className="cell-sub">{v3st.renderLast && Date.now() - new Date(v3st.renderLast).getTime() < 3 * 60_000 ? `렌더 PC 연결됨 · 대기 ${v3st.renderQueue}건` : `렌더 PC 연결 안 됨${v3st.renderLast ? ` (마지막 ${fmtKST(v3st.renderLast)})` : ''} — 워커 PC에서 pv3_render.py 실행 필요`}</span>
+            {v3st.kwReady && v3st.storesImg > 0 && <Status kind="ok">보낼 수 있음 · {v3st.storesImg}곳</Status>}{pendTest && <Status kind="wait">준비되면 자동 테스트 발송</Status>}
           </>}
         </div>}
         {autoDone.length > 0 && <div className="cell-sub">오늘 이미 끝난 키워드 {autoDone.length}개는 건너뜀 (이어하기) · <button type="button" className="btn ghost xs" onClick={resetDone}>처음부터</button></div>}

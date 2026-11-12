@@ -3,7 +3,7 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { DEFAULT_SUBJECT, DEFAULT_BODY } from '@/lib/mail';
 import MailClient from './MailClient';
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'; export const maxDuration = 60;   // 발송 준비(맞춤 제안서 자동 생성 포함)가 길어질 수 있음
 export default async function MailPage({ searchParams }: { searchParams: { kw?: string; hl?: string } }) {
   const me = (await getProfile())!; const sb = supabaseAdmin();
   const [{ data: accts }, { data: hist }, { data: prof }, { data: todayRows }, { data: cfg }] = await Promise.all([

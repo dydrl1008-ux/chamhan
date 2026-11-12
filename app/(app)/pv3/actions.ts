@@ -4,18 +4,18 @@ import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { settings, eligible, type Candidate } from '@/lib/mailSend';
-import { ensureKeyword, ensureStores, requestKwAi, ingestAi, queueRender } from '@/lib/pv3Tasks';
-import { computeStore, matchProduct, parseLoose, type KwData, type StoreData } from '@/lib/proposalV3';
+import { ensureKeyword, ensureStores, requestKwAi, ingestAi, queueRender, queueMissingRenders } from '@/lib/pv3Tasks';
+import { parseLoose, hasPages, PV3_STORE_PAGES, PV3_COMMON_PAGES, type KwData, type StoreData, type StoreAi } from '@/lib/proposalV3';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 const lead = (me: { role: string }) => me.role === 'admin' || me.role === 'head';
 
-export type KwRow = { keyword: string; updated_at: string; ai_status: string; ai_task_id: number | null; images: any[]; stores: number; storesAi: number; storesImg: number; volume: number; leak: string };
+export type KwRow = { keyword: string; updated_at: string; ai_status: string; ai_task_id: number | null; ready: boolean; stores: number; storesAi: number; storesWorker: number; storesImg: number; volume: number; leak: string };
 export async function listKw(): Promise<R<{ rows: KwRow[] }>> {
   const me = await getProfile(); if (!me || !lead(me)) return { ok: false, msg: '총괄·대표만' };
   const sb = supabaseAdmin();
   const { data: ks } = await sb.from('pv3_keywords').select('keyword,updated_at,ai_status,ai_task_id,images,data').order('updated_at', { ascending: false }).limit(100);
-  const { data: ss } = await sb.from('pv3_stores').select('keyword,ai,images');
-  const rows: KwRow[] = (ks ?? []).map(k => { const st = (ss ?? []).filter(s => s.keyword === k.keyword); const d = k.data as KwData; return { keyword: k.keyword, updated_at: k.updated_at, ai_status: k.ai_status, ai_task_id: k.ai_task_id, images: k.images ?? [], stores: st.length, storesAi: st.filter(s => s.ai).length, storesImg: st.filter(s => (s.images ?? []).length >= 4).length, volume: d?.volume?.group ?? 0, leak: d?.kwLeak ?? '' }; });
+  const { data: ss } = await sb.from('pv3_stores').select('keyword,ai,images').in('keyword', (ks ?? []).map(k => k.keyword)).limit(5000);
+  const rows: KwRow[] = (ks ?? []).map(k => { const st = (ss ?? []).filter(s => s.keyword === k.keyword); const d = k.data as KwData; return { keyword: k.keyword, updated_at: k.updated_at, ai_status: k.ai_status, ai_task_id: k.ai_task_id, ready: hasPages(k.images, PV3_COMMON_PAGES), stores: st.length, storesAi: st.filter(s => s.ai).length, storesWorker: st.filter(s => (s.ai as StoreAi | null)?._src === 'worker').length, storesImg: st.filter(s => hasPages(s.images, PV3_STORE_PAGES)).length, volume: d?.volume?.group ?? 0, leak: d?.kwLeak ?? '' }; });
   return { ok: true, msg: '', rows };
 }
 
@@ -31,9 +31,7 @@ export async function buildKeyword(keyword: string, n: number, force = false): P
   const purl = new Map((mt ?? []).map((x: any) => [x.id, x.product_url as string | null]));
   const targets = picks.map(c => ({ target_id: c.id, store: c.store_name || '귀사', rank: c.rank_now, reviews: c.review_cnt, price: null as number | null, link: c.store_url, productUrl: purl.get(c.id) ?? null }));
   const es = targets.length ? await ensureStores(kw, k, targets, me) : { ok: true, msg: '업체 없음', ids: [] as number[], queued: 0 };
-  const { data: nsc } = await sb.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods = ((nsc?.data as any)?.products ?? []) as any[];
-  const sample = targets.length ? computeStore(k, { ...targets[0], product: matchProduct(prods, { store: targets[0].store, productUrl: targets[0].productUrl, rank: targets[0].rank }) }) : computeStore(k, { store: '귀사', rank: null, reviews: null, price: null });
-  const ra = await requestKwAi(kw, k, sample, me, force || ek.fresh);
+  const ra = await requestKwAi(kw, k, me, force || ek.fresh);
   revalidatePath('/pv3');
   return { ok: true, msg: `「${kw}」 ${ek.msg} · ${es.msg} · 키워드 글 ${ra.msg}`, stores: es.ids?.length ?? 0 };
 }
@@ -41,13 +39,7 @@ export async function buildKeyword(keyword: string, n: number, force = false): P
 /** 워커 결과 수거 + 글 끝난 것 렌더 큐에 */
 export async function collect(): Promise<R<{ kw: number; stores: number; renders: number }>> {
   const me = await getProfile(); if (!me || !lead(me)) return { ok: false, msg: '총괄·대표만' };
-  const r = await ingestAi(); const sb = supabaseAdmin(); let renders = 0;
-  const { data: ks } = await sb.from('pv3_keywords').select('keyword,ai_status,images').in('ai_status', ['done', 'fallback']);
-  for (const k of ks ?? []) {
-    if ((k.images ?? []).length < 4) { await queueRender('keyword', k.keyword); renders++; }
-    const { data: ss } = await sb.from('pv3_stores').select('id,images').eq('keyword', k.keyword).not('ai', 'is', null);
-    for (const s of ss ?? []) if ((s.images ?? []).length < 4) { await queueRender('store', String(s.id)); renders++; }
-  }
+  const r = await ingestAi(); const renders = await queueMissingRenders();
   revalidatePath('/pv3');
   return { ok: true, msg: `수거 — 키워드 글 ${r.kw} · 업체 글 ${r.stores} · 렌더 요청 ${renders}`, ...r, renders };
 }
@@ -58,10 +50,10 @@ export async function rerender(keyword: string): Promise<R> {
   const { data: ss } = await sb.from('pv3_stores').select('id').eq('keyword', keyword); for (const s of ss ?? []) { await sb.from('pv3_stores').update({ images: [] }).eq('id', s.id); await queueRender('store', String(s.id)); }
   revalidatePath('/pv3'); return { ok: true, msg: `렌더 다시 요청 — 키워드 + 업체 ${ss?.length ?? 0}곳` };
 }
-export async function storesOf(keyword: string): Promise<R<{ rows: { id: number; store_name: string; leak: string; rank: number | null; ai: boolean; images: number; headline: string }[] }>> {
+export async function storesOf(keyword: string): Promise<R<{ rows: { id: number; store_name: string; leak: string; lead: string; rank: number | null; matched: boolean; src: string; ready: boolean; headline: string }[] }>> {
   const me = await getProfile(); if (!me || !lead(me)) return { ok: false, msg: '총괄·대표만' };
-  const { data } = await supabaseAdmin().from('pv3_stores').select('id,store_name,data,ai,images').eq('keyword', keyword).order('id').limit(300);
-  return { ok: true, msg: '', rows: (data ?? []).map(s => ({ id: s.id, store_name: s.store_name, leak: (s.data as StoreData)?.leak ?? '', rank: (s.data as StoreData)?.rank ?? null, ai: !!s.ai, images: (s.images ?? []).length, headline: (s.ai as any)?.headline ?? '' })) };
+  const { data } = await supabaseAdmin().from('pv3_stores').select('id,store_name,data,ai,images').eq('keyword', keyword).order('id').limit(500);
+  return { ok: true, msg: '', rows: (data ?? []).map(s => { const d = s.data as StoreData; const a = s.ai as StoreAi | null; return { id: s.id, store_name: s.store_name, leak: d?.leak ?? '', lead: d?.lead ?? '', rank: d?.rank ?? null, matched: !!d?.title, src: a ? (a._src ?? 'worker') : '', ready: hasPages(s.images, PV3_STORE_PAGES), headline: a?.headline ?? '' }; }) };
 }
 export async function removeKw(keyword: string): Promise<R> {
   const me = await getProfile(); if (!me || !lead(me)) return { ok: false, msg: '총괄·대표만' };
@@ -134,24 +126,17 @@ export async function removeKnowledge(id: number): Promise<R> {
   await supabaseAdmin().from('knowledge').delete().eq('id', id); revalidatePath('/pv3'); return { ok: true, msg: '삭제' };
 }
 
-/** 메일 대상 있는 키워드 전부(이메일 업체 많은 순) × 업체 n곳 — 한 번에 워커 큐에. 전날 저녁에 눌러두면 아침엔 준비 끝 */
-export async function prepareAll(n: number, maxKw = 60): Promise<R<{ kws: number; stores: number; skipped: string[] }>> {
+/** 「전체 미리 준비」용 키워드 목록 — 메일 대상 있는 키워드(이메일 업체 많은 순) 중 오늘 아직 준비 안 됐거나 업체가 모자란 것. 실제 준비는 화면이 키워드별로 buildKeyword 를 차례로 호출 */
+export async function prepList(n: number, maxKw = 60): Promise<R<{ list: { keyword: string; n: number }[]; total: number }>> {
   const me = await getProfile(); if (!me || !lead(me)) return { ok: false, msg: '총괄·대표만' };
   const sb = supabaseAdmin();
   const { data: kws, error } = await sb.rpc('mail_keywords_json'); if (error) return { ok: false, msg: error.message };
-  const list = ((kws ?? []) as { keyword: string; n: number }[]).sort((a, b) => b.n - a.n).slice(0, Math.max(1, Math.min(200, maxKw)));
-  let kwN = 0, stN = 0; const skipped: string[] = [];
-  for (const k of list) {
-    const { data: ex } = await sb.from('pv3_keywords').select('ai_status,images,updated_at').eq('keyword', k.keyword).maybeSingle();
-    if (ex && ['queued', 'done', 'fallback'].includes(ex.ai_status) && Date.now() - new Date(ex.updated_at).getTime() < 24 * 3600e3) {
-      // 키워드는 있음 → 업체만 보충
-      const { count } = await sb.from('pv3_stores').select('id', { count: 'exact', head: true }).eq('keyword', k.keyword);
-      if ((count ?? 0) >= n) continue;
-    }
-    const r = await buildKeyword(k.keyword, n); if (r.ok) { kwN++; stN += r.stores ?? 0; } else skipped.push(`${k.keyword}: ${r.msg}`);
-  }
-  revalidatePath('/pv3');
-  return { ok: true, msg: `키워드 ${kwN}개 · 업체 ${stN}곳 워커 큐에 올림${skipped.length ? ` · 건너뜀 ${skipped.length}` : ''} — 워커·렌더는 자동, 수거는 렌더 스크립트가 2분마다`, kws: kwN, stores: stN, skipped };
+  const all = ((kws ?? []) as { keyword: string; n: number }[]).sort((a, b) => b.n - a.n).slice(0, Math.max(1, Math.min(300, maxKw)));
+  const { data: ex } = await sb.from('pv3_keywords').select('keyword,ai_status,updated_at').in('keyword', all.map(k => k.keyword));
+  const { data: ss } = await sb.from('pv3_stores').select('keyword').in('keyword', all.map(k => k.keyword)).limit(20000);
+  const cnt = new Map<string, number>(); (ss ?? []).forEach(s => cnt.set(s.keyword, (cnt.get(s.keyword) ?? 0) + 1));
+  const list = all.filter(k => { const e = (ex ?? []).find(x => x.keyword === k.keyword); const today = e && ['queued', 'done', 'fallback'].includes(e.ai_status) && Date.now() - new Date(e.updated_at).getTime() < 24 * 3600e3; return !(today && (cnt.get(k.keyword) ?? 0) >= Math.min(n, k.n)); });
+  return { ok: true, msg: `준비할 키워드 ${list.length}개 (전체 ${all.length}개 중)`, list, total: all.length };
 }
 
 /** 워커 원문 (키워드 글 + 업체 묶음) — 글 품질 확인·지시문 조정용 */

@@ -6,6 +6,7 @@ import { fillVars } from '@/lib/mail';
 import { search } from '@/lib/nsc';
 import { buildDoc, BRAND, type Doc } from '@/lib/proposalDoc';
 import { autoPrepareV3 } from '@/lib/pv3Tasks';
+import { hasPages, PV3_PAGES, PV3_STORE_PAGES, PV3_COMMON_PAGES, PV3_DESIGN, type Pv3Img } from '@/lib/proposalV3';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
 export type Candidate = { id: number; store_name: string; store_url: string; email: string; phone: string; rank_now: number | null; review_cnt: number | null; optout: boolean; replied: boolean; ours: string | null; interest: string | null; recent_by: string | null; recent_at: string | null };
@@ -22,27 +23,28 @@ export const siteBase = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://cham
 export const linkBase = () => (process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');
 export const eligible = (c: Candidate) => !!c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by;
 
-/** 제안서 v3 이미지: 업체별 4장(1·2·5·7) + 키워드 공통 4장(3·4·6·8) 이 다 있어야 발송 가능 */
+/** 제안서 v3 이미지: 업체별 장 + 키워드 공통 장이 현재 디자인 버전으로 다 있어야 발송 가능. urls = 1~N장 순서 */
 export async function v3ImagesFor(keyword: string, targetIds: number[]): Promise<Map<number, { storeId: number; urls: string[] }>> {
   const out = new Map<number, { storeId: number; urls: string[] }>(); if (!targetIds.length) return out;
   const sb = supabaseAdmin();
   const { data: k } = await sb.from('pv3_keywords').select('images').eq('keyword', keyword).maybeSingle();
-  const kimg = new Map<number, string>(((k?.images ?? []) as { page: number; url: string }[]).map(x => [x.page, x.url]));
-  if ([3, 4, 6, 8].some(p => !kimg.get(p))) return out;
+  if (!hasPages(k?.images, PV3_COMMON_PAGES)) return out;
+  const cur = (imgs: unknown) => new Map<number, string>(((Array.isArray(imgs) ? imgs : []) as Pv3Img[]).filter(x => x.v === PV3_DESIGN).map(x => [x.page, x.url]));
+  const kimg = cur(k?.images);
   const { data: ss } = await sb.from('pv3_stores').select('id,target_id,images').eq('keyword', keyword).in('target_id', targetIds);
   for (const st of ss ?? []) {
-    const simg = new Map<number, string>(((st.images ?? []) as { page: number; url: string }[]).map(x => [x.page, x.url]));
-    if ([1, 2, 5, 7].some(p => !simg.get(p))) continue;
-    out.set(st.target_id!, { storeId: st.id, urls: [1, 2, 3, 4, 5, 6, 7, 8].map(p => (simg.get(p) ?? kimg.get(p))!) });
+    if (!hasPages(st.images, PV3_STORE_PAGES)) continue;
+    const simg = cur(st.images);
+    out.set(st.target_id!, { storeId: st.id, urls: Array.from({ length: PV3_PAGES }, (_, i) => (simg.get(i + 1) ?? kimg.get(i + 1))!).filter(Boolean) });
   }
   return out;
 }
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-/** 본문 텍스트 + 이미지 8장 → 메일 HTML. 본문은 쓴 그대로(URL 은 링크로) · 이미지는 본문 뒤 · 수신거부는 본문에 {수신거부링크} 넣었을 때만 */
+/** 본문 텍스트 + 제안서 이미지 → 메일 HTML. 본문은 쓴 그대로(URL 은 링크로) · 이미지는 본문 뒤 · 수신거부는 본문에 {수신거부링크} 넣었을 때만 */
 export function v3Html(body: string, urls: string[]) {
-  const text = esc(body).replace(/(https?:\/\/[^\s<>"']+)/g, '<a href="$1" style="color:#03C75A">$1</a>').replace(/\n/g, '<br>');
-  const imgs = urls.map((u, i) => `<img src="${u}" alt="제안서 ${i + 1}" width="640" style="display:block;width:100%;max-width:640px;height:auto;margin:0 0 6px;border:0">`).join('');
-  return `<div style="font-family:'Malgun Gothic',Apple SD Gothic Neo,sans-serif;font-size:14px;line-height:1.7;color:#222;max-width:640px">${text}<div style="margin:18px 0 10px">${imgs}</div></div>`;
+  const text = esc(body).replace(/(https?:\/\/[^\s<>"']+)/g, '<a href="$1" style="color:#2F5BFF">$1</a>').replace(/\n/g, '<br>');
+  const imgs = urls.map((u, i) => `<img src="${u}" alt="제안서 ${i + 1}" width="720" style="display:block;width:100%;max-width:720px;height:auto;margin:0;border:0">`).join('');
+  return `<div style="font-family:'Malgun Gothic',Apple SD Gothic Neo,sans-serif;font-size:14px;line-height:1.7;color:#222;max-width:720px">${text}<div style="margin:18px 0 10px;border:1px solid #E6E9F0;border-radius:10px;overflow:hidden;font-size:0;line-height:0">${imgs}</div></div>`;
 }
 
 export async function prepareCore(me: { id: string; name: string }, i: { keyword: string; ids: number[]; subject: string; body: string; doc: Doc; owner: string; phone: string; accountId: number; campaignId?: number | null; v3?: boolean; quick?: boolean }): Promise<R<{ job: AgentJob; skipped: string[] }>> {
@@ -73,9 +75,9 @@ export async function prepareCore(me: { id: string; name: string }, i: { keyword
       const pr = await autoPrepareV3(kw, me, missing.map(c => ({ target_id: c.id, store: c.store_name, rank: c.rank_now, reviews: c.review_cnt, link: c.store_url })), !!i.quick);
       if (pr.ready) v3map = await v3ImagesFor(kw, picks.map(c => c.id)); v3msg = pr.msg;
     }
-    for (let x = picks.length - 1; x >= 0; x--) if (!v3map!.has(picks[x].id)) { skipped.push(`${picks[x].store_name}: 제안서 v3 준비 중`); picks.splice(x, 1); }
+    for (let x = picks.length - 1; x >= 0; x--) if (!v3map!.has(picks[x].id)) { skipped.push(`${picks[x].store_name}: 맞춤 제안서 준비 중`); picks.splice(x, 1); }
   }
-  if (!picks.length) return { ok: false, msg: i.v3 ? (v3msg || '제안서 v3 준비 중') : '보낼 수 있는 대상이 없습니다', skipped };
+  if (!picks.length) return { ok: false, msg: i.v3 ? (v3msg || '맞춤 제안서 준비 중') : '보낼 수 있는 대상이 없습니다', skipped };
   if (picks.length > remain) { skipped.push(`일 상한 초과 ${picks.length - remain}곳 제외`); picks.length = remain; }
   // 미리본 제안서 그대로 링크 1개 (수신자 구분은 ?m=큐번호)
   const code = randomBytes(6).toString('base64url').slice(0, 8);

@@ -2,12 +2,12 @@
 // Authorization: Bearer CRON_SECRET
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { PV3_PAGES, PV3_STORE_PAGES } from '@/components/Pv3Doc';
+import { PV3_STORE_PAGES, PV3_COMMON_PAGES, PV3_DESIGN } from '@/lib/proposalV3';
 export const dynamic = 'force-dynamic'; export const maxDuration = 60;
 const J = (o: any, status = 200) => NextResponse.json(o, { status });
 const authed = (req: Request) => !!process.env.CRON_SECRET && req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`;
 const base = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');
-const COMMON = Array.from({ length: PV3_PAGES }, (_, i) => i + 1).filter(p => !PV3_STORE_PAGES.includes(p));
+const COMMON = PV3_COMMON_PAGES;
 
 export async function GET(req: Request) {
   if (!authed(req)) return J({ ok: false }, 401);
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const { data: jobs } = await sb.from('pv3_render_jobs').select('id,kind,ref').eq('status', 'queued').order('id').limit(5);
   if (jobs?.length) await sb.from('pv3_render_jobs').update({ status: 'running' }).in('id', jobs.map(j => j.id));
   const t = process.env.CRON_SECRET;
-  return J({ ok: true, jobs: (jobs ?? []).map(j => ({ id: j.id, kind: j.kind, ref: j.ref, pages: (j.kind === 'store' ? PV3_STORE_PAGES : COMMON).map(p => ({ page: p, url: `${base()}/pv3/view?kind=${j.kind}&ref=${encodeURIComponent(j.ref)}&page=${p}&t=${t}` })) })) });
+  return J({ ok: true, width: 720, scale: 1.5, quality: 84, jobs: (jobs ?? []).map(j => ({ id: j.id, kind: j.kind, ref: j.ref, pages: (j.kind === 'store' ? PV3_STORE_PAGES : COMMON).map(p => ({ page: p, url: `${base()}/pv3/view?kind=${j.kind}&ref=${encodeURIComponent(j.ref)}&page=${p}&t=${t}` })) })) });
 }
 
 export async function POST(req: Request) {
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const url = sb.storage.from('pv3').getPublicUrl(path).data.publicUrl;
     const table = job.kind === 'store' ? 'pv3_stores' : 'pv3_keywords'; const key = job.kind === 'store' ? 'id' : 'keyword'; const refv = job.kind === 'store' ? Number(job.ref) : job.ref;
     const { data: row } = await sb.from(table).select('images').eq(key, refv).maybeSingle();
-    const imgs: { page: number; url: string }[] = ((row?.images ?? []) as any[]).filter(x => x.page !== Number(b.page)); imgs.push({ page: Number(b.page), url }); imgs.sort((x, y) => x.page - y.page);
+    const imgs: { page: number; url: string; v?: number }[] = ((row?.images ?? []) as any[]).filter(x => x.page !== Number(b.page) && x.v === PV3_DESIGN); imgs.push({ page: Number(b.page), url, v: PV3_DESIGN }); imgs.sort((x, y) => x.page - y.page);   // 예전 디자인 장은 버림
     await sb.from(table).update({ images: imgs, rendered_at: new Date().toISOString() }).eq(key, refv);
     return J({ ok: true, url });
   }
