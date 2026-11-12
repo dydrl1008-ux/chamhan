@@ -9,6 +9,7 @@ import { buildDoc, BRAND, type Doc } from '@/lib/proposalDoc';
 import { fillVars } from '@/lib/mail';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
+import { autoPrepareV3 } from '@/lib/pv3Tasks';
 import { settings, kstDayStart, siteBase, linkBase, prepareCore, autoPrepareCore, eligible, v3ImagesFor, v3Html, type Candidate, type AgentItem, type AgentJob } from '@/lib/mailSend';
 export type { Candidate, AgentItem, AgentJob };
 
@@ -103,8 +104,14 @@ export async function testSend(i: { keyword: string; to: string; subject: string
   let html: string | undefined;
   if (i.v3) {
     const { data: st } = await sb.from('pv3_stores').select('target_id').eq('keyword', kw).not('target_id', 'is', null).limit(50);
-    const m = await v3ImagesFor(kw, (st ?? []).map(x => x.target_id!)); const first = [...m.values()][0];
-    if (!first) return { ok: false, msg: `'${kw}' 제안서 v3 이미지가 아직 없습니다 (제안서 v3 화면에서 만들기 → 수거 → 렌더)` };
+    let m = await v3ImagesFor(kw, (st ?? []).map(x => x.target_id!)); let first = [...m.values()][0];
+    if (!first) {   // 없으면 자동 준비 (메일 대상 상위 3곳으로)
+      const { days } = await settings(); const { data: cand } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days });
+      const picks = ((cand ?? []) as Candidate[]).filter(c => c.email).slice(0, 3);
+      const pr = await autoPrepareV3(kw, me, picks.map(c => ({ target_id: c.id, store: c.store_name, rank: c.rank_now, reviews: c.review_cnt, link: c.store_url })));
+      if (pr.ready) { const { data: st2 } = await sb.from('pv3_stores').select('target_id').eq('keyword', kw).not('target_id', 'is', null).limit(50); m = await v3ImagesFor(kw, (st2 ?? []).map(x => x.target_id!)); first = [...m.values()][0]; }
+      if (!first) return { ok: false, msg: pr.msg + ' · 준비되면 다시 「테스트 1건 발송」' };
+    }
     v.제안서링크 = ''; html = v3Html(fillVars(i.body, v), first.urls, v.수신거부링크);
   }
   const subject = `[테스트] ` + fillVars(i.subject, v).slice(0, 190), body = fillVars(i.body, v);

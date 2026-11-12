@@ -143,3 +143,21 @@ export async function queueRender(kind: 'keyword' | 'store', ref: string) {
   const { data } = await db.from('pv3_render_jobs').insert({ kind, ref }).select('id').single(); return data?.id;
 }
 export { nounEnd };
+
+/** 발송 쪽에서 호출: 키워드·업체 v3 데이터가 없으면 자동으로 계산 + 워커 요청 + (글 있으면) 렌더 큐. 반환 = 지금 보낼 수 있는지 */
+export async function autoPrepareV3(kw: string, me: { id: string; name: string }, picks: { target_id: number; store: string; rank: number | null; reviews: number | null; link?: string }[]): Promise<{ ready: boolean; msg: string }> {
+  const ek = await ensureKeyword(kw, me); if (!ek.ok || !ek.k) return { ready: false, msg: ek.msg };
+  const k = ek.k; const db = sb();
+  const { data: nsc } = await db.from('nsc_searches').select('data').eq('keyword', kw).maybeSingle(); const prods: any[] = (nsc?.data as any)?.products ?? [];
+  const targets = picks.map(c => { const p = c.rank ? prods.find(x => Number(x.rank) === c.rank) : null; return { target_id: c.target_id, store: c.store || '귀사', rank: c.rank, reviews: c.reviews ?? (p ? Number(p.reviewCount) : null), price: p ? Number(p.lowPrice) || null : null, link: c.link }; });
+  const es = targets.length ? await ensureStores(kw, k, targets, me) : { msg: '', queued: 0, ids: [] as number[] };
+  const sample = targets.length ? computeStore(k, targets[0]) : computeStore(k, { store: '귀사', rank: null, reviews: null, price: null });
+  await requestKwAi(kw, k, sample, me, ek.fresh);
+  await ingestAi();
+  const { data: kr } = await db.from('pv3_keywords').select('ai_status,images').eq('keyword', kw).maybeSingle();
+  if (kr && ['done', 'fallback'].includes(kr.ai_status) && (kr.images ?? []).length < 4) await queueRender('keyword', kw);
+  const { data: ss } = await db.from('pv3_stores').select('id,images').eq('keyword', kw).not('ai', 'is', null).in('id', es.ids ?? []);
+  for (const s of ss ?? []) if ((s.images ?? []).length < 4) await queueRender('store', String(s.id));
+  const ready = !!kr && (kr.images ?? []).length >= 4 && (ss ?? []).some(s => (s.images ?? []).length >= 4);
+  return { ready, msg: ready ? '준비됨' : `'${kw}' 제안서 v3 준비 중 — 워커 글·이미지 생성 요청함 (보통 5~10분, 워커 PC 켜져 있어야 함)` };
+}

@@ -44,8 +44,16 @@ export async function POST(req: Request) {
     if (!kw) { log('모든 키워드 완료'); await sb.from('mail_campaigns').update({ status: 'done', progress: prog }).eq('id', c.id); return J({ ok: true, idle: true, reason: '캠페인 완료', wait: 300 }); }
     const n = Math.min(c.per_kw || 30, remain);
     const r = await autoPrepareCore(me, { keyword: kw, n, subject: c.subject, body: c.body, owner: c.owner_name, phone: c.phone, offer: (c.offer ?? { basic: '', rec: '' }) as any, accountId: c.account_id, campaignId: c.id, v3: !!c.use_v3 });
+    if (!r.ok && c.use_v3 && /준비 중/.test(r.msg)) {   // v3 준비 중 → 이 키워드는 뒤로 미루고 다음 키워드. 전부 준비 중이면 5분 쉼
+      const rest = kws.filter(x => x !== kw && !prog.done.includes(x)); const pending = (prog as any).pending ?? [];
+      if (!pending.includes(kw)) pending.push(kw); (prog as any).pending = pending; log(`'${kw}' v3 준비 중 — 뒤로`);
+      await sb.from('mail_campaigns').update({ keywords: [...prog.done, ...rest, kw], progress: prog }).eq('id', c.id);
+      if (!rest.length || pending.length >= rest.length + 1) return J({ ok: true, idle: true, reason: 'v3 글·이미지 준비 중 (워커)', wait: 300 });
+      kws.splice(kws.indexOf(kw), 1); kws.push(kw); continue;
+    }
     prog.done.push(kw);
     if (!r.ok || !r.job) { log(`'${kw}' 건너뜀 — ${r.msg}`); if (/상한/.test(r.msg)) { await sb.from('mail_campaigns').update({ progress: prog }).eq('id', c.id); return J({ ok: true, idle: true, reason: r.msg, wait: 1800 }); } continue; }
+    (prog as any).pending = ((prog as any).pending ?? []).filter((x: string) => x !== kw);
     prog.sent += r.job.items.length; log(`'${kw}' ${r.job.items.length}건 → SNS_Manager`);
     await sb.from('mail_campaigns').update({ progress: prog }).eq('id', c.id);
     return J({ ok: true, job: r.job, keyword: kw, campaign_id: c.id });

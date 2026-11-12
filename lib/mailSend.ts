@@ -5,6 +5,7 @@ import { decrypt } from '@/lib/crypto/secret';
 import { fillVars } from '@/lib/mail';
 import { search } from '@/lib/nsc';
 import { buildDoc, BRAND, type Doc } from '@/lib/proposalDoc';
+import { autoPrepareV3 } from '@/lib/pv3Tasks';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
 export type Candidate = { id: number; store_name: string; store_url: string; email: string; phone: string; rank_now: number | null; review_cnt: number | null; optout: boolean; replied: boolean; ours: string | null; interest: string | null; recent_by: string | null; recent_at: string | null };
@@ -65,9 +66,16 @@ export async function prepareCore(me: { id: string; name: string }, i: { keyword
     if (c.recent_by) { skipped.push(`${c.store_name}: ${c.recent_by} ${days}일 내 발송`); continue; }
     picks.push(c);
   }
-  const v3map = i.v3 ? await v3ImagesFor(kw, picks.map(c => c.id)) : null;
-  if (v3map) { for (let x = picks.length - 1; x >= 0; x--) if (!v3map.has(picks[x].id)) { skipped.push(`${picks[x].store_name}: 제안서 v3 이미지 없음`); picks.splice(x, 1); } }
-  if (!picks.length) return { ok: false, msg: i.v3 ? '제안서 v3 이미지가 준비된 대상이 없습니다 (제안서 v3 화면에서 키워드 만들기 → 수거 → 렌더)' : '보낼 수 있는 대상이 없습니다', skipped };
+  let v3map = i.v3 ? await v3ImagesFor(kw, picks.map(c => c.id)) : null; let v3msg = '';
+  if (v3map) {
+    const missing = picks.filter(c => !v3map!.has(c.id));
+    if (missing.length) {   // 없으면 자동으로 계산·워커 요청·렌더 큐 → 이번엔 준비된 업체만, 나머진 다음에
+      const pr = await autoPrepareV3(kw, me, missing.map(c => ({ target_id: c.id, store: c.store_name, rank: c.rank_now, reviews: c.review_cnt, link: c.store_url })));
+      if (pr.ready) v3map = await v3ImagesFor(kw, picks.map(c => c.id)); v3msg = pr.msg;
+    }
+    for (let x = picks.length - 1; x >= 0; x--) if (!v3map!.has(picks[x].id)) { skipped.push(`${picks[x].store_name}: 제안서 v3 준비 중`); picks.splice(x, 1); }
+  }
+  if (!picks.length) return { ok: false, msg: i.v3 ? (v3msg || '제안서 v3 준비 중') : '보낼 수 있는 대상이 없습니다', skipped };
   if (picks.length > remain) { skipped.push(`일 상한 초과 ${picks.length - remain}곳 제외`); picks.length = remain; }
   // 미리본 제안서 그대로 링크 1개 (수신자 구분은 ?m=큐번호)
   const code = randomBytes(6).toString('base64url').slice(0, 8);

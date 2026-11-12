@@ -139,7 +139,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       const left = cap - sent; if (left <= 0) { alog(`이번 실행 한도 ${cap}건 도달 — 종료`); break; }
       const n = Math.min(perKw, left); alog(`'${k}' 대상 ${n}건 준비…`);
       const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3 });
-      if (!p.ok || !p.job) { alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) break; markDone(k); continue; }
+      if (!p.ok || !p.job) { alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) break; if (!/준비 중/.test(p.msg)) markDone(k); continue; }   // v3 준비 중인 키워드는 다음 실행 때 다시
       try {
         const res = await agentPost('/mail/wh-send', p.job, 15_000);
         if (!res?.ok) { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 거부: ' + (res?.error || '')); alog(`'${k}' SNS_Manager 거부 — ${res?.error || ''}`); break; }
