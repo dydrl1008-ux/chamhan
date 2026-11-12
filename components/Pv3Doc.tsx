@@ -364,7 +364,6 @@ export default function Pv3Doc(p: Pv3Props) {
         <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>{[
           ['효과는 언제부터 보이나요?', '쇼핑 상위노출은 시작한 다음 날부터 순위가 움직이기 시작하고, 보통 3~7일 안에 1페이지 진입 여부를 확인할 수 있습니다. 키워드 경쟁도에 따라 차이가 있습니다.'],
           ['중간에 그만둘 수 있나요?', '네, 10일 단위로 진행하기 때문에 결과를 보시고 계속할지 정하시면 됩니다. 다만 유입이 멈추면 순위는 서서히 내려갈 수 있습니다.'],
-          ['상품이나 스토어에 문제가 생기지는 않나요?', '실제 사용자의 검색 유입으로 진행합니다. 가격비교에 묶인 상품처럼 진행이 어려운 조건은 접수할 때 먼저 확인해서 알려 드립니다.'],
           ['무엇을 준비하면 되나요?', '상품 URL만 있으면 됩니다. 키워드는 검색량과 경쟁도를 확인한 뒤 함께 정합니다.'],
           ['비용은 어떻게 되나요?', '키워드 경쟁도와 진행할 채널에 따라 달라지기 때문에, 상품을 확인한 뒤 안내드립니다. 1단계만 먼저 진행하셔도 됩니다.'],
         ].map(([q, a]) => <div key={q} className="card" style={{ padding: '18px 20px' }}><div style={{ fontSize: 19, fontWeight: 800, color: C.ink, lineHeight: 1.45, display: 'flex', gap: 9 }}><span style={{ color: C.blue }}>Q</span><span>{q}</span></div><div style={{ fontSize: 17, color: C.sub, marginTop: 6, lineHeight: 1.7 }}>{a}</div></div>)}</div></div>
