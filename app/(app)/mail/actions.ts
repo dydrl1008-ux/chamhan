@@ -9,7 +9,8 @@ import { buildDoc, BRAND, type Doc } from '@/lib/proposalDoc';
 import { fillVars } from '@/lib/mail';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
-import { autoPrepareV3, v3Status } from '@/lib/pv3Tasks';
+import { autoPrepareV3, v3Status, ensureKeyword } from '@/lib/pv3Tasks';
+import { fallbackKwAi, type KwData, type KwAi } from '@/lib/proposalV3';
 import { settings, kstDayStart, siteBase, linkBase, prepareCore, autoPrepareCore, eligible, v3ImagesFor, v3Html, type Candidate, type AgentItem, type AgentJob } from '@/lib/mailSend';
 export type { Candidate, AgentItem, AgentJob };
 
@@ -258,4 +259,14 @@ export async function agentKey(regen = false): Promise<R<{ key: string; base: st
 export async function v3StatusOf(keyword: string) {
   const me = await getProfile(); if (!me) return null;
   return v3Status(keyword.trim());
+}
+
+/** 수동 발송(엑셀)용: 키워드 공용판 제안서 데이터 — 화면에서 9장을 그려 이미지로 저장한다. 워커 글이 있으면 그 글, 없으면 기본 문장 */
+export async function manualCommonV3(keyword: string): Promise<R<{ k: KwData; ka: KwAi; worker: boolean }>> {
+  const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
+  const kw = keyword.trim().replace(/\s+/g, ' '); if (!kw) return { ok: false, msg: '키워드 없음' };
+  const ek = await ensureKeyword(kw, me); if (!ek.ok || !ek.k) return { ok: false, msg: `${kw}: ${ek.msg}` };
+  const { data: kd } = await supabaseAdmin().from('pv3_keywords').select('ai,ai_status').eq('keyword', kw).maybeSingle();
+  const worker = kd?.ai_status === 'done' && !!kd.ai;
+  return { ok: true, msg: '', k: ek.k, ka: (worker ? kd!.ai : fallbackKwAi(ek.k)) as KwAi, worker };
 }
