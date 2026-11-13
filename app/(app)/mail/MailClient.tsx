@@ -156,7 +156,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
         if (!p.ok || !p.job) {
           if (/준비 중/.test(p.msg)) { pend.push(k); if (round === 0) alog(`'${k}' 준비 중 — 준비되면 자동으로 발송`); continue; }
           if (sentBy.has(k) && /대상/.test(p.msg)) { alog(`'${k}' 완료 — 남은 대상 없음`); markDone(k); continue; }
-          alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) { halt = true; break; } markDone(k); continue;
+          alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) { halt = true; break; } if (/대상/.test(p.msg)) markDone(k); continue;   // 보낼 대상이 없을 때만 '오늘 끝'. 오류(로그인 풀림·조회 한도 등)로 건너뛴 키워드는 다음 실행 때 다시
         }
         try {
           const res = await agentPost('/mail/wh-send', p.job, 15_000);
