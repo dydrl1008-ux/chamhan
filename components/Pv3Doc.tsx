@@ -1,7 +1,7 @@
 // 제안서 v3 (디자인 4) — 10장 · 가로 720 · 세로 가변. 워커 PC가 장별로 캡처해 메일 본문에 이어 붙임. 서버·클라이언트 공용, 외부 의존 없음 (폰트는 view 페이지 <link>)
 // 메일은 폰에서 절반 크기로 보이므로 글씨를 크게 잡는다 (본문 19px · 가장 작은 글씨 13px).
 // 문체: 제목·한 줄 = 명사 맺음 / 설명·안내 = 존댓말. 매체명·작업 수량·방식 세부 없음.
-import { FUNNEL, LEAK_LABEL, AXIS_LABEL, josa, AXIS_DESC, PV3_PAGES, PV3_TITLES, TOP10_SHARE, PAGE1_SHARE, ctr, man, eok, fallbackStages, nowLine, clickGap, type KwData, type StoreData, type KwAi, type StoreAi, type Axes, type Leak } from '@/lib/proposalV3';
+import { computeStore, fallbackStoreAi, FUNNEL, LEAK_LABEL, AXIS_LABEL, josa, AXIS_DESC, PV3_PAGES, PV3_TITLES, TOP10_SHARE, PAGE1_SHARE, ctr, man, eok, fallbackStages, nowLine, clickGap, type KwData, type StoreData, type KwAi, type StoreAi, type Axes, type Leak } from '@/lib/proposalV3';
 import { weaponInfo, TRACK_LABEL, TIMELINE, type MockKind, type Track } from '@/lib/pv3Weapons';
 export { PV3_PAGES, PV3_STORE_PAGES, PV3_COMMON_PAGES } from '@/lib/proposalV3';
 
@@ -58,7 +58,7 @@ export const PV3_CSS = `
 .pv3 .num{width:44px;height:44px;border-radius:14px;font-weight:800;font-size:20px;display:flex;align-items:center;justify-content:center;flex:none}
 `;
 
-export type Pv3Props = { k: KwData; ka: KwAi; s: StoreData; sa: StoreAi; brand: { name: string; email: string; kakao: string; owner?: string; phone?: string }; page: number };   // 담당자 이름·연락처는 메일 본문 서명에 (공통 장은 키워드당 1번만 렌더되므로 이미지엔 회사 정보만)
+export type Pv3Props = { k: KwData; ka: KwAi; s: StoreData; sa: StoreAi; brand: { name: string; email: string; kakao: string; owner?: string; phone?: string }; page: number; no?: { n: number; total: number; title: string } };   // 담당자 이름·연락처는 메일 본문 서명에 (공통 장은 키워드당 1번만 렌더되므로 이미지엔 회사 정보만)
 const won = (n: number) => Math.round(n).toLocaleString('ko-KR');
 const ICON: Record<string, string> = {
   trend: 'M4 16l5-5 3 3 7-8M14 6h5v5', search: 'M10.5 17a6.5 6.5 0 110-13 6.5 6.5 0 010 13zM20 20l-4.6-4.6', ad: 'M4 9v6h3l6 4V5L7 9H4zM17 9a4 4 0 010 6', cart: 'M4 5h2l2.2 10h9.3L20 8H7.5M9.5 19.5a1 1 0 100-2 1 1 0 000 2zM17 19.5a1 1 0 100-2 1 1 0 000 2z',
@@ -70,8 +70,8 @@ const ICON: Record<string, string> = {
 };
 const Svg = ({ n, c, s = 24, w = 1.9 }: { n: string; c: string; s?: number; w?: number }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none' }}><path d={ICON[n] ?? ICON.trend} /></svg>;
 const Ico = ({ n, c, bg, size = 48 }: { n: string; c: string; bg: string; size?: number }) => <div className="ic" style={{ background: bg, width: size, height: size }}><Svg n={n} c={c} s={Math.round(size * .54)} /></div>;
-const Bar = ({ n, brand }: { n: number; brand: string }) => <div className="bar"><span className="brand">{brand}</span><span className="no"><b>{String(n).padStart(2, '0')}</b>{PV3_TITLES[n - 1]}</span></div>;
-const Foot = ({ k, n }: { k: KwData; n: number }) => <div className="foot"><span>「{k.keyword}」 광고 설계 제안 · {k.date} 데이터 기준 · 금액은 추정치</span><span>{n} / {PV3_PAGES}</span></div>;
+const Bar = ({ n, brand, title }: { n: number; brand: string; title?: string }) => <div className="bar"><span className="brand">{brand}</span><span className="no"><b>{String(n).padStart(2, '0')}</b>{title ?? PV3_TITLES[n - 1]}</span></div>;
+const Foot = ({ k, n, total }: { k: KwData; n: number; total?: number }) => <div className="foot"><span>「{k.keyword}」 광고 설계 제안 · {k.date} 데이터 기준 · 금액은 추정치</span><span>{n} / {total ?? PV3_PAGES}</span></div>;
 const Tag = ({ t }: { t: Track }) => <span className="tag" style={{ color: TC[t][0], background: TC[t][1] }}>{TRACK_LABEL[t]}</span>;
 const SHOW_AXES: (keyof Axes)[] = ['hit', 'sale', 'quality', 'review'];
 const STAGE_DESC = ['처음 알게 됨', '검색해서 찾음', '후기·가격 비교', '상세 보고 결제', '다시 찾고 다시 삼'];
@@ -82,7 +82,7 @@ function topWords(k: KwData): [string, number][] {
   k.top10.forEach(t => { const seen = new Set<string>(); t.title.replace(/[\[\]()\/,+·]/g, ' ').split(/\s+/).map(w => w.trim()).filter(w => w.length >= 2 && w.length <= 8 && !/^\d|^[a-z0-9]+$/i.test(w) && !kw.includes(w.toLowerCase()) && !w.toLowerCase().includes(kw)).forEach(w => { if (seen.has(w)) return; seen.add(w); cnt.set(w, (cnt.get(w) ?? 0) + 1); }); });
   return [...cnt.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 12);
 }
-const rankText = (k: KwData, s: StoreData) => s.rank ? `${s.rank}위` : `${k.n}위 밖`;
+const rankText = (k: KwData, s: StoreData) => s.store === '대표님 스토어' ? '순위' : s.rank ? `${s.rank}위` : `${k.n}위 밖`;   // 공용판은 특정 순위를 적지 않는다
 
 // ── 화면 예시(목업) — "이렇게 보입니다" ──
 const Line = ({ w = '100%' }: { w?: string }) => <div style={{ height: 10, borderRadius: 5, background: '#E7EBF3', width: w, flex: w === '100%' ? 1 : undefined }} />;
@@ -98,7 +98,7 @@ function Mock({ kind, k, s }: { kind: MockKind; k: KwData; s: StoreData }) {
         {([['search', `「${kw}」 검색`, '실제 사용자가 검색'], ['tap', '상품 클릭', `${s.store} 상품을 찾아 들어옴`], ['trend', '순위 반영', '찾는 사람이 많은 상품으로']] as [string, string, string][]).flatMap(([ic, t, d], i) => [
           <div key={t} style={{ background: '#fff', borderRadius: 14, padding: '14px 8px 12px', textAlign: 'center', border: `1.5px solid ${C.line}` }}><div style={{ display: 'flex', justifyContent: 'center' }}><Ico n={ic} c={C.blue} bg={C.blueSoft} size={42} /></div><div style={{ fontSize: 16.5, fontWeight: 800, color: C.ink, marginTop: 8, lineHeight: 1.35 }}>{t}</div><div style={{ fontSize: 13.5, color: C.mute, marginTop: 3, lineHeight: 1.4 }}>{d}</div></div>,
           ...(i < 2 ? [<div key={t + '>'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Svg n="arrow" c={C.blue} s={18} w={2.4} /></div>] : [])])}</div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, background: '#fff', border: `1.5px solid ${C.line}`, borderRadius: 14, padding: '12px 16px' }}><span style={{ color: s.leak === 'defend' ? C.blue : C.red, fontWeight: 800, fontSize: 16.5, whiteSpace: 'nowrap' }}>지금 {rankText(k, s)}</span><div style={{ flex: 1, height: 7, borderRadius: 4, background: `linear-gradient(90deg,${s.leak === 'defend' ? C.blueLine : C.redLine},${C.green})` }} /><span style={{ color: C.green, fontWeight: 800, fontSize: 16.5, whiteSpace: 'nowrap' }}>목표 {s.target}위권</span></div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, background: '#fff', border: `1.5px solid ${C.line}`, borderRadius: 14, padding: '12px 16px' }}><span style={{ color: s.leak === 'defend' ? C.blue : C.red, fontWeight: 800, fontSize: 16.5, whiteSpace: 'nowrap' }}>지금 {rankText(k, s)}</span><div style={{ flex: 1, height: 7, borderRadius: 4, background: `linear-gradient(90deg,${s.leak === 'defend' ? C.blueLine : C.redLine},${C.green})` }} /><span style={{ color: C.green, fontWeight: 800, fontSize: 16.5, whiteSpace: 'nowrap' }}>목표 {s.store === '대표님 스토어' ? '1페이지 상단' : `${s.target}위권`}</span></div>
       {cap('매일 일정하게 쌓이는 유입이 순위에 반영되는 흐름')}</div>;
     case 'rank': return <div className="mock">{q}
       {[1, 2, 3].map(i => i === 2 ? <div key={i} style={hi}><span>{Math.min(s.target, 9)}</span><span style={{ flex: 1 }}>{s.store}</span><span style={{ fontSize: 13.5 }}>목표 자리</span></div> : <div key={i} style={lo}><span>{i === 1 ? Math.max(1, Math.min(s.target, 9) - 1) : Math.min(s.target, 9) + 1}</span><Line /></div>)}{cap(`「${kw}」 검색 결과에서의 자리`)}</div>;
@@ -178,7 +178,7 @@ export default function Pv3Doc(p: Pv3Props) {
   const kakao = brand.kakao.replace(/^https?:\/\//, '');
   const have = (sa.have?.length ? sa.have : s.good ?? []).slice(0, 3); const lack = (sa.leak?.length ? sa.leak : s.bad ?? s.why ?? []).slice(0, 3);
   const ratio = (x: number) => Math.max(10, Math.min(100, Math.round(100 * x)));
-  const B = (n: number) => <Bar n={n} brand={brand.name} />; const F = (n: number) => <Foot k={k} n={n} />;
+  const B = (n: number) => <Bar n={p.no?.n ?? n} title={p.no?.title} brand={brand.name} />; const F = (n: number) => <Foot k={k} n={p.no?.n ?? n} total={p.no?.total} />;
   const aw = s.leak === 'awareness'; const hasRev = s.revenue.gain >= 10000; const relN = k.volume.related.length;
   const gainCap = defend ? '연관 키워드로 넓히면' : aw ? '검색 밖 광고로 만드는' : `${s.target}위권 진입 시`;
   const first = sa.first || `카카오톡으로 상품 URL 하나만 보내 주시면 됩니다. 「${kw}」${josa(kw, '과/와')} 연관 키워드의 현재 순위부터 확인해서 답장드리겠습니다.`;
@@ -374,5 +374,106 @@ export default function Pv3Doc(p: Pv3Props) {
       <div className="card sec" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}><div><div style={{ fontSize: 21, fontWeight: 800, color: C.ink }}>{brand.name}</div><div style={{ fontSize: 14.5, color: C.mute }}>네이버쇼핑 상위노출 · 카페 · 인플루언서 · 쿠팡</div></div><div style={{ textAlign: 'right', fontSize: 15, color: C.sub, lineHeight: 1.6 }}>{brand.email}</div></div>
       <p className="cap">※ 매출과 시장 규모는 검색량·클릭 비율·구매 전환율을 가정해 계산한 추정치이며, 구매자에 대한 설명은 데이터에서 추론한 내용입니다. 특정 순위나 매출을 보장하지 않습니다.</p>
       {F(10)}</div></div>;
+  }
+}
+
+
+// ══════════════ 공용판 (키워드 한 통을 여러 업체에 보낼 때) ══════════════
+// 업체 이름·순위 없이 9장. 받는 사람은 항상 "대표님 / 대표님 스토어" 한 사람으로 부른다 (복수 표현 금지).
+// 3·4·7·8·9장은 맞춤판의 장을 그대로 쓰고(번호만 바꿈), 1·2·5·6장만 공용판 전용.
+export const PV3G_PAGES = 9;
+export const PV3G_TITLES = ['표지', '내 순위 찾기', '시장', '사는 사람', '1~10위라면', '11위 밖이라면', '그 다음 단계', '일정·역할', '콘텐츠·FAQ·문의'];
+const G_STORE = '대표님 스토어';
+export function Pv3CommonDoc({ k, ka, brand, page }: { k: KwData; ka: KwAi; brand: Pv3Props['brand']; page: number }) {
+  const kw = k.keyword; const g = k.volume.group; const T = PV3G_PAGES;
+  const sA = computeStore(k, { store: G_STORE, rank: 5, reviews: null, price: null });      // 1~10위 구간 대표
+  const sB = computeStore(k, { store: G_STORE, rank: 25, reviews: null, price: null });     // 11~40위 구간 대표
+  const sC = computeStore(k, { store: G_STORE, rank: null, reviews: null, price: null });   // 41위 밖 구간 대표
+  const no = (n: number) => ({ n, total: T, title: PV3G_TITLES[n - 1] });
+  const B = (n: number) => <Bar n={n} title={PV3G_TITLES[n - 1]} brand={brand.name} />; const F = (n: number) => <Foot k={k} n={n} total={T} />;
+  const sub = (n: number, from: number, s: StoreData) => <Pv3Doc k={k} ka={ka} s={s} sa={fallbackStoreAi(k, s)} brand={brand} page={from} no={no(n)} />;
+  const aw = sB.leak === 'awareness'; const share = Math.round(100 * TOP10_SHARE / PAGE1_SHARE);
+  const firstB = aw ? '검색 밖에서 수요를 만드는 일' : sB.leak === 'exposure' ? '1페이지 상단에 보이는 일' : `「${sB.plan[0].title}」 단계`;
+  const bands: [string, string, string, string, string, number][] = [
+    ['1~10위', C.blue, C.blueSoft, C.blueLine, '지금 자리를 지키면서, 연관 키워드로 넓히는 일이 먼저입니다.', 5],
+    ['11~40위', C.green, C.greenSoft, C.greenLine, aw ? `${firstB}이 먼저입니다.` : `1페이지 상단(${sB.target}위권)으로 올라가는 일이 먼저입니다.`, 6],
+    ['41위 밖', C.red, C.redSoft, C.redLine, aw ? `${firstB}이 먼저입니다.` : `1페이지 안(${sC.target}위권)으로 들어오는 일이 먼저입니다.`, 6]];
+  const cards = (s: StoreData) => { const ws = s.plan[0].weapons; return [...ws.filter(w => w === s.lead), ...ws.filter(w => w !== s.lead)].map(w => <WeaponCard key={w} name={w} k={k} s={s} full={w === s.lead} lead={w === s.lead} />); };
+  switch (page) {
+    // ───────── 1. 표지 ─────────
+    case 1: return <div className="pv3">
+      <div className="hero">
+        <div className="hb"><span className="brand">{brand.name}</span><span>광고 설계 제안서 · {k.date}</span></div>
+        <span className="pill">「{kw}」 검색 결과 확인 후 드리는 제안</span>
+        <h1 style={{ fontSize: 44 }}><span style={{ display: 'block' }}>「{kw}」 검색에서,</span><span style={{ display: 'block' }}>지금 순위보다 한 단계 위로</span></h1>
+        <p className="hlead">「{kw}」 상위 {k.n}개 상품의 실제 데이터{g ? <>와 월 검색량 <b>{won(g)}회</b>{k.volume.related.length ? '(연관 키워드 포함)' : ''}</> : null}를 기준으로, <b>대표님 스토어가 지금 순위에서 무엇부터 하면 되는지</b> 정리했습니다.</p>
+      </div>
+      <div className="body" style={{ paddingTop: 26 }}>
+        <div className="g3">
+          <div className="stat"><b>{g ? won(g) : '—'}</b><span>월 검색수<br />{k.volume.related.length ? `연관 ${k.volume.related.length}개 포함` : `「${kw}」`}</span></div>
+          <div className="stat"><b>{won(k.stats.medianReview10)}개</b><span>상위 10개<br />리뷰 중간값</span></div>
+          <div className="stat"><b>{won(k.stats.avgPrice10)}원</b><span>상위 10개<br />평균 가격</span></div></div>
+        <div style={{ marginTop: 14, borderRadius: 20, padding: '24px 26px', background: `linear-gradient(135deg,${C.blueSoft},${C.violetSoft})`, border: `1.5px solid ${C.blueLine}` }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: C.blue, letterSpacing: '.06em' }}>이 제안의 한 줄</div>
+          <div className="bal" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.42, marginTop: 6, letterSpacing: '-.03em', color: C.ink }}>순위 구간마다 먼저 할 일이 다릅니다. 지금 자리에 맞는 한 가지부터 시작합니다.</div></div>
+        <div className="sec"><div className="eyebrow">먼저 이 세 가지만 보셔도 됩니다</div>
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {([['지금 시장', C.sub, C.bg, C.line, ka.marketRead || `「${kw}」${josa(kw, '은/는')} 1페이지 클릭의 약 ${share}%가 상위 10개에 몰리는 키워드입니다(추정).`],
+              ['대표님 스토어는', C.blue, C.blueSoft, C.blueLine, <>다음 장에서 <b style={{ color: C.ink }}>지금 순위 구간</b>을 찾으시면, 그 구간에서 먼저 할 일이 바로 이어집니다.</>],
+              ['대표님이 하실 일', C.green, C.greenSoft, C.greenLine, `카카오톡으로 상품 URL 하나만 보내 주시면 됩니다. 「${kw}」${josa(kw, '과/와')} 연관 키워드의 현재 순위부터 확인해서 답장드리겠습니다.`]] as [string, string, string, string, React.ReactNode][]).map(([t, c, bg, ln, d]) => <div key={t} className="row" style={{ gridTemplateColumns: '1fr', gap: 4, background: bg, border: `1.5px solid ${ln}` }}><b style={{ color: c, fontSize: 15 }}>{t}</b><span style={{ fontSize: 18, lineHeight: 1.62 }}>{d}</span></div>)}</div></div>
+        <div className="sec"><div className="eyebrow">이 제안서에 담긴 내용</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 22px', marginTop: 8 }}>
+            {[['02', '내 순위 찾기', '구간별로 먼저 할 일'], ['03', '시장', `「${kw}」의 수요와 돈`], ['04', '사는 사람', '무엇을 보고 사는지'], ['05', '1~10위라면', '지키면서 넓히는 방법'], ['06', '11위 밖이라면', '위로 올라가는 방법'], ['07', '그 다음 단계', '이어서 더하는 것'], ['08', '일정·역할', '언제 무엇이 진행되는지'], ['09', '문의', '카카오톡으로 시작하는 방법']].map(([n, t, d]) => <div key={n} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: `1px solid ${C.line}`, alignItems: 'baseline' }}><b style={{ color: C.blue, fontSize: 14, width: 22, flex: 'none' }}>{n}</b><b style={{ fontSize: 16.5, color: C.ink, whiteSpace: 'nowrap' }}>{t}</b><span style={{ fontSize: 14, color: C.mute, lineHeight: 1.4 }}>{d}</span></div>)}</div></div>
+        {F(1)}</div></div>;
+
+    // ───────── 2. 내 순위 찾기 ─────────
+    case 2: return <div className="pv3">{B(2)}<div className="body">
+      <div className="eyebrow">WHERE · 내 순위 찾기</div>
+      <h2>대표님 스토어는<br />지금 <em>어느 구간</em>에 계신가요</h2>
+      <p className="lead">같은 「{kw}」 검색이라도 <b>지금 순위에 따라 먼저 할 일이 다릅니다.</b> 아래에서 해당하는 구간을 찾으시고, 안내된 장을 먼저 보시면 됩니다.</p>
+      <div className="card sec" style={{ padding: '20px 20px 18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}><b style={{ fontSize: 18, color: C.ink }}>「{kw}」 검색 1페이지 · 40개 자리</b><span style={{ fontSize: 13.5, color: C.mute }}>{k.date} 기준</span></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10,1fr)', gap: 5 }}>{Array.from({ length: 40 }, (_, i) => i + 1).map(r => <div key={r} style={{ height: 42, borderRadius: 10, border: '1.5px solid', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, fontVariantNumeric: 'tabular-nums', ...(r <= 10 ? { background: C.blueSoft, color: C.blue, borderColor: C.blueLine } : { background: C.greenSoft, color: C.green, borderColor: C.greenLine }) }}>{r}</div>)}</div>
+        <div style={{ marginTop: 8, border: `2px dashed ${C.redLine}`, background: C.redSoft, borderRadius: 12, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}><b className="red" style={{ fontSize: 17.5, whiteSpace: 'nowrap' }}>41위 밖</b><span style={{ color: C.sub, fontSize: 15, textAlign: 'right', lineHeight: 1.45 }}>2페이지 이후 — 검색한 사람이 잘 넘겨 보지 않는 자리</span></div>
+        <p className="cap">상위 10개 자리에 1페이지 클릭의 약 {share}%가 몰립니다(추정). 순위를 모르셔도 괜찮습니다. 상품 URL을 보내 주시면 확인해 드립니다.</p></div>
+      <div className="sec" style={{ display: 'grid', gap: 12 }}>{bands.map(([t, c, bg, ln, d, pg]) => <div key={t} style={{ background: bg, border: `1.5px solid ${ln}`, borderRadius: 18, padding: '18px 20px', display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, alignItems: 'center' }}>
+        <div><div style={{ fontSize: 23, fontWeight: 800, color: c, letterSpacing: '-.02em' }}>{t}</div><div style={{ fontSize: 17.5, color: C.text, lineHeight: 1.6, marginTop: 4 }}>{d}</div></div>
+        <div style={{ textAlign: 'center', background: '#fff', border: `1.5px solid ${ln}`, borderRadius: 14, padding: '10px 14px', minWidth: 78 }}><div style={{ fontSize: 13, color: C.mute, fontWeight: 700 }}>먼저 볼 장</div><div style={{ fontSize: 24, fontWeight: 800, color: c }}>{String(pg).padStart(2, '0')}</div></div></div>)}</div>
+      <div className="soft sec"><div className="lbl" style={{ marginBottom: 4 }}>어느 구간이든 순서는 같습니다</div>
+        {['지금 구간에서 먼저 할 한 가지부터 시작합니다', '10일 단위로 결과를 보고, 계속할지 정하시면 됩니다', '자리가 잡히면 그 다음 단계(07장)를 더합니다'].map(t => <div key={t} className="li w">{t}</div>)}</div>
+      {F(2)}</div></div>;
+
+    case 3: return sub(3, 3, sB);
+    case 4: return sub(4, 4, sB);
+
+    // ───────── 5. 1~10위라면 ─────────
+    case 5: return <div className="pv3">{B(5)}<div className="body">
+      <div className="eyebrow">TOP 10 · 1~10위라면</div>
+      <h2>상단 자리는 확보한 상태,<br />남은 건 <em>지키면서 넓히는 일</em></h2>
+      <p className="lead">이미 1페이지 상단에 계시다면 새로 올리는 것보다 <b>지금 자리를 지키고, 연관 키워드로 넓히는 일</b>이 먼저입니다. 가장 먼저 시작하는 것은 <b style={{ color: C.blue }}>{sA.lead}</b>입니다.</p>
+      <div className="sec" style={{ display: 'grid', gap: 10 }}>
+        {([['그대로 두면', C.red, C.redSoft, k.volume.related.length ? `연관 키워드 ${k.volume.related.length}개의 검색 수요는 계속 다른 상품 몫으로 남고, 상단 자리도 경쟁 상품에 밀릴 수 있습니다.` : '브랜드 이름으로 찾아오는 고객이 쌓이지 않아, 상단 자리가 흔들리면 매출도 함께 흔들릴 수 있습니다.'],
+          ['진행하면', C.green, C.greenSoft, '지금 자리를 지키면서, 연관 키워드와 브랜드 이름 검색으로 들어오는 고객을 함께 쌓는 것을 목표로 합니다.']] as [string, string, string, string][]).map(([t, c, bg, d]) => <div key={t} className="row" style={{ gridTemplateColumns: '104px 1fr', background: bg, borderLeft: `6px solid ${c}` }}><b style={{ color: c, fontSize: 16.5, lineHeight: 1.7 }}>{t}</b><span style={{ fontSize: 17.5, lineHeight: 1.62 }}>{d}</span></div>)}</div>
+      {cards(sA)}
+      {F(5)}</div></div>;
+
+    // ───────── 6. 11위 밖이라면 ─────────
+    case 6: return <div className="pv3">{B(6)}<div className="body">
+      <div className="eyebrow">OUTSIDE TOP 10 · 11위 밖이라면</div>
+      <h2>지금 필요한 건<br /><em>{firstB}</em></h2>
+      <p className="lead">{aw ? <>「{kw}」{josa(kw, '은/는')} 검색량이 크지 않은 키워드라, 순위만 올려서는 늘어나는 매출에 한계가 있습니다. <b>아직 검색하지 않는 사람에게 상품을 먼저 보여주는 것</b>부터 시작합니다.</> : <>검색한 사람의 클릭은 대부분 1페이지 상단에서 끝납니다. <b>상단에 보이는 자리</b>를 먼저 만들고, 그 다음에 후기와 콘텐츠를 더합니다.</>} 가장 먼저 시작하는 것은 <b style={{ color: C.blue }}>{sB.lead}</b>입니다.</p>
+      {!aw && <div className="g2 sec">
+        <div className="stat" style={{ background: C.greenSoft, borderColor: C.greenLine }}><b className="green">{sB.target}위권</b><span style={{ color: C.sub }}>11~40위에 계시다면<br />1차 목표</span></div>
+        <div className="stat" style={{ background: C.redSoft, borderColor: C.redLine }}><b className="red">{sC.target}위권</b><span style={{ color: C.sub }}>41위 밖에 계시다면<br />1차 목표</span></div></div>}
+      {!aw && <div className="soft sec"><div className="lbl" style={{ marginBottom: 4 }}>41위 밖이라면 함께 확인해 드리는 두 가지</div>
+        <div className="li w">상품명에 「{kw}」{josa(kw, '이/가')} 검색되는 형태로 들어가 있는지</div>
+        <div className="li w">리뷰 수가 상위 10개 중간값({won(k.stats.medianReview10)}개)과 얼마나 차이 나는지</div>
+        <p className="cap">둘 중 하나가 크게 비어 있으면 순위보다 그쪽을 먼저 권해 드립니다. 상품 URL을 보내 주시면 확인해서 알려 드립니다.</p></div>}
+      {cards(sB)}
+      {F(6)}</div></div>;
+
+    case 7: return sub(7, 7, sB);
+    case 8: return sub(8, 8, sB);
+    default: return sub(9, 10, sB);
   }
 }

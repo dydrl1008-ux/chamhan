@@ -57,6 +57,7 @@ export default function ProposalsClient({ initialKw, phone: phone0, owner: owner
         <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>권장 가격<input value={rec} onChange={e => setRec(e.target.value)} onBlur={() => pick(tgt)} placeholder="예: 30만원 / 10일" style={{ width: 130 }} /></label>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button type="button" className="btn" disabled={!!busy} onClick={toPdf}>{busy === 'pdf' ? '만드는 중…' : `PDF 저장 (${docPageCount(doc)}장)`}</button>
+          <a className="btn ghost" href={`/proposals/common?kw=${encodeURIComponent(doc.keyword)}`} target="_blank" rel="noreferrer" title="업체 이름 없이 키워드 한 통을 여러 업체에 보낼 때 쓰는 맞춤 제안서 9장 (이미지 저장)">맞춤 제안서 공용판 (9장)</a>
           <button type="button" className="btn ghost" disabled={!!busy} onClick={() => toPng1(0)}>표지 PNG</button>
           <button type="button" className="btn ghost" disabled={!!busy} onClick={mkLink}>{busy === 'link' ? '…' : '링크 만들기'}</button>
         </span>
