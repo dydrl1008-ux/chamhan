@@ -231,7 +231,7 @@ export function computeStore(k: KwData, t: { store: string; rank: number | null;
 export const PV3_PAGES = 10;
 export const PV3_STORE_PAGES = [1, 2, 5, 6, 7, 8, 9];   // 업체별: 표지·진단·광고 설계·1단계 상세·2·3단계·일정과 역할·시뮬레이션
 export const PV3_COMMON_PAGES = [3, 4, 10];              // 키워드 공통: 시장·사는 사람·콘텐츠/FAQ/문의
-export const PV3_DESIGN = 7;                             // 디자인 버전 — 올리면 예전 이미지는 '없음'으로 보고 다시 렌더
+export const PV3_DESIGN = 8;                             // 디자인 버전 — 올리면 예전 이미지는 '없음'으로 보고 다시 렌더
 export const PV3_DATA_VER = 4;                           // 계산 데이터 구조 버전 — 예전 구조(dv 없음)는 다시 계산해야 렌더
 export const PV3_AI_VER = 3;                             // 워커 글 구조 버전 — 올리면 다음 준비 때 다시 요청
 export type Pv3Img = { page: number; url: string; v?: number };
