@@ -33,11 +33,18 @@ export async function POST(req: Request) {
     const { error } = await sb.storage.from('pv3').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
     if (error) return J({ ok: false, msg: error.message }, 500);
     const url = sb.storage.from('pv3').getPublicUrl(path).data.publicUrl;
-    const table = job.kind === 'store' ? 'pv3_stores' : 'pv3_keywords'; const key = job.kind === 'store' ? 'id' : 'keyword'; const refv = job.kind === 'store' ? Number(job.ref) : job.ref;
-    const { data: row } = await sb.from(table).select('images').eq(key, refv).maybeSingle();
-    const imgs: { page: number; url: string; v?: number }[] = ((row?.images ?? []) as any[]).filter(x => x.page !== Number(b.page) && x.v === PV3_DESIGN); imgs.push({ page: Number(b.page), url, v: PV3_DESIGN }); imgs.sort((x, y) => x.page - y.page);   // 예전 디자인 장은 버림
-    await sb.from(table).update({ images: imgs, rendered_at: new Date().toISOString() }).eq(key, refv);
+    // 장 목록(images)은 여기서 쓰지 않는다 — 여러 장이 동시에 올라오면 서로 덮어써서 장이 빠졌음. 완료 보고 때 폴더를 보고 한 번에 기록
     return J({ ok: true, url });
+  }
+  if (b.done && !b.error) {
+    const safe = job.kind === 'store' ? `s${job.ref}` : `k_${encodeURIComponent(job.ref).replace(/%/g, '')}`;
+    const { data: files } = await sb.storage.from('pv3').list(safe, { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } });
+    const want = job.kind === 'store' ? PV3_STORE_PAGES : PV3_COMMON_PAGES; const pick = new Map<number, string>();
+    for (const f of files ?? []) { const m = /^(\d+)_/.exec(f.name); const pg = m ? Number(m[1]) : 0; if (want.includes(pg) && !pick.has(pg)) pick.set(pg, f.name); }   // 장마다 가장 최근 파일
+    const imgs = want.filter(pg => pick.has(pg)).map(pg => ({ page: pg, url: sb.storage.from('pv3').getPublicUrl(`${safe}/${pick.get(pg)}`).data.publicUrl, v: PV3_DESIGN }));
+    const table = job.kind === 'store' ? 'pv3_stores' : 'pv3_keywords'; const key = job.kind === 'store' ? 'id' : 'keyword'; const refv = job.kind === 'store' ? Number(job.ref) : job.ref;
+    if (imgs.length === want.length) await sb.from(table).update({ images: imgs, rendered_at: new Date().toISOString() }).eq(key, refv);
+    else b.error = `장 누락 ${imgs.length}/${want.length}`;
   }
   if (b.done) { await sb.from('pv3_render_jobs').update({ status: b.error ? 'failed' : 'done', error: b.error ? String(b.error).slice(0, 300) : null, done_at: new Date().toISOString() }).eq('id', id); return J({ ok: true }); }
   return J({ ok: false, msg: '?' }, 400);
