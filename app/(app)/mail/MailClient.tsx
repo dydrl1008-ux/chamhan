@@ -139,7 +139,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     if (!confirm(`[${useV3 ? '맞춤 제안서 이미지' : '예전 링크형 제안서'}] 키워드 ${list.length}개를 순서대로 자동 발송합니다. 키워드당 최대 ${perKw}건 · 이번 실행 최대 ${cap}건 · ${account.email}. 이 탭을 닫으면 멈춥니다.`)) return;
     stopRef.current = false; setAutoRun(true); setAutoLog([]); setBusy('auto');
     let sent = 0, fail = 0;
-    let queue = list; let halt = false; const t0 = Date.now(); const sentBy = new Map<string, number>();   // 키워드별 이번 실행에서 보낸 수
+    let queue = list; let halt = false; const t0 = Date.now(); const sentBy = new Map<string, number>(); let errN = 0;   // 키워드별 이번 실행에서 보낸 수
     for (let round = 0; queue.length && !halt; round++) {
       const pend: string[] = [];
       if (round > 0) {   // 준비 중이던 키워드 — 2분 뒤 다시 확인 (탭을 켜 둔 동안, 최대 3시간)
@@ -152,7 +152,13 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
         const left = cap - sent; if (left <= 0) { alog(`이번 실행 한도 ${cap}건 도달 — 종료`); halt = true; break; }
         const n = Math.min(perKw - (sentBy.get(k) ?? 0), left); if (n <= 0) { markDone(k); continue; }
         if (round === 0) alog(`'${k}' 대상 ${n}건 준비…`);
-        const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3, quick });
+        let p: Awaited<ReturnType<typeof autoPrepare>>;
+        try { p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3, quick }); errN = 0; }
+        catch (e: any) {   // 서버 호출 자체가 실패 — 잠깐 끊김이면 다시, 계속 실패하면 워크허브가 새 버전으로 바뀐 것(이 탭은 예전 버전)
+          errN++; pend.push(k);
+          if (errN >= 3) { alog('서버 호출이 계속 실패합니다 — 워크허브가 새 버전으로 바뀐 것 같습니다. 새로고침(F5) 후 「자동 발송 시작」을 다시 눌러 주세요'); notify('자동 발송 멈춤 — 새로고침 후 다시 시작해 주세요', 'bad'); halt = true; break; }
+          alog(`'${k}' 서버 호출 실패 — 잠시 뒤 다시 시도 (${String(e?.message ?? e).slice(0, 60)})`); continue;
+        }
         if (!p.ok || !p.job) {
           if (/준비 중/.test(p.msg)) { pend.push(k); if (round === 0) alog(`'${k}' 준비 중 — 준비되면 자동으로 발송`); continue; }
           if (sentBy.has(k) && /대상/.test(p.msg)) { alog(`'${k}' 완료 — 남은 대상 없음`); markDone(k); continue; }
