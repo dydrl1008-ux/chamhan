@@ -5,10 +5,20 @@ const BASE = () => (process.env.NSC_BASE_URL || 'https://navershopping-click.ver
 const admin = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
 const cookie = () => { const v = (process.env.NSC_SESSION || '').trim(); if (!v) throw new Error('NSC_SESSION 환경변수 없음 (시크릿 지수 사이트 세션 쿠키)'); return v.startsWith('session=') ? v : `session=${v}`; };
 const H = (json = false) => ({ Cookie: cookie(), Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36', Referer: `${BASE()}/app`, Origin: BASE(), ...(json ? { 'Content-Type': 'application/json' } : {}) });
+/** 로그인이 풀린 걸 총괄·대표에게 알림 (3시간에 한 번만) — 조용히 건너뛰어 발송이 빠지는 일 방지 */
+async function alertExpired() {
+  try {
+    const sb = admin(); const { data: last } = await sb.from('app_settings').select('value').eq('key', 'nsc_alert_at').maybeSingle();
+    if (last?.value && Date.now() - new Date(last.value).getTime() < 3 * 3600e3) return;
+    await sb.from('app_settings').upsert({ key: 'nsc_alert_at', value: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    const { data: us } = await sb.from('profiles').select('id').in('role', ['admin', 'head']).eq('is_active', true);
+    if (us?.length) await sb.from('notifications').insert(us.map(u => ({ user_id: u.id, kind: 'alert', title: '⚠️ 시크릿 지수 로그인이 풀렸습니다', body: '새 키워드 조회가 막혀 제안서·메일 발송에서 해당 키워드가 건너뛰어집니다. Vercel 환경변수 NSC_SESSION 을 새 쿠키로 바꾸고 재배포해 주세요.', link: '/secret-index' })));
+  } catch { /* 알림 실패는 무시 */ }
+}
 async function call(path: string, init: RequestInit) {
   const res = await fetch(`${BASE()}${path}`, { ...init, cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(60000) });
   const text = await res.text();
-  if (res.status === 401 || res.status === 403 || res.status === 302) throw new Error('시크릿 지수 사이트 로그인이 풀렸습니다 — Vercel 환경변수 NSC_SESSION 을 새 쿠키로 바꿔주세요');
+  if (res.status === 401 || res.status === 403 || res.status === 302) { await alertExpired(); throw new Error('시크릿 지수 사이트 로그인이 풀렸습니다 — Vercel 환경변수 NSC_SESSION 을 새 쿠키로 바꿔주세요'); }
   let j: any; try { j = JSON.parse(text); } catch { throw new Error(`응답이 JSON 이 아님 (${res.status}) ${text.slice(0, 80)}`); }
   if (res.status >= 400 || j?.success === false) throw new Error(j?.error || j?.message || `사이트 오류 ${res.status}`);
   return j;

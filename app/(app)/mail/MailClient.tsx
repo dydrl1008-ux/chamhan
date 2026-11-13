@@ -127,7 +127,21 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       if (stopRef.current) { try { await agentPost('/mail/wh-stop', {}); } catch {} }
     }
   };
-  const runAuto = async () => {
+  // 워크허브가 새 버전으로 배포되면 열려 있던 탭은 서버 호출이 실패한다 → 진행 상태를 저장하고 새로고침한 뒤 자동으로 이어서 발송
+  const RESUME_KEY = 'wh.mail.autoResume';
+  type Resume = { at: number; n: number; sel: string[]; perKw: number; autoMax: number; subject: string; body: string; owner: string; phone: string; basic: string; rec: string; acctId: number; useV3: boolean; quick: boolean; sent: number; fail: number; sentBy: [string, number][]; t0: number; cap: number };
+  const resumeRef = useRef<Resume | null>(null); const [resumeGo, setResumeGo] = useState(false);
+  useEffect(() => {
+    try {
+      const j: Resume | null = JSON.parse(sessionStorage.getItem(RESUME_KEY) || 'null'); sessionStorage.removeItem(RESUME_KEY);
+      if (!j || Date.now() - j.at > 15 * 60_000 || !accounts.some(a => a.id === j.acctId)) return;
+      resumeRef.current = j; setAutoSel(new Set(j.sel)); setPerKw(j.perKw); setAutoMax(j.autoMax); setSubject(j.subject); setBody(j.body); setOwner(j.owner); setPhone(j.phone); setBasic(j.basic); setRec(j.rec); setAcctId(j.acctId); setUseV3Raw(j.useV3); setQuickRaw(j.quick); setAutoOpen(true); setResumeGo(true);
+    } catch {}
+    // eslint-disable-next-line
+  }, []);
+  useEffect(() => { if (resumeGo && kws.length && resumeRef.current) { setResumeGo(false); runAuto(true); } /* eslint-disable-next-line */ }, [resumeGo, kws]);
+  const runAuto = async (resume = false) => {
+    const R = resume ? resumeRef.current : null; resumeRef.current = null;
     const list = kws.filter(k => autoSel.has(k.keyword) && !autoDone.includes(k.keyword)).sort((a, b) => b.n - a.n).map(k => k.keyword);
     if (!list.length) { notify(autoDone.length ? '고른 키워드는 오늘 이미 다 돌았습니다 — 「처음부터」로 초기화' : '키워드를 고르세요', 'bad'); return; }
     const h = await agentHealth(); setAgent(h);
@@ -135,11 +149,11 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     if (useV3 && !h.mailHtml) { notify('이 SNS_Manager 는 이미지 발송 전 빌드 — build_exe_agent.bat 다시 돌려 새 exe로 켜 주세요 (지금 보내면 이미지 없이 나갑니다)', 'bad'); return; }
     if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
     if (!subject.trim() || !body.trim()) { notify('④ 제목·본문을 먼저 채우세요', 'bad'); return; }
-    const cap = autoMax > 0 ? autoMax : account.limit - account.today;
-    if (!confirm(`[${useV3 ? '맞춤 제안서 이미지' : '예전 링크형 제안서'}] 키워드 ${list.length}개를 순서대로 자동 발송합니다. 키워드당 최대 ${perKw}건 · 이번 실행 최대 ${cap}건 · ${account.email}. 이 탭을 닫으면 멈춥니다.`)) return;
-    stopRef.current = false; setAutoRun(true); setAutoLog([]); setBusy('auto');
-    let sent = 0, fail = 0;
-    let queue = list; let halt = false; const t0 = Date.now(); const sentBy = new Map<string, number>(); let errN = 0;   // 키워드별 이번 실행에서 보낸 수
+    const cap = R ? R.cap : autoMax > 0 ? autoMax : account.limit - account.today;
+    if (!R && !confirm(`[${useV3 ? '맞춤 제안서 이미지' : '예전 링크형 제안서'}] 키워드 ${list.length}개를 순서대로 자동 발송합니다. 키워드당 최대 ${perKw}건 · 이번 실행 최대 ${cap}건 · ${account.email}. 이 탭을 닫으면 멈춥니다.`)) return;
+    stopRef.current = false; setAutoRun(true); setAutoLog(R ? [`${new Date().toTimeString().slice(0, 8)} 워크허브가 새 버전으로 바뀌어 새로고침했습니다 — 자동으로 이어서 발송합니다 (지금까지 ${R.sent}건)`] : []); setBusy('auto');
+    let sent = R?.sent ?? 0, fail = R?.fail ?? 0; const resumeN = R?.n ?? 0;
+    let queue = list; let halt = false; const t0 = R?.t0 ?? Date.now(); const sentBy = new Map<string, number>(R?.sentBy ?? []); let errN = 0;   // 키워드별 이번 실행에서 보낸 수
     for (let round = 0; queue.length && !halt; round++) {
       const pend: string[] = [];
       if (round > 0) {   // 준비 중이던 키워드 — 2분 뒤 다시 확인 (탭을 켜 둔 동안, 최대 3시간)
@@ -156,7 +170,10 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
         try { p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3, quick }); errN = 0; }
         catch (e: any) {   // 서버 호출 자체가 실패 — 잠깐 끊김이면 다시, 계속 실패하면 워크허브가 새 버전으로 바뀐 것(이 탭은 예전 버전)
           errN++; pend.push(k);
-          if (errN >= 3) { alog('서버 호출이 계속 실패합니다 — 워크허브가 새 버전으로 바뀐 것 같습니다. 새로고침(F5) 후 「자동 발송 시작」을 다시 눌러 주세요'); notify('자동 발송 멈춤 — 새로고침 후 다시 시작해 주세요', 'bad'); halt = true; break; }
+          if (errN >= 2 && resumeN < 6 && !stopRef.current) {   // 새 버전 배포로 보임 → 상태 저장 후 새로고침, 열리면 자동으로 이어서
+            try { const snap: Resume = { at: Date.now(), n: resumeN + 1, sel: [...autoSel], perKw, autoMax, subject, body, owner, phone, basic, rec, acctId: account.id, useV3, quick, sent, fail, sentBy: [...sentBy], t0, cap }; sessionStorage.setItem(RESUME_KEY, JSON.stringify(snap)); alog('워크허브가 새 버전으로 바뀐 것 같습니다 — 새로고침 후 자동으로 이어서 발송합니다'); await sleep(1500); location.reload(); return; } catch { /* 저장 실패 → 아래 안내로 */ }
+          }
+          if (errN >= 3) { alog('서버 호출이 계속 실패합니다 — 새로고침(F5) 후 「자동 발송 시작」을 다시 눌러 주세요'); notify('자동 발송 멈춤 — 새로고침 후 다시 시작해 주세요', 'bad'); halt = true; break; }
           alog(`'${k}' 서버 호출 실패 — 잠시 뒤 다시 시도 (${String(e?.message ?? e).slice(0, 60)})`); continue;
         }
         if (!p.ok || !p.job) {
@@ -273,7 +290,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
           <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'grid', gap: 3 }}>이번 실행 최대 <span style={{ fontWeight: 400 }}>(0 = 오늘 남은 한도)</span><input type="number" value={autoMax} onChange={e => setAutoMax(Math.max(0, Number(e.target.value) || 0))} style={{ width: 110 }} /></label>
           <label style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }} title="업체별 맞춤 제안서 이미지(10장)를 본문에 넣어 발송 · 준비 안 된 키워드는 자동으로 만들고, 준비된 업체만 나감 · 제안서 링크 없음"><input type="checkbox" checked={useV3} onChange={e => setUseV3(e.target.checked)} style={{ width: 'auto', margin: 0 }} /> 맞춤 제안서 이미지로 (링크 없음)</label>
           {useV3 && <label style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }} title="워커 글을 안 기다리고 코드 기본 문장으로 바로 렌더 (1~2분). 워커 글이 나오면 다음 발송부터 자동 반영"><input type="checkbox" checked={quick} onChange={e => setQuick(e.target.checked)} style={{ width: 'auto', margin: 0 }} /> 빠른 모드 (워커 안 기다림)</label>}
-          {!autoRun ? <button type="button" className="btn" disabled={!!busy || !autoSel.size || !account} onClick={runAuto} style={{ background: '#03C75A', borderColor: '#03C75A' }}>자동 발송 시작</button>
+          {!autoRun ? <button type="button" className="btn" disabled={!!busy || !autoSel.size || !account} onClick={() => runAuto()} style={{ background: '#03C75A', borderColor: '#03C75A' }}>자동 발송 시작</button>
             : <button type="button" className="btn" onClick={() => { stopRef.current = true; alog('중단 요청 — 현재 키워드 끝나면 멈춤'); }} style={{ background: '#E11D48', borderColor: '#E11D48' }}>중단</button>}
           {account && <span className="cell-sub">{account.email} · 오늘 {account.today}/{account.limit}</span>}
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'flex-end' }}>
