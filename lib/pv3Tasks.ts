@@ -119,7 +119,8 @@ export async function ensureStores(kw: string, k: KwData, targets: { target_id: 
     if (!ex) { toInsert.push({ keyword: kw, target_id: t.target_id, store_name: t.store, data: s }); continue; }
     const ai = ex.ai as StoreAi | null; const od = ex.data as StoreData | null; const old = Date.now() - new Date(ex.created_at).getTime() > 7 * 86400e3;
     const changed = !od || od.dv !== PV3_DATA_VER || od.leak !== s.leak || od.lead !== s.lead || JSON.stringify(od.plan) !== JSON.stringify(s.plan) || Math.abs((od.rank ?? 999) - (s.rank ?? 999)) >= 5 || (!od.title && !!s.title);
-    const waiting = !ai && !!ex.ai_task_id && !changed && !old;   // 워커 글을 기다리는 중 — 다시 요청하지 않는다 (호출될 때마다 작업이 새로 쌓이던 문제)
+    const recent = Date.now() - new Date(ex.created_at).getTime() < 6 * 3600e3 && od?.dv === PV3_DATA_VER;   // 최근 6시간 안에 요청한 것
+    const waiting = recent && (ai ? ai._v === PV3_AI_VER : !!ex.ai_task_id);   // 이미 요청했거나 글이 있음 — 순위·판정이 조금 흔들려도 다시 요청하지 않는다 (자동 발송이 2분마다 확인할 때 작업이 중복으로 쌓이던 문제)
     if (!waiting && (!ai || ai._v !== PV3_AI_VER || changed || old)) {   // 글 구조가 예전 것 · 판정/순위가 크게 바뀜 · 7일 지남 → 데이터·글·이미지 새로
       await db.from('pv3_stores').update({ store_name: t.store, data: s, ai: null, ai_task_id: null, images: [], created_at: new Date().toISOString() }).eq('id', ex.id); fresh.push({ id: ex.id, s });
     }
