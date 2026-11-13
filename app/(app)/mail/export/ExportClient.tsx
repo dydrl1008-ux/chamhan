@@ -55,28 +55,37 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
   const [imgMode, setImgMode] = useState(true); const [imgKws, setImgKws] = useState<string[]>([]); const [imgBusy, setImgBusy] = useState('');
   const [cur, setCur] = useState<{ k: KwData; ka: KwAi } | null>(null); const stage = useRef<HTMLDivElement>(null); const ready = useRef<(() => void) | null>(null);
   useEffect(() => { if (cur && ready.current) { const f = ready.current; ready.current = null; requestAnimationFrame(() => requestAnimationFrame(f)); } }, [cur]);
+  /** 키워드마다 공용판 9장을 그려 캡처 → { 'zip 안 경로': 바이트 } */
+  const makeImages = async (kws: string[]) => {
+    const files: Record<string, Uint8Array> = {}; const fails: string[] = [];
+    const h = await import('html-to-image'); let fontCss: string | undefined; const safe = (t: string) => t.replace(/[\\/:*?"<>|]/g, '_');
+    try { await Promise.all([400, 500, 600, 700, 800].map(w => (document as any).fonts.load(`${w} 20px Pretendard`, '가'))); } catch {}
+    for (let x = 0; x < kws.length; x++) {
+      const kw = kws[x]; setImgBusy(`${x + 1}/${kws.length} · ${kw}`);
+      const r = await manualCommonV3(kw); if (!r.ok || !r.k || !r.ka) { fails.push(r.msg || kw); continue; }
+      await new Promise<void>(res => { ready.current = res; setCur({ k: r.k!, ka: r.ka! }); });
+      try { await (document as any).fonts?.ready; } catch {}
+      const els = Array.from(stage.current?.querySelectorAll<HTMLElement>('.pv3g') ?? []);
+      if (fontCss === undefined && els[0]) { try { fontCss = await h.getFontEmbedCSS(els[0]); } catch { fontCss = ''; } }   // 글꼴은 한 번만 내려받아 모든 장에 재사용
+      for (let n = 0; n < els.length; n++) {
+        const u = await h.toJpeg(els[n], { pixelRatio: 1.5, quality: 0.88, backgroundColor: '#ffffff', ...(fontCss ? { fontEmbedCSS: fontCss } : {}) });
+        files[`${safe(kw)}/${safe(kw)}_제안서_${String(n + 1).padStart(2, '0')}.jpg`] = Uint8Array.from(atob(u.split(',')[1]), c => c.charCodeAt(0));
+      }
+    }
+    setCur(null); return { files, fails };
+  };
+  const saveZip = async (files: Record<string, Uint8Array>, name: string) => {
+    const { zipSync } = await import('fflate'); const zip = zipSync(files, { level: 0 });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([zip as BlobPart], { type: 'application/zip' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  };
+  const ymd = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
   const getImages = async () => {
     if (!imgKws.length) return notify('먼저 「대상 확인」 또는 「엑셀 받기」', 'bad');
-    setImgBusy('준비 중…'); const files: Record<string, Uint8Array> = {}; const fails: string[] = [];
+    setImgBusy('준비 중…');
     try {
-      const h = await import('html-to-image'); const { zipSync } = await import('fflate'); let fontCss: string | undefined;
-      try { await Promise.all([400, 500, 600, 700, 800].map(w => (document as any).fonts.load(`${w} 20px Pretendard`, '가'))); } catch {} const safe = (t: string) => t.replace(/[\\/:*?"<>|]/g, '_');
-      for (let x = 0; x < imgKws.length; x++) {
-        const kw = imgKws[x]; setImgBusy(`${x + 1}/${imgKws.length} · ${kw}`);
-        const r = await manualCommonV3(kw); if (!r.ok || !r.k || !r.ka) { fails.push(r.msg || kw); continue; }
-        await new Promise<void>(res => { ready.current = res; setCur({ k: r.k!, ka: r.ka! }); });
-        try { await (document as any).fonts?.ready; } catch {}
-        const els = Array.from(stage.current?.querySelectorAll<HTMLElement>('.pv3g') ?? []);
-        if (fontCss === undefined && els[0]) { try { fontCss = await h.getFontEmbedCSS(els[0]); } catch { fontCss = ''; } }   // 글꼴은 한 번만 내려받아 모든 장에 재사용
-        for (let n = 0; n < els.length; n++) {
-          const u = await h.toJpeg(els[n], { pixelRatio: 1.5, quality: 0.88, backgroundColor: '#ffffff', ...(fontCss ? { fontEmbedCSS: fontCss } : {}) });
-          files[`${safe(kw)}/${safe(kw)}_제안서_${String(n + 1).padStart(2, '0')}.jpg`] = Uint8Array.from(atob(u.split(',')[1]), c => c.charCodeAt(0));
-        }
-      }
-      setCur(null);
+      const { files, fails } = await makeImages(imgKws);
       if (!Object.keys(files).length) { notify('만들어진 이미지가 없습니다 — ' + fails.slice(0, 2).join(' / '), 'bad'); return; }
-      const zip = zipSync(files, { level: 0 }); const d = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
-      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([zip as BlobPart], { type: 'application/zip' })); a.download = `제안서이미지_${d}_키워드${imgKws.length - fails.length}개.zip`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      await saveZip(files, `제안서이미지_${ymd()}_키워드${imgKws.length - fails.length}개.zip`);
       notify(`제안서 이미지 저장 — 키워드 ${imgKws.length - fails.length}개 × ${PV3G_PAGES}장${fails.length ? ` · 실패 ${fails.length}개` : ''}`, fails.length ? 'bad' : 'ok');
       if (fails.length) setLog(l => [...l, ...fails.map(f => `✕ 이미지: ${f}`)]);
     } catch (e: any) { notify('이미지 만들기 실패: ' + (e?.message ?? e), 'bad'); } finally { setImgBusy(''); setCur(null); }
@@ -104,9 +113,18 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '발송');
     const ws2 = XLSX.utils.json_to_sheet(plan.map(p => ({ 키워드: p.keyword, 건수: p.n })));
     XLSX.utils.book_append_sheet(wb, ws2, '키워드별');
-    const d = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
-    XLSX.writeFile(wb, `메일발송_수동_${d}_${rows.length}건.xlsx`);
-    notify(`${rows.length}건 엑셀 저장됨`, 'ok'); setPlan(null);
+    const d = ymd(); const xname = `메일발송_수동_${d}_${rows.length}건.xlsx`;
+    if (!imgMode) { XLSX.writeFile(wb, xname); notify(`${rows.length}건 엑셀 저장됨`, 'ok'); setPlan(null); return; }
+    // 이미지 방식: 엑셀 + 키워드별 제안서 이미지를 zip 하나로
+    const kws = [...new Set(rows.map(r => r.keyword))]; setBusy(true); setImgBusy('준비 중…');
+    try {
+      const { files, fails } = await makeImages(kws);
+      files[xname] = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer);
+      await saveZip(files, `메일발송_수동_${d}_${rows.length}건.zip`);
+      if (fails.length) setLog(l => [...l, ...fails.map(f => `✕ 이미지: ${f}`)]);
+      notify(`${rows.length}건 엑셀 + 제안서 이미지(키워드 ${kws.length - fails.length}개) 저장됨${fails.length ? ` · 이미지 실패 ${fails.length}개` : ''}`, fails.length ? 'bad' : 'ok'); setPlan(null);
+    } catch (e: any) { XLSX.writeFile(wb, xname); notify('이미지 만들기 실패 — 엑셀만 저장했습니다: ' + (e?.message ?? e), 'bad'); }
+    finally { setBusy(false); setImgBusy(''); setCur(null); }
   };
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -127,8 +145,8 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       <div className="help">변수: {'{업체명} {키워드} {순위} {담당자} {연락처} {제안서링크} {수신거부링크} {오픈채팅}'}</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn ghost" disabled={busy} onClick={doPlan}>{busy ? '확인 중…' : '1. 대상 확인'}</button>
-        <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? '만드는 중…' : '2. 엑셀 받기'}</button>
-        <button className="btn ghost" disabled={busy || !!imgBusy || !imgKws.length} onClick={getImages} title="키워드마다 맞춤 제안서 공용판 9장을 만들어 zip 하나로 받습니다 (키워드별 폴더)">{imgBusy ? `이미지 만드는 중 ${imgBusy}` : `3. 제안서 이미지 받기${imgKws.length ? ` (키워드 ${imgKws.length}개)` : ''}`}</button>
+        <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? (imgBusy ? `이미지 만드는 중 ${imgBusy}` : '만드는 중…') : imgMode ? '2. 엑셀 + 제안서 이미지 받기' : '2. 엑셀 받기'}</button>
+        <button className="btn ghost" disabled={busy || !!imgBusy || !imgKws.length} onClick={getImages} title="키워드마다 맞춤 제안서 공용판 9장을 만들어 zip 하나로 받습니다 (키워드별 폴더)">{imgBusy && !busy ? `이미지 만드는 중 ${imgBusy}` : `이미지만 다시 받기${imgKws.length ? ` (키워드 ${imgKws.length}개)` : ''}`}</button>
         {plan && <span className="help">키워드 {plan.length}개 · {plan.reduce((a, p) => a + p.n, 0)}건</span>}
       </div>
       {plan && <div className="card" style={{ fontSize: 13, display: 'flex', gap: 6, flexWrap: 'wrap' }}>{plan.map(p => <span key={p.keyword} className="chip">{p.keyword} {p.n}</span>)}</div>}
