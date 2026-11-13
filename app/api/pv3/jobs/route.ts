@@ -12,6 +12,8 @@ const COMMON = PV3_COMMON_PAGES;
 export async function GET(req: Request) {
   if (!authed(req)) return J({ ok: false }, 401);
   const sb = supabaseAdmin();
+  // 예전 렌더 스크립트(이미지를 워크허브로 올리는 방식 — Vercel 전송량 과금)에는 일감을 주지 않는다. 새 스크립트는 ?v=2 로 부른다
+  if (Number(new URL(req.url).searchParams.get('v') ?? 0) < 2) return J({ ok: true, jobs: [], msg: 'pv3_render.py 를 새 버전으로 바꾸고 렌더 창을 껐다 켜 주세요' });
   await sb.from('ai_settings').upsert({ key: 'pv3_render_last', value: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'key' });   // 렌더 PC 연결 표시
   // 10분 넘게 running 이면 다시 queued (워커 죽음)
   await sb.from('pv3_render_jobs').update({ status: 'queued' }).eq('status', 'running').lt('created_at', new Date(Date.now() - 10 * 60e3).toISOString());
@@ -33,16 +35,7 @@ export async function POST(req: Request) {
     if (error || !data?.signedUrl) return J({ ok: false, msg: error?.message ?? '업로드 주소 발급 실패' }, 500);
     return J({ ok: true, url: data.signedUrl, path });
   }
-  if (b.jpeg && b.page) {
-    const buf = Buffer.from(String(b.jpeg), 'base64'); if (buf.length < 1000 || buf.length > 4_000_000) return J({ ok: false, msg: '이미지 크기' }, 400);
-    const safe = job.kind === 'store' ? `s${job.ref}` : `k_${encodeURIComponent(job.ref).replace(/%/g, '')}`;
-    const path = `${safe}/${b.page}_${Date.now().toString(36)}.jpg`;
-    const { error } = await sb.storage.from('pv3').upload(path, buf, { contentType: 'image/jpeg', upsert: true });
-    if (error) return J({ ok: false, msg: error.message }, 500);
-    const url = sb.storage.from('pv3').getPublicUrl(path).data.publicUrl;
-    // 장 목록(images)은 여기서 쓰지 않는다 — 여러 장이 동시에 올라오면 서로 덮어써서 장이 빠졌음. 완료 보고 때 폴더를 보고 한 번에 기록
-    return J({ ok: true, url });
-  }
+  if (b.jpeg) return J({ ok: false, msg: '이미지는 저장소로 직접 올려야 합니다 — pv3_render.py 를 새 버전으로 바꿔 주세요' }, 410);   // 워크허브를 거치는 업로드는 막음 (전송량 과금)
   if (b.done && !b.error) {
     const safe = job.kind === 'store' ? `s${job.ref}` : `k_${encodeURIComponent(job.ref).replace(/%/g, '')}`;
     const { data: files } = await sb.storage.from('pv3').list(safe, { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } });
