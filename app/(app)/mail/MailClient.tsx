@@ -134,7 +134,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     if (!confirm(`키워드 ${list.length}개를 순서대로 자동 발송합니다. 키워드당 최대 ${perKw}건 · 이번 실행 최대 ${cap}건 · ${account.email}. 이 탭을 닫으면 멈춥니다.`)) return;
     stopRef.current = false; setAutoRun(true); setAutoLog([]); setBusy('auto');
     let sent = 0, fail = 0;
-    let queue = list; let halt = false; const t0 = Date.now();
+    let queue = list; let halt = false; const t0 = Date.now(); const sentBy = new Map<string, number>();   // 키워드별 이번 실행에서 보낸 수
     for (let round = 0; queue.length && !halt; round++) {
       const pend: string[] = [];
       if (round > 0) {   // 준비 중이던 키워드 — 2분 뒤 다시 확인 (탭을 켜 둔 동안, 최대 3시간)
@@ -145,10 +145,12 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       for (const k of queue) {
         if (stopRef.current) { alog('중단'); halt = true; break; }
         const left = cap - sent; if (left <= 0) { alog(`이번 실행 한도 ${cap}건 도달 — 종료`); halt = true; break; }
-        const n = Math.min(perKw, left); if (round === 0) alog(`'${k}' 대상 ${n}건 준비…`);
+        const n = Math.min(perKw - (sentBy.get(k) ?? 0), left); if (n <= 0) { markDone(k); continue; }
+        if (round === 0) alog(`'${k}' 대상 ${n}건 준비…`);
         const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3, quick });
         if (!p.ok || !p.job) {
           if (/준비 중/.test(p.msg)) { pend.push(k); if (round === 0) alog(`'${k}' 준비 중 — 준비되면 자동으로 발송`); continue; }
+          if (sentBy.has(k) && /대상/.test(p.msg)) { alog(`'${k}' 완료 — 남은 대상 없음`); markDone(k); continue; }
           alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) { halt = true; break; } markDone(k); continue;
         }
         try {
@@ -157,7 +159,10 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
         } catch { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 연결 실패'); alog('SNS_Manager 연결 끊김 — 종료'); halt = true; break; }
         setProg({ running: true, total: p.job.items.length, done: 0, ok: 0, fail: 0, current: '', log: [] });
         const s = await waitIdle(); sent += s?.ok ?? 0; fail += s?.fail ?? 0;
-        markDone(k); alog(`'${k}' 완료 — 성공 ${s?.ok ?? 0} · 실패 ${s?.fail ?? 0} (누적 ${sent})`);
+        sentBy.set(k, (sentBy.get(k) ?? 0) + p.job.items.length);
+        const waitN = (p.skipped ?? []).filter(x => /제안서 준비 중/.test(x)).length;   // 이미지가 아직 없는 업체 — 준비되면 이어서
+        if (waitN > 0) { pend.push(k); alog(`'${k}' ${p.job.items.length}곳 발송 — 성공 ${s?.ok ?? 0} · 실패 ${s?.fail ?? 0} (누적 ${sent}) · 남은 ${waitN}곳은 준비되면 이어서`); }
+        else { markDone(k); alog(`'${k}' 완료 — 성공 ${s?.ok ?? 0} · 실패 ${s?.fail ?? 0} (누적 ${sent})`); }
         await sleep(1500);
       }
       queue = pend;
