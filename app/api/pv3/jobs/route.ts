@@ -26,6 +26,13 @@ export async function POST(req: Request) {
   let b: any = {}; try { b = await req.json(); } catch { return J({ ok: false, msg: 'bad json' }, 400); }
   const sb = supabaseAdmin(); const id = Number(b.id); if (!id) return J({ ok: false, msg: 'id' }, 400);
   const { data: job } = await sb.from('pv3_render_jobs').select('id,kind,ref').eq('id', id).maybeSingle(); if (!job) return J({ ok: false, msg: 'job 없음' }, 404);
+  if (b.sign && b.page) {   // 이미지를 워크허브(Vercel)를 거치지 않고 저장소로 바로 올리도록 업로드 주소만 발급 — 이미지가 Vercel 전송량으로 잡히던 문제
+    const safe = job.kind === 'store' ? `s${job.ref}` : `k_${encodeURIComponent(job.ref).replace(/%/g, '')}`;
+    const path = `${safe}/${Number(b.page)}_${Date.now().toString(36)}.jpg`;
+    const { data, error } = await sb.storage.from('pv3').createSignedUploadUrl(path);
+    if (error || !data?.signedUrl) return J({ ok: false, msg: error?.message ?? '업로드 주소 발급 실패' }, 500);
+    return J({ ok: true, url: data.signedUrl, path });
+  }
   if (b.jpeg && b.page) {
     const buf = Buffer.from(String(b.jpeg), 'base64'); if (buf.length < 1000 || buf.length > 4_000_000) return J({ ok: false, msg: '이미지 크기' }, 400);
     const safe = job.kind === 'store' ? `s${job.ref}` : `k_${encodeURIComponent(job.ref).replace(/%/g, '')}`;
