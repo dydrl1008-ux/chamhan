@@ -11,7 +11,7 @@ import { agentHealth, agentPost, type AgentHealth } from '@/lib/snsAgent';
 import type { Doc } from '@/lib/proposalDoc';
 import { loadKeywords, loadCandidates, makeDoc, prepareSend, autoPrepare, testSend, failQueued, saveTemplate, cancelQueued, replyPayload, ingestReplies, listCampaigns, createCampaign, setCampaign, agentKey, v3StatusOf, type Candidate, type AgentJob, type Campaign } from './actions';
 
-type Hist = { id: number; target?: { phone: string; store_url: string } | null; to_email: string; store_name: string; keyword: string; status: string; error: string | null; queued_at: string; sent_at: string | null; opened_at: string | null; open_cnt: number; replied_at: string | null; proposal_code: string | null };
+type Hist = { id: number; pv3_store_id?: number | null; target?: { phone: string; store_url: string } | null; to_email: string; store_name: string; keyword: string; status: string; error: string | null; queued_at: string; sent_at: string | null; opened_at: string | null; open_cnt: number; replied_at: string | null; proposal_code: string | null };
 type Acct = { id: number; email: string; provider: string; today: number; limit: number };
 type Prog = { running: boolean; total: number; done: number; ok: number; fail: number; current: string; log: string[] };
 const ST: Record<string, [string, 'ok' | 'wait' | 'bad' | 'off']> = { queued: ['대기', 'wait'], sending: ['발송 중', 'wait'], sent: ['완료', 'ok'], failed: ['실패', 'bad'], skipped: ['취소', 'off'] };
@@ -128,6 +128,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     if (!list.length) { notify(autoDone.length ? '고른 키워드는 오늘 이미 다 돌았습니다 — 「처음부터」로 초기화' : '키워드를 고르세요', 'bad'); return; }
     const h = await agentHealth(); setAgent(h);
     if (!h.up || !h.mailWh) { notify(h.up ? 'SNS_Manager 구버전' : 'SNS_Manager 가 꺼져 있습니다', 'bad'); return; }
+    if (useV3 && !h.mailHtml) { notify('이 SNS_Manager 는 이미지 발송 전 빌드 — build_exe_agent.bat 다시 돌려 새 exe로 켜 주세요 (지금 보내면 이미지 없이 나갑니다)', 'bad'); return; }
     if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
     if (!subject.trim() || !body.trim()) { notify('④ 제목·본문을 먼저 채우세요', 'bad'); return; }
     const cap = autoMax > 0 ? autoMax : account.limit - account.today;
@@ -374,7 +375,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
           <td><Status kind={k}>{l}</Status>{h.error && <div className="cell-sub" style={{ maxWidth: 220 }}>{h.error}</div>}</td>
           <td>{h.opened_at ? <span style={{ color: 'var(--ok-ink)', fontWeight: 700 }}>{fmtKST(h.opened_at)} ({h.open_cnt})</span> : <span className="cell-sub">-</span>}</td>
           <td>{h.replied_at ? <b style={{ color: 'var(--ok-ink)' }}>📩 {fmtKST(h.replied_at)}</b> : <span className="cell-sub">-</span>}</td>
-          <td style={{ whiteSpace: 'nowrap' }}>{h.proposal_code && <a href={`${base}/p/${h.proposal_code}?preview=1`} target="_blank" rel="noreferrer" className="btn ghost xs" title="열람 집계 안 됨">미리보기</a>}{h.status === 'queued' && <button type="button" className="btn ghost xs" style={{ marginLeft: 4 }} onClick={async () => { const x = await cancelQueued(h.id); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }}>취소</button>}</td></tr>; })}
+          <td style={{ whiteSpace: 'nowrap' }}>{h.proposal_code && <a href={h.pv3_store_id ? `/pv3/view?kind=store&ref=${h.pv3_store_id}&page=all` : `${base}/p/${h.proposal_code}?preview=1`} target="_blank" rel="noreferrer" className="btn ghost xs" title="열람 집계 안 됨">미리보기</a>}{h.status === 'queued' && <button type="button" className="btn ghost xs" style={{ marginLeft: 4 }} onClick={async () => { const x = await cancelQueued(h.id); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }}>취소</button>}</td></tr>; })}
       </tbody></table>}
     </Section>
 
@@ -383,7 +384,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
       <div style={{ maxHeight: 560, overflow: 'auto' }}><table><thead><tr><th>시각</th><th>담당자</th><th>업체</th><th>이메일</th><th>키워드</th><th>제목</th><th>상태</th><th>열람</th><th>회신</th></tr></thead><tbody>
         {teamHist.filter(h => !who || h.sender === who).map(h => { const [l, k] = ST[h.status] ?? [h.status, 'off']; return <tr key={h.id} style={{ background: h.replied_at ? 'var(--ok-soft)' : undefined }}>
           <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{fmtKST(h.sent_at ?? h.queued_at)}</td><td><b>{h.sender}</b></td><td>{h.store_name}{h.target?.store_url && <a href={h.target.store_url} target="_blank" rel="noreferrer" className="cell-sub" style={{ marginLeft: 6 }}>스토어</a>}{h.target?.phone && <div className="cell-sub">{h.target.phone}</div>}</td><td style={{ fontSize: 12.5 }}>{h.to_email}</td><td>{h.keyword}</td>
-          <td style={{ fontSize: 12.5, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h.subject}>{h.proposal_code ? <a href={`${base}/p/${h.proposal_code}?preview=1`} target="_blank" rel="noreferrer" title="미리보기 (열람 집계 안 됨)">{h.subject || '(제목 없음)'}</a> : h.subject}</td>
+          <td style={{ fontSize: 12.5, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={h.subject}>{h.proposal_code ? <a href={h.pv3_store_id ? `/pv3/view?kind=store&ref=${h.pv3_store_id}&page=all` : `${base}/p/${h.proposal_code}?preview=1`} target="_blank" rel="noreferrer" title="미리보기 (열람 집계 안 됨)">{h.subject || '(제목 없음)'}</a> : h.subject}</td>
           <td><Status kind={k}>{l}</Status>{h.error && <div className="cell-sub" style={{ maxWidth: 260, whiteSpace: 'normal' }} title={h.error}>{h.error}</div>}</td>
           <td>{h.opened_at ? <span style={{ color: 'var(--ok-ink)', fontWeight: 700 }}>{fmtKST(h.opened_at)} ({h.open_cnt})</span> : <span className="cell-sub">-</span>}</td>
           <td>{h.replied_at ? <b style={{ color: 'var(--ok-ink)' }}>📩 {fmtKST(h.replied_at)}</b> : <span className="cell-sub">-</span>}</td></tr>; })}
