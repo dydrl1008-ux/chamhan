@@ -222,10 +222,10 @@ export async function manualExport(i: { keyword: string; n: number; owner: strin
 }
 
 // ── 자동 발송 캠페인 (SNS_Manager 가 서버에서 끌어감 — 브라우저 없어도 PC만 켜져 있으면 진행) ──
-export type Campaign = { id: number; account_id: number; keywords: string[]; per_kw: number; daily_cap: number; subject: string; status: 'active' | 'paused' | 'done'; progress: { done: string[]; sent: number; log: string[] }; last_pull_at: string | null; created_at: string };
+export type Campaign = { id: number; account_id: number; keywords: string[]; per_kw: number; daily_cap: number; subject: string; status: 'active' | 'paused' | 'done'; progress: { done: string[]; sent: number; log: string[] }; last_pull_at: string | null; created_at: string; use_v3?: boolean };
 export async function listCampaigns(): Promise<R<{ rows: Campaign[] }>> {
   const me = await getProfile(); if (!me) return { ok: false, msg: '로그인 필요' };
-  const { data, error } = await supabaseAdmin().from('mail_campaigns').select('id,account_id,keywords,per_kw,daily_cap,subject,status,progress,last_pull_at,created_at').eq('owner_id', me.id).order('created_at', { ascending: false }).limit(20);
+  const { data, error } = await supabaseAdmin().from('mail_campaigns').select('id,account_id,keywords,per_kw,daily_cap,subject,status,progress,last_pull_at,created_at,use_v3').eq('owner_id', me.id).order('created_at', { ascending: false }).limit(20);
   return error ? { ok: false, msg: error.message } : { ok: true, msg: '', rows: (data ?? []) as Campaign[] };
 }
 export async function createCampaign(i: { keywords: string[]; perKw: number; dailyCap: number; subject: string; body: string; owner: string; phone: string; offer: { basic: string; rec: string }; accountId: number; v3?: boolean }): Promise<R<{ id: number }>> {

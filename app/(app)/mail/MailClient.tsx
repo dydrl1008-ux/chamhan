@@ -38,7 +38,11 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   const [autoDone, setAutoDone] = useState<string[]>(() => { try { const j = JSON.parse(localStorage.getItem(DONE_KEY) || '{}'); return j.d === today ? (j.kws ?? []) : []; } catch { return []; } });
   const markDone = (k: string) => setAutoDone(d => { const n = [...new Set([...d, k])]; try { localStorage.setItem(DONE_KEY, JSON.stringify({ d: today, kws: n })); } catch {} return n; });
   const resetDone = () => { setAutoDone([]); try { localStorage.removeItem(DONE_KEY); } catch {} };
-  const [useV3, setUseV3] = useState(false); const [quick, setQuick] = useState(false); const [v3st, setV3st] = useState<Awaited<ReturnType<typeof v3StatusOf>>>(null); const [pendTest, setPendTest] = useState(false); const [camps, setCamps] = useState<Campaign[]>([]); const [agentAuto, setAgentAuto] = useState<{ enabled: boolean; last: string; msg: string } | null>(null);
+  const [useV3, setUseV3Raw] = useState(false); const [quick, setQuickRaw] = useState(false);
+  const setUseV3 = (v: boolean) => { setUseV3Raw(v); try { localStorage.setItem('mail_use_v3', v ? '1' : '0'); } catch {} };
+  const setQuick = (v: boolean) => { setQuickRaw(v); try { localStorage.setItem('mail_quick', v ? '1' : '0'); } catch {} };
+  useEffect(() => { try { if (localStorage.getItem('mail_use_v3') === '1') setUseV3Raw(true); if (localStorage.getItem('mail_quick') === '1') setQuickRaw(true); } catch {} }, []);   // 새로고침해도 체크 유지
+  const [v3st, setV3st] = useState<Awaited<ReturnType<typeof v3StatusOf>>>(null); const [pendTest, setPendTest] = useState(false); const [camps, setCamps] = useState<Campaign[]>([]); const [agentAuto, setAgentAuto] = useState<{ enabled: boolean; last: string; msg: string } | null>(null);
   const loadCamps = async () => { const x = await listCampaigns(); if (x.ok) setCamps(x.rows!); };
 
   const eligible = (c: Candidate) => !!c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by;
@@ -132,7 +136,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     if (!account) { notify('발신 계정을 선택하세요', 'bad'); return; }
     if (!subject.trim() || !body.trim()) { notify('④ 제목·본문을 먼저 채우세요', 'bad'); return; }
     const cap = autoMax > 0 ? autoMax : account.limit - account.today;
-    if (!confirm(`키워드 ${list.length}개를 순서대로 자동 발송합니다. 키워드당 최대 ${perKw}건 · 이번 실행 최대 ${cap}건 · ${account.email}. 이 탭을 닫으면 멈춥니다.`)) return;
+    if (!confirm(`[${useV3 ? '맞춤 제안서 이미지' : '예전 링크형 제안서'}] 키워드 ${list.length}개를 순서대로 자동 발송합니다. 키워드당 최대 ${perKw}건 · 이번 실행 최대 ${cap}건 · ${account.email}. 이 탭을 닫으면 멈춥니다.`)) return;
     stopRef.current = false; setAutoRun(true); setAutoLog([]); setBusy('auto');
     let sent = 0, fail = 0;
     let queue = list; let halt = false; const t0 = Date.now(); const sentBy = new Map<string, number>();   // 키워드별 이번 실행에서 보낸 수
@@ -194,7 +198,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     const h = await agentHealth(); setAgent(h);
     if (!h.up) { notify('SNS_Manager 가 꺼져 있습니다', 'bad'); return; }
     if (!h.autoPull) { notify('SNS_Manager 가 자동 끌어가기 없는 구버전 — 새 exe 로 교체 후 다시', 'bad'); return; }
-    if (!confirm(`키워드 ${list.length}개를 이 PC의 SNS_Manager 에 맡깁니다. 브라우저를 닫아도 PC·SNS_Manager 가 켜져 있으면 계속 발송합니다 (키워드당 ${perKw}건 · 하루 ${autoMax > 0 ? autoMax + '건' : '계정 상한'}).`)) return;
+    if (!confirm(`[${useV3 ? '맞춤 제안서 이미지' : '예전 링크형 제안서'}] 키워드 ${list.length}개를 이 PC의 SNS_Manager 에 맡깁니다. 브라우저를 닫아도 PC·SNS_Manager 가 켜져 있으면 계속 발송합니다 (키워드당 ${perKw}건 · 하루 ${autoMax > 0 ? autoMax + '건' : '계정 상한'}).`)) return;
     setBusy('camp');
     const c = await createCampaign({ keywords: list, perKw, dailyCap: autoMax, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3 });
     if (!c.ok) { setBusy(''); notify(c.msg, 'bad'); return; }
@@ -298,7 +302,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
           {camps.length > 0 && <table><thead><tr><th>등록</th><th>키워드</th><th>진행</th><th>상태</th><th>마지막 확인</th><th></th></tr></thead><tbody>
             {camps.map(c => <tr key={c.id}>
               <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{fmtKST(c.created_at)}</td>
-              <td style={{ fontSize: 12.5 }} title={c.keywords.join(', ')}>{c.keywords.slice(0, 4).join(', ')}{c.keywords.length > 4 ? ` 외 ${c.keywords.length - 4}` : ''}</td>
+              <td style={{ fontSize: 12.5 }} title={c.keywords.join(', ')}>{c.keywords.slice(0, 4).join(', ')}{c.keywords.length > 4 ? ` 외 ${c.keywords.length - 4}` : ''}<div className="cell-sub" style={c.use_v3 ? undefined : { color: '#E11D48', fontWeight: 600 }}>{c.use_v3 ? '맞춤 제안서 이미지' : '예전 링크형 제안서'}</div></td>
               <td style={{ fontSize: 12.5 }}>{c.progress?.done?.length ?? 0}/{c.keywords.length} 키워드 · {c.progress?.sent ?? 0}건{c.progress?.log?.length ? <div className="cell-sub" title={c.progress.log.join('\n')}>{c.progress.log[c.progress.log.length - 1]}</div> : null}</td>
               <td><Status kind={c.status === 'active' ? 'ok' : c.status === 'paused' ? 'wait' : 'off'}>{c.status === 'active' ? '진행' : c.status === 'paused' ? '정지' : '완료'}</Status></td>
               <td className="cell-sub">{c.last_pull_at ? fmtKST(c.last_pull_at) : '-'}</td>
