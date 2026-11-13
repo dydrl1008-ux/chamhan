@@ -134,20 +134,33 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
     if (!confirm(`키워드 ${list.length}개를 순서대로 자동 발송합니다. 키워드당 최대 ${perKw}건 · 이번 실행 최대 ${cap}건 · ${account.email}. 이 탭을 닫으면 멈춥니다.`)) return;
     stopRef.current = false; setAutoRun(true); setAutoLog([]); setBusy('auto');
     let sent = 0, fail = 0;
-    for (const k of list) {
-      if (stopRef.current) { alog('중단'); break; }
-      const left = cap - sent; if (left <= 0) { alog(`이번 실행 한도 ${cap}건 도달 — 종료`); break; }
-      const n = Math.min(perKw, left); alog(`'${k}' 대상 ${n}건 준비…`);
-      const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3, quick });
-      if (!p.ok || !p.job) { alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) break; if (!/준비 중/.test(p.msg)) markDone(k); continue; }   // v3 준비 중인 키워드는 다음 실행 때 다시
-      try {
-        const res = await agentPost('/mail/wh-send', p.job, 15_000);
-        if (!res?.ok) { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 거부: ' + (res?.error || '')); alog(`'${k}' SNS_Manager 거부 — ${res?.error || ''}`); break; }
-      } catch { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 연결 실패'); alog('SNS_Manager 연결 끊김 — 종료'); break; }
-      setProg({ running: true, total: p.job.items.length, done: 0, ok: 0, fail: 0, current: '', log: [] });
-      const s = await waitIdle(); sent += s?.ok ?? 0; fail += s?.fail ?? 0;
-      markDone(k); alog(`'${k}' 완료 — 성공 ${s?.ok ?? 0} · 실패 ${s?.fail ?? 0} (누적 ${sent})`);
-      await sleep(1500);
+    let queue = list; let halt = false; const t0 = Date.now();
+    for (let round = 0; queue.length && !halt; round++) {
+      const pend: string[] = [];
+      if (round > 0) {   // 준비 중이던 키워드 — 2분 뒤 다시 확인 (탭을 켜 둔 동안, 최대 3시간)
+        if (Date.now() - t0 > 3 * 3600e3) { alog(`3시간 경과 — 아직 준비 안 된 키워드 ${queue.length}개는 남김`); break; }
+        alog(`준비 중 ${queue.length}개 — 2분 뒤 다시 확인`);
+        for (let i = 0; i < 40 && !stopRef.current; i++) await sleep(3000);
+      }
+      for (const k of queue) {
+        if (stopRef.current) { alog('중단'); halt = true; break; }
+        const left = cap - sent; if (left <= 0) { alog(`이번 실행 한도 ${cap}건 도달 — 종료`); halt = true; break; }
+        const n = Math.min(perKw, left); if (round === 0) alog(`'${k}' 대상 ${n}건 준비…`);
+        const p = await autoPrepare({ keyword: k, n, subject, body, owner, phone, offer: { basic, rec }, accountId: account.id, v3: useV3, quick });
+        if (!p.ok || !p.job) {
+          if (/준비 중/.test(p.msg)) { pend.push(k); if (round === 0) alog(`'${k}' 준비 중 — 준비되면 자동으로 발송`); continue; }
+          alog(`'${k}' 건너뜀 — ${p.msg}`); if (/상한/.test(p.msg)) { halt = true; break; } markDone(k); continue;
+        }
+        try {
+          const res = await agentPost('/mail/wh-send', p.job, 15_000);
+          if (!res?.ok) { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 거부: ' + (res?.error || '')); alog(`'${k}' SNS_Manager 거부 — ${res?.error || ''}`); halt = true; break; }
+        } catch { await failQueued(p.job.items.map(i => i.id), 'SNS_Manager 연결 실패'); alog('SNS_Manager 연결 끊김 — 종료'); halt = true; break; }
+        setProg({ running: true, total: p.job.items.length, done: 0, ok: 0, fail: 0, current: '', log: [] });
+        const s = await waitIdle(); sent += s?.ok ?? 0; fail += s?.fail ?? 0;
+        markDone(k); alog(`'${k}' 완료 — 성공 ${s?.ok ?? 0} · 실패 ${s?.fail ?? 0} (누적 ${sent})`);
+        await sleep(1500);
+      }
+      queue = pend;
     }
     setAutoRun(false); setBusy(''); notify(`자동 발송 종료 — 성공 ${sent} · 실패 ${fail}`, fail ? 'bad' : 'ok'); r.refresh();
   };
