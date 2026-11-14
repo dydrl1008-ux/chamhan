@@ -187,13 +187,14 @@ export async function manualPlan(total: number, perKeyword: number): Promise<R<{
   const sb = supabaseAdmin(); const { days } = await settings();
   const { data: kws, error } = await sb.rpc('mail_keywords_json'); if (error) return { ok: false, msg: error.message };
   const list = ((kws ?? []) as { keyword: string; n: number }[]).sort((a, b) => b.n - a.n);
-  const plan: { keyword: string; n: number }[] = []; let left = Math.max(1, Math.min(5000, total)); let available = 0;
-  for (const k of list) {
-    if (left <= 0) break;
-    const { data: cand } = await sb.rpc('mail_candidates_json', { p_keyword: k.keyword, p_days: days });
-    const ok = ((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by).length;
-    available += ok; if (!ok) continue;
-    const n = Math.min(ok, Math.max(1, perKeyword), left); plan.push({ keyword: k.keyword, n }); left -= n;
+  const plan: { keyword: string; n: number }[] = []; let left = Math.max(1, Math.min(100000, total)); let available = 0;
+  const count = async (kw: string) => { const { data: cand } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); return ((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by).length; };
+  for (let x = 0; x < list.length && left > 0; x += 8) {   // 8개씩 동시에 세기 (전체 뽑기 때 키워드가 많아도 시간 안에 끝나게)
+    const part = list.slice(x, x + 8); const oks = await Promise.all(part.map(k => count(k.keyword)));
+    for (let y = 0; y < part.length; y++) {
+      const ok = oks[y]; available += ok; if (!ok || left <= 0) continue;
+      const n = Math.min(ok, Math.max(1, perKeyword), left); plan.push({ keyword: part[y].keyword, n }); left -= n;
+    }
   }
   return { ok: true, msg: `${plan.reduce((a, p) => a + p.n, 0)}건 · 키워드 ${plan.length}개`, plan, available };
 }

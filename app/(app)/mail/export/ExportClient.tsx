@@ -83,16 +83,20 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
     if (!imgKws.length) return notify('먼저 「대상 확인」 또는 「엑셀 받기」', 'bad');
     setImgBusy('준비 중…');
     try {
-      const { files, fails } = await makeImages(imgKws);
-      if (!Object.keys(files).length) { notify('만들어진 이미지가 없습니다 — ' + fails.slice(0, 2).join(' / '), 'bad'); return; }
-      await saveZip(files, `제안서이미지_${ymd()}_키워드${imgKws.length - fails.length}개.zip`);
-      notify(`제안서 이미지 저장 — 키워드 ${imgKws.length - fails.length}개 × ${PV3G_PAGES}장${fails.length ? ` · 실패 ${fails.length}개` : ''}`, fails.length ? 'bad' : 'ok');
+      const CH = 25; const parts = Math.ceil(imgKws.length / CH); const fails: string[] = []; let made = 0;
+      for (let c = 0; c < parts; c++) {   // 25개 키워드씩 zip 하나 (많으면 여러 개로 나눠 저장)
+        const r = await makeImages(imgKws.slice(c * CH, (c + 1) * CH)); fails.push(...r.fails); made += new Set(Object.keys(r.files).map(f => f.split('/')[0])).size;
+        if (Object.keys(r.files).length) await saveZip(r.files, parts === 1 ? `제안서이미지_${ymd()}_키워드${made}개.zip` : `제안서이미지_${ymd()}_${String(c + 1).padStart(2, '0')}of${String(parts).padStart(2, '0')}.zip`);
+        if (parts > 1) await new Promise(res => setTimeout(res, 800));
+      }
+      if (!made) { notify('만들어진 이미지가 없습니다 — ' + fails.slice(0, 2).join(' / '), 'bad'); return; }
+      notify(`제안서 이미지 저장 — 키워드 ${made}개 × ${PV3G_PAGES}장${fails.length ? ` · 실패 ${fails.length}개` : ''}`, fails.length ? 'bad' : 'ok');
       if (fails.length) setLog(l => [...l, ...fails.map(f => `✕ 이미지: ${f}`)]);
     } catch (e: any) { notify('이미지 만들기 실패: ' + (e?.message ?? e), 'bad'); } finally { setImgBusy(''); setCur(null); }
   };
   const T = ({ v, set, label }: { v: Tpl; set: (t: Tpl) => void; label: string }) => <div className="card" style={{ display: 'grid', gap: 8 }}><div style={{ fontWeight: 800 }}>{label}</div><input value={v.subject} onChange={e => set({ ...v, subject: e.target.value })} placeholder="제목" /><textarea value={v.body} onChange={e => set({ ...v, body: e.target.value })} rows={12} style={{ fontSize: 13, lineHeight: 1.6 }} /></div>;
 
-  const doPlan = async () => { setBusy(true); const r = await manualPlan(total, per); setBusy(false); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok && r.plan) { setPlan(r.plan); setImgKws(r.plan.map(p => p.keyword)); setLog([`보낼 수 있는 대상 ${r.available}건 중 ${r.plan.reduce((a, p) => a + p.n, 0)}건 배분 (키워드당 최대 ${per})`]); } };
+  const doPlan = async (all = false) => { if (all) { setTotal(100000); setPer(100000); } setBusy(true); const r = await manualPlan(all ? 100000 : total, all ? 100000 : per); setBusy(false); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok && r.plan) { setPlan(r.plan); setImgKws(r.plan.map(p => p.keyword)); setLog([`보낼 수 있는 대상 ${r.available}건 중 ${r.plan.reduce((a, p) => a + p.n, 0)}건 배분 (키워드당 최대 ${per})`]); } };
   const run = async () => {
     if (!plan?.length) return notify('먼저 「대상 확인」', 'bad');
     if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건 엑셀을 만듭니다. 워크허브에는 기록되지 않습니다. 진행할까요?`)) return;
@@ -115,14 +119,24 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
     XLSX.utils.book_append_sheet(wb, ws2, '키워드별');
     const d = ymd(); const xname = `메일발송_수동_${d}_${rows.length}건.xlsx`;
     if (!imgMode) { XLSX.writeFile(wb, xname); notify(`${rows.length}건 엑셀 저장됨`, 'ok'); setPlan(null); return; }
-    // 이미지 방식: 엑셀 + 키워드별 제안서 이미지를 zip 하나로
-    const kws = [...new Set(rows.map(r => r.keyword))]; setBusy(true); setImgBusy('준비 중…');
+    // 이미지 방식: 엑셀 + 키워드별 제안서 이미지를 zip 으로. 키워드가 많으면 엑셀은 먼저 따로 저장하고 이미지는 25개 키워드씩 나눠 저장 (한 파일에 다 담으면 브라우저 메모리가 모자람)
+    const kws = [...new Set(rows.map(r => r.keyword))]; setBusy(true); setImgBusy('준비 중…'); const CH = 25; const allFails: string[] = [];
     try {
-      const { files, fails } = await makeImages(kws);
-      files[xname] = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer);
-      await saveZip(files, `메일발송_수동_${d}_${rows.length}건.zip`);
-      if (fails.length) setLog(l => [...l, ...fails.map(f => `✕ 이미지: ${f}`)]);
-      notify(`${rows.length}건 엑셀 + 제안서 이미지(키워드 ${kws.length - fails.length}개) 저장됨${fails.length ? ` · 이미지 실패 ${fails.length}개` : ''}`, fails.length ? 'bad' : 'ok'); setPlan(null);
+      if (kws.length <= CH) {
+        const { files, fails } = await makeImages(kws); allFails.push(...fails);
+        files[xname] = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer);
+        await saveZip(files, `메일발송_수동_${d}_${rows.length}건.zip`);
+      } else {
+        XLSX.writeFile(wb, xname); const parts = Math.ceil(kws.length / CH);
+        for (let c = 0; c < parts; c++) {
+          setLog(l => [...l, `이미지 묶음 ${c + 1}/${parts} 만드는 중…`]);
+          const { files, fails } = await makeImages(kws.slice(c * CH, (c + 1) * CH)); allFails.push(...fails);
+          if (Object.keys(files).length) await saveZip(files, `제안서이미지_${d}_${String(c + 1).padStart(2, '0')}of${String(parts).padStart(2, '0')}.zip`);
+          await new Promise(r => setTimeout(r, 800));
+        }
+      }
+      if (allFails.length) setLog(l => [...l, ...allFails.map(f => `✕ 이미지: ${f}`)]);
+      notify(`${rows.length}건 엑셀 + 제안서 이미지(키워드 ${kws.length - allFails.length}개) 저장됨${allFails.length ? ` · 이미지 실패 ${allFails.length}개` : ''}${kws.length > CH ? ' — 브라우저가 "여러 파일 다운로드"를 물으면 허용' : ''}`, allFails.length ? 'bad' : 'ok'); setPlan(null);
     } catch (e: any) { XLSX.writeFile(wb, xname); notify('이미지 만들기 실패 — 엑셀만 저장했습니다: ' + (e?.message ?? e), 'bad'); }
     finally { setBusy(false); setImgBusy(''); setCur(null); }
   };
@@ -144,7 +158,8 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       </div>
       <div className="help">변수: {'{업체명} {키워드} {순위} {담당자} {연락처} {제안서링크} {수신거부링크} {오픈채팅}'}</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button className="btn ghost" disabled={busy} onClick={doPlan}>{busy ? '확인 중…' : '1. 대상 확인'}</button>
+        <button className="btn ghost" disabled={busy} onClick={() => doPlan()}>{busy ? '확인 중…' : '1. 대상 확인'}</button>
+        <button className="btn ghost" disabled={busy} onClick={() => doPlan(true)} title="총 건수·키워드당 최대와 상관없이, 지금 보낼 수 있는 대상을 전부 뽑습니다">전체 뽑기</button>
         <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? (imgBusy ? `이미지 만드는 중 ${imgBusy}` : '만드는 중…') : imgMode ? '2. 엑셀 + 제안서 이미지 받기' : '2. 엑셀 받기'}</button>
         <button className="btn ghost" disabled={busy || !!imgBusy || !imgKws.length} onClick={getImages} title="키워드마다 맞춤 제안서 공용판 9장을 만들어 zip 하나로 받습니다 (키워드별 폴더)">{imgBusy && !busy ? `이미지 만드는 중 ${imgBusy}` : `이미지만 다시 받기${imgKws.length ? ` (키워드 ${imgKws.length}개)` : ''}`}</button>
         {plan && <span className="help">키워드 {plan.length}개 · {plan.reduce((a, p) => a + p.n, 0)}건</span>}
