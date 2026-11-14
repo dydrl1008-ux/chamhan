@@ -202,7 +202,8 @@ export async function manualPlan(total: number, perKeyword: number, from = 0): P
   return { ok: true, msg: `${plan.reduce((a, p) => a + p.n, 0)}건 · 키워드 ${plan.length}개`, plan, available, next, totalKw: list.length };
 }
 
-/** 2단계: 키워드 1개 — 제안서(캐시 지수) 1개 만들고 대상 n건을 엑셀 행으로 반환. 워크허브에 발송 기록은 남기지 않음(총괄 요청) */
+const MANUAL_MARK = '수동 엑셀';   // mail_queue.error 에 넣는 표시 — 수동 발송 엑셀로 뽑은 건
+/** 2단계: 키워드 1개 — 제안서(캐시 지수) 1개 만들고 대상 n건을 엑셀 행으로 반환. 뽑은 대상은 '수동 엑셀' 표시로 발송 내역에 남긴다 (2026-11-14 변경: 다시 뽑히지 않게) */
 export async function manualExport(i: { keyword: string; n: number; owner: string; phone: string; offer: { basic: string; rec: string }; tpl: Tpl; tplB: Tpl; tplC: Tpl; startNo: number; kakao?: string }): Promise<R<{ rows: ManualRow[] }>> {
   const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
   const kw = i.keyword.trim(); const sb = supabaseAdmin(); const { days } = await settings();
@@ -223,7 +224,11 @@ export async function manualExport(i: { keyword: string; n: number; owner: strin
     const [s1, b1] = f(i.tpl), [s2, b2] = f(i.tplB), [s3, b3] = f(i.tplC);
     rows.push({ no: no++, store: c.store_name, email: em, keyword: kw, rank: v.순위, subject: s1, body: b1, subjectB: s2, bodyB: b2, subjectC: s3, bodyC: b3, link: v.제안서링크, unsub: v.수신거부링크 });
   }
-  return { ok: true, msg: `${kw} ${rows.length}건`, rows };
+  // 뽑은 대상을 '수동 발송'으로 기록 — 재발송 금지 기간 동안 다시 뽑히지 않고, 자동 발송에서도 같은 업체가 빠진다 (실제로 보냈는지는 워크허브가 알 수 없으므로 '뽑은 시점'을 발송으로 본다)
+  const now = new Date().toISOString(); let rec = '';
+  const { error: qe } = await sb.from('mail_queue').insert(picks.map((c, x) => ({ sender_id: me.id, target_id: c.id, to_email: c.email.toLowerCase(), store_name: c.store_name || '', keyword: kw, subject: rows[x]?.subject ?? '', body: '', proposal_code: code, status: 'sent', error: MANUAL_MARK, queued_at: now, sent_at: now })));
+  if (qe) rec = ` (기록 실패: ${qe.message.slice(0, 50)} — 다음에 다시 뽑힐 수 있음)`;
+  return { ok: true, msg: `${kw} ${rows.length}건${rec}`, rows };
 }
 
 // ── 자동 발송 캠페인 (SNS_Manager 가 서버에서 끌어감 — 브라우저 없어도 PC만 켜져 있으면 진행) ──

@@ -121,7 +121,7 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
   };
   const run = async () => {
     if (!plan?.length) return notify('먼저 「대상 확인」', 'bad');
-    if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건 엑셀을 만듭니다. 워크허브에는 기록되지 않습니다. 진행할까요?`)) return;
+    if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건 엑셀을 만듭니다. 뽑은 대상은 발송 내역에 '수동 엑셀'로 기록되어, 재발송 금지 기간 동안 다시 뽑히지 않고 자동 발송에서도 빠집니다. 진행할까요?`)) return;
     setBusy(true); const rows: ManualRow[] = []; let no = 1; const lg: string[] = [];
     const failed: { keyword: string; n: number }[] = [];
     for (const p of plan) {
