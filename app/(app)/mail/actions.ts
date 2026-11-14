@@ -182,21 +182,24 @@ export type Tpl = { subject: string; body: string };
 const isHeadOnly = (me: { role: string }) => me.role === 'head';   // 수동 발송 엑셀 = 총괄만
 
 /** 1단계: 키워드별로 보낼 수 있는 대상 수 (제외 규칙 적용) → 총 건수 맞춰 배분 */
-export async function manualPlan(total: number, perKeyword: number): Promise<R<{ plan: { keyword: string; n: number }[]; available: number }>> {
+export async function manualPlan(total: number, perKeyword: number, from = 0): Promise<R<{ plan: { keyword: string; n: number }[]; available: number; next: number | null; totalKw: number }>> {
   const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
   const sb = supabaseAdmin(); const { days } = await settings();
   const { data: kws, error } = await sb.rpc('mail_keywords_json'); if (error) return { ok: false, msg: error.message };
-  const list = ((kws ?? []) as { keyword: string; n: number }[]).sort((a, b) => b.n - a.n);
+  const list = ((kws ?? []) as { keyword: string; n: number }[]).sort((a, b) => b.n - a.n || a.keyword.localeCompare(b.keyword));   // 순서 고정 (나눠 부를 때 어긋나지 않게)
   const plan: { keyword: string; n: number }[] = []; let left = Math.max(1, Math.min(100000, total)); let available = 0;
   const count = async (kw: string) => { const { data: cand } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); return ((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by).length; };
-  for (let x = 0; x < list.length && left > 0; x += 8) {   // 8개씩 동시에 세기 (전체 뽑기 때 키워드가 많아도 시간 안에 끝나게)
-    const part = list.slice(x, x + 8); const oks = await Promise.all(part.map(k => count(k.keyword)));
+  // 한 번 호출에 키워드 40개까지만 센다 — 전체 뽑기처럼 키워드가 수백 개면 한 번에 다 세다가 시간 초과로 끊기던 문제. 화면이 next 를 받아 이어서 부른다
+  const end = Math.min(list.length, Math.max(0, from) + 40); let x = Math.max(0, from);
+  for (; x < end && left > 0; x += 8) {
+    const part = list.slice(x, Math.min(x + 8, end)); const oks = await Promise.all(part.map(k => count(k.keyword)));
     for (let y = 0; y < part.length; y++) {
       const ok = oks[y]; available += ok; if (!ok || left <= 0) continue;
       const n = Math.min(ok, Math.max(1, perKeyword), left); plan.push({ keyword: part[y].keyword, n }); left -= n;
     }
   }
-  return { ok: true, msg: `${plan.reduce((a, p) => a + p.n, 0)}건 · 키워드 ${plan.length}개`, plan, available };
+  const next = left > 0 && end < list.length ? end : null;
+  return { ok: true, msg: `${plan.reduce((a, p) => a + p.n, 0)}건 · 키워드 ${plan.length}개`, plan, available, next, totalKw: list.length };
 }
 
 /** 2단계: 키워드 1개 — 제안서(캐시 지수) 1개 만들고 대상 n건을 엑셀 행으로 반환. 워크허브에 발송 기록은 남기지 않음(총괄 요청) */

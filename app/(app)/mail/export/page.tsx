@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { PageHeader } from '@/components/ui';
 import { supabaseServer } from '@/lib/supabase/server';
 import ExportClient from './ExportClient';
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'; export const maxDuration = 60;   // 대상 확인·키워드별 엑셀 행 만들기가 길어질 수 있음
 
 /** 메일 발송 › 수동 발송용 엑셀 — 다른 계정으로 직접 보낼 때. 총괄만 */
 export default async function MailExportPage() {

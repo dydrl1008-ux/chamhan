@@ -96,7 +96,25 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
   };
   const T = ({ v, set, label }: { v: Tpl; set: (t: Tpl) => void; label: string }) => <div className="card" style={{ display: 'grid', gap: 8 }}><div style={{ fontWeight: 800 }}>{label}</div><input value={v.subject} onChange={e => set({ ...v, subject: e.target.value })} placeholder="제목" /><textarea value={v.body} onChange={e => set({ ...v, body: e.target.value })} rows={12} style={{ fontSize: 13, lineHeight: 1.6 }} /></div>;
 
-  const doPlan = async (all = false) => { if (all) { setTotal(100000); setPer(100000); } setBusy(true); const r = await manualPlan(all ? 100000 : total, all ? 100000 : per); setBusy(false); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok && r.plan) { setPlan(r.plan); setImgKws(r.plan.map(p => p.keyword)); setLog([`보낼 수 있는 대상 ${r.available}건 중 ${r.plan.reduce((a, p) => a + p.n, 0)}건 배분 (키워드당 최대 ${per})`]); } };
+  const [planMsg, setPlanMsg] = useState('');
+  const doPlan = async (all = false) => {
+    const T = all ? 100000 : total, P = all ? 100000 : per; if (all) { setTotal(T); setPer(P); }
+    setBusy(true); setPlan(null); const acc: { keyword: string; n: number }[] = []; let avail = 0, from = 0, left = T;
+    try {
+      for (;;) {   // 키워드 40개씩 나눠서 확인 (많아도 시간 초과 없이)
+        const r = await manualPlan(left, P, from);
+        if (!r.ok || !r.plan) { notify(r.msg || '대상 확인 실패', 'bad'); return; }
+        acc.push(...r.plan); avail += r.available ?? 0; left = T - acc.reduce((a, p) => a + p.n, 0);
+        setPlanMsg(`확인 중… 키워드 ${Math.min(r.next ?? r.totalKw ?? 0, r.totalKw ?? 0)}/${r.totalKw ?? '?'} · ${acc.reduce((a, p) => a + p.n, 0)}건`);
+        if (r.next == null || left <= 0) break; from = r.next;
+      }
+      const n = acc.reduce((a, p) => a + p.n, 0);
+      if (!acc.length) { notify('지금 보낼 수 있는 대상이 없습니다', 'bad'); setLog(['보낼 수 있는 대상 0건 — 이메일 없음·수신거부·회신·최근 발송을 뺀 결과']); return; }
+      setPlan(acc); setImgKws(acc.map(p => p.keyword)); notify(`${n}건 · 키워드 ${acc.length}개`, 'ok');
+      setLog([`보낼 수 있는 대상 ${all ? n : `${avail}건 이상 중 ${n}`}건 배분 · 키워드 ${acc.length}개${all ? ' (전체)' : ` (키워드당 최대 ${P})`}`]);
+    } catch (e: any) { notify('대상 확인 중 오류 — 다시 눌러 주세요: ' + String(e?.message ?? e).slice(0, 80), 'bad'); }
+    finally { setBusy(false); setPlanMsg(''); }
+  };
   const run = async () => {
     if (!plan?.length) return notify('먼저 「대상 확인」', 'bad');
     if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건 엑셀을 만듭니다. 워크허브에는 기록되지 않습니다. 진행할까요?`)) return;
@@ -158,7 +176,7 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       </div>
       <div className="help">변수: {'{업체명} {키워드} {순위} {담당자} {연락처} {제안서링크} {수신거부링크} {오픈채팅}'}</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button className="btn ghost" disabled={busy} onClick={() => doPlan()}>{busy ? '확인 중…' : '1. 대상 확인'}</button>
+        <button className="btn ghost" disabled={busy} onClick={() => doPlan()}>{busy ? (planMsg || '확인 중…') : '1. 대상 확인'}</button>
         <button className="btn ghost" disabled={busy} onClick={() => doPlan(true)} title="총 건수·키워드당 최대와 상관없이, 지금 보낼 수 있는 대상을 전부 뽑습니다">전체 뽑기</button>
         <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? (imgBusy ? `이미지 만드는 중 ${imgBusy}` : '만드는 중…') : imgMode ? '2. 엑셀 + 제안서 이미지 받기' : '2. 엑셀 받기'}</button>
         <button className="btn ghost" disabled={busy || !!imgBusy || !imgKws.length} onClick={getImages} title="키워드마다 맞춤 제안서 공용판 9장을 만들어 zip 하나로 받습니다 (키워드별 폴더)">{imgBusy && !busy ? `이미지 만드는 중 ${imgBusy}` : `이미지만 다시 받기${imgKws.length ? ` (키워드 ${imgKws.length}개)` : ''}`}</button>
