@@ -97,6 +97,10 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
   const T = ({ v, set, label }: { v: Tpl; set: (t: Tpl) => void; label: string }) => <div className="card" style={{ display: 'grid', gap: 8 }}><div style={{ fontWeight: 800 }}>{label}</div><input value={v.subject} onChange={e => set({ ...v, subject: e.target.value })} placeholder="제목" /><textarea value={v.body} onChange={e => set({ ...v, body: e.target.value })} rows={12} style={{ fontSize: 13, lineHeight: 1.6 }} /></div>;
 
   const [planMsg, setPlanMsg] = useState('');
+  const FAILED_KEY = 'wh.export.failed'; const [failedKws, setFailedKws] = useState<{ keyword: string; n: number }[]>([]);
+  useEffect(() => { try { const j = JSON.parse(localStorage.getItem(FAILED_KEY) || 'null'); if (j?.kws?.length && Date.now() - j.at < 3 * 86400e3) setFailedKws(j.kws); } catch {} }, []);
+  const saveFailed = (kws: { keyword: string; n: number }[]) => { setFailedKws(kws); try { if (kws.length) localStorage.setItem(FAILED_KEY, JSON.stringify({ at: Date.now(), kws })); else localStorage.removeItem(FAILED_KEY); } catch {} };
+  const retryFailed = () => { if (!failedKws.length) return; setPlan(failedKws); setImgKws(failedKws.map(p => p.keyword)); setLog([`못 뽑은 키워드 ${failedKws.length}개 · ${failedKws.reduce((a, p) => a + p.n, 0)}건을 다시 뽑습니다 — 「2. 엑셀 받기」를 누르세요`]); };
   const doPlan = async (all = false) => {
     const T = all ? 100000 : total, P = all ? 100000 : per; if (all) { setTotal(T); setPer(P); }
     setBusy(true); setPlan(null); setPlanMsg('확인 중… 키워드 0개째'); setLog([all ? '전체 대상을 세는 중입니다 — 키워드 16개씩 확인합니다' : '대상을 세는 중입니다']); const acc: { keyword: string; n: number }[] = []; let avail = 0, from = 0, left = T;
@@ -119,11 +123,16 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
     if (!plan?.length) return notify('먼저 「대상 확인」', 'bad');
     if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건 엑셀을 만듭니다. 워크허브에는 기록되지 않습니다. 진행할까요?`)) return;
     setBusy(true); const rows: ManualRow[] = []; let no = 1; const lg: string[] = [];
+    const failed: { keyword: string; n: number }[] = [];
     for (const p of plan) {
-      const r = await manualExport({ keyword: p.keyword, n: p.n, owner, phone, offer: { basic, rec }, tpl, tplB, tplC, startNo: no, kakao });
+      let r: Awaited<ReturnType<typeof manualExport>>;
+      try { r = await manualExport({ keyword: p.keyword, n: p.n, owner, phone, offer: { basic, rec }, tpl, tplB, tplC, startNo: no, kakao }); }
+      catch (e: any) { r = { ok: false, msg: `${p.keyword}: 서버 호출 실패 — ${String(e?.message ?? e).slice(0, 60)}` }; }
       lg.push(`${r.ok ? '✓' : '✕'} ${r.msg}`); setLog([...lg]);
-      if (r.ok && r.rows) { rows.push(...r.rows); no += r.rows.length; }
+      if (r.ok && r.rows) { rows.push(...r.rows); no += r.rows.length; } else if (!r.ok) failed.push(p);
     }
+    saveFailed(failed);   // 조회 한도 등으로 못 뽑은 키워드 — 다음에 그것만 다시 뽑을 수 있게 이 브라우저에 기억
+    if (failed.length) { lg.push(`— 못 뽑은 키워드 ${failed.length}개는 「못 뽑은 키워드만 다시」로 이어서 뽑을 수 있습니다 (조회 한도는 자정에 풀림)`); setLog([...lg]); }
     setBusy(false);
     if (!rows.length) return notify('뽑힌 행이 없습니다', 'bad');
     if (imgMode) rows.forEach(r => { const strip = (t: string) => (r.link ? t.split(r.link).join('') : t).replace(/\n{3,}/g, '\n\n').trim(); r.body = strip(r.body); r.bodyB = strip(r.bodyB); r.bodyC = strip(r.bodyC); r.link = ''; });   // 본문에 이미지를 넣어 보내는 방식 — 제안서 링크는 뺀다
@@ -178,6 +187,7 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn ghost" disabled={busy} onClick={() => doPlan()}>{busy ? (planMsg || '확인 중…') : '1. 대상 확인'}</button>
         <button className="btn ghost" disabled={busy} onClick={() => doPlan(true)} title="총 건수·키워드당 최대와 상관없이, 지금 보낼 수 있는 대상을 전부 뽑습니다">전체 뽑기</button>
+        {failedKws.length > 0 && <button className="btn ghost" disabled={busy} onClick={retryFailed} title="지난번에 조회 한도 등으로 못 뽑은 키워드만 다시 뽑습니다 (이미 뽑은 키워드는 제외)">못 뽑은 키워드만 다시 ({failedKws.length}개)</button>}
         <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? (imgBusy ? `이미지 만드는 중 ${imgBusy}` : '만드는 중…') : imgMode ? '2. 엑셀 + 제안서 이미지 받기' : '2. 엑셀 받기'}</button>
         <button className="btn ghost" disabled={busy || !!imgBusy || !imgKws.length} onClick={getImages} title="키워드마다 맞춤 제안서 공용판 9장을 만들어 zip 하나로 받습니다 (키워드별 폴더)">{imgBusy && !busy ? `이미지 만드는 중 ${imgBusy}` : `이미지만 다시 받기${imgKws.length ? ` (키워드 ${imgKws.length}개)` : ''}`}</button>
         {plan && <span className="help">키워드 {plan.length}개 · {plan.reduce((a, p) => a + p.n, 0)}건</span>}
