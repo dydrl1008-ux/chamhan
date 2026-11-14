@@ -189,8 +189,8 @@ export async function manualPlan(total: number, perKeyword: number, from = 0): P
   const list = ((kws ?? []) as { keyword: string; n: number }[]).sort((a, b) => b.n - a.n || a.keyword.localeCompare(b.keyword));   // 순서 고정 (나눠 부를 때 어긋나지 않게)
   const plan: { keyword: string; n: number }[] = []; let left = Math.max(1, Math.min(100000, total)); let available = 0;
   const count = async (kw: string) => { const { data: cand } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); return ((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by).length; };
-  // 한 번 호출에 키워드 40개까지만 센다 — 전체 뽑기처럼 키워드가 수백 개면 한 번에 다 세다가 시간 초과로 끊기던 문제. 화면이 next 를 받아 이어서 부른다
-  const end = Math.min(list.length, Math.max(0, from) + 40); let x = Math.max(0, from);
+  // 한 번 호출에 키워드 16개까지만 센다 — 전체 뽑기처럼 키워드가 수백 개면 한 번에 다 세다가 시간 초과로 끊기던 문제. 화면이 next 를 받아 이어서 부른다
+  const end = Math.min(list.length, Math.max(0, from) + 16); let x = Math.max(0, from);
   for (; x < end && left > 0; x += 8) {
     const part = list.slice(x, Math.min(x + 8, end)); const oks = await Promise.all(part.map(k => count(k.keyword)));
     for (let y = 0; y < part.length; y++) {

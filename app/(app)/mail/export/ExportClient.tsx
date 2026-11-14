@@ -99,9 +99,9 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
   const [planMsg, setPlanMsg] = useState('');
   const doPlan = async (all = false) => {
     const T = all ? 100000 : total, P = all ? 100000 : per; if (all) { setTotal(T); setPer(P); }
-    setBusy(true); setPlan(null); const acc: { keyword: string; n: number }[] = []; let avail = 0, from = 0, left = T;
+    setBusy(true); setPlan(null); setPlanMsg('확인 중… 키워드 0개째'); setLog([all ? '전체 대상을 세는 중입니다 — 키워드 16개씩 확인합니다' : '대상을 세는 중입니다']); const acc: { keyword: string; n: number }[] = []; let avail = 0, from = 0, left = T;
     try {
-      for (;;) {   // 키워드 40개씩 나눠서 확인 (많아도 시간 초과 없이)
+      for (;;) {   // 키워드 16개씩 나눠서 확인 (많아도 시간 초과 없이)
         const r = await manualPlan(left, P, from);
         if (!r.ok || !r.plan) { notify(r.msg || '대상 확인 실패', 'bad'); return; }
         acc.push(...r.plan); avail += r.available ?? 0; left = T - acc.reduce((a, p) => a + p.n, 0);
