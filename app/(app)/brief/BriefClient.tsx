@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { normKw, volBandOf, type BriefKw, type BriefRow, type Buckets, type BriefSummary, type Pct } from '@/lib/brief';
-import { saveBrief, saveBuckets } from './actions';
+import { saveBrief, saveBuckets, addRef, delRef, type BriefRef } from './actions';
 import { josa } from '@/lib/proposalV3';
 
 const FONT_BASE = 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/packages/pretendard/dist/web/static/woff2';
@@ -35,7 +35,7 @@ function parseAny(html: string, text: string): BriefRow[] {
   return parseTable(text.split(/\r?\n/).map(l => l.split('\t').map(c => c.trim())));
 }
 
-export default function BriefClient({ list, buckets, at, n, err, initKws, summary, canEdit = true }: { canEdit?: boolean; list: BriefKw[]; buckets: Buckets; at: string | null; n: number; err: string; initKws?: string; summary: BriefSummary | null }) {
+export default function BriefClient({ list, buckets, at, n, err, initKws, summary, canEdit = true, refs = [] }: { canEdit?: boolean; refs?: BriefRef[]; list: BriefKw[]; buckets: Buckets; at: string | null; n: number; err: string; initKws?: string; summary: BriefSummary | null }) {
   const router = useRouter(); const sheet = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(''); const [kwText, setKwText] = useState(initKws ?? ''); const [q, setQ] = useState('');
   const [slots, setSlots] = useState(buckets.slots.join(', ')); const [ranks, setRanks] = useState(buckets.ranks.join(', ')); const [good, setGood] = useState(String(buckets.good ?? 40));
@@ -58,6 +58,9 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
   };
   const onPaste = (e: React.ClipboardEvent) => { e.preventDefault(); upload(e.clipboardData.getData('text/html'), e.clipboardData.getData('text/plain')); };
   const onFile = async (f?: File | null) => { if (!f) return; const t = await f.text(); upload(/<table/i.test(t) ? t : '', t); };
+  const [rf, setRf] = useState({ keyword: '', vol: '', slots: '', rank: '', up: '' });
+  const addMine = async () => { setBusy('rf'); const r = await addRef({ keyword: rf.keyword, vol: Number(rf.vol) || null, slots: Number(rf.slots) || null, rank: Number(rf.rank) || null, up: Number(rf.up) || null }); setBusy(''); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) { add(rf.keyword.trim()); setRf({ keyword: '', vol: '', slots: '', rank: '', up: '' }); router.refresh(); } };
+  const delMine = async (id: number) => { setBusy('rf'); const r = await delRef(id); setBusy(''); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) router.refresh(); };
   const nums = (t: string) => t.split(/[,\s]+/).map(Number).filter(x => x > 0);
   const saveBk = async () => { setBusy('bk'); const r = await saveBuckets({ slots: nums(slots), ranks: nums(ranks), good: Number(good) || 40 }); setBusy(''); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) router.refresh(); };
 
@@ -126,6 +129,21 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
         <div className="cell-sub">예) 슬롯 경계 5, 10 → 10개는 「5~10개」 · 순위 경계 5, 10 → 3위·5위는 「5위 이내」</div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>{([['dist', '10위·1페이지 비율'], ['keep', '상승·유지 비율'], ['band', '같은 조건 비율'], ['risers', '검색량 높은 진행 사례']] as const).map(([k, l]) => <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><input type="checkbox" style={{ width: 'auto' }} checked={show[k]} onChange={e => setShow(v => ({ ...v, [k]: e.target.checked }))} />{l}</label>)}</div>
         <button type="button" className="btn ghost" disabled={!!busy} onClick={saveBk}>{busy === 'bk' ? '저장 중…' : '구간 저장'}</button></>}
+      </div>
+      <div className="card" style={{ padding: 16, display: 'grid', gap: 8 }}>
+        <b>④ 내 레퍼런스</b>
+        <div className="cell-sub">다른 상품으로 진행한 건을 직접 적어 두는 칸입니다. 본인 것만 쓰이고, 브리핑에는 구간으로 바뀌어 나옵니다 (표시 기준 순위 밖이면 안 나옴).</div>
+        <label>키워드<input value={rf.keyword} onChange={e => setRf(v => ({ ...v, keyword: e.target.value }))} placeholder="예: 가습기" /></label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <label>진행 규모 (개)<input type="number" value={rf.slots} onChange={e => setRf(v => ({ ...v, slots: e.target.value }))} placeholder="10" /></label>
+          <label>현재 순위<input type="number" value={rf.rank} onChange={e => setRf(v => ({ ...v, rank: e.target.value }))} placeholder="3" /></label>
+          <label>월 검색량 (선택)<input type="number" value={rf.vol} onChange={e => setRf(v => ({ ...v, vol: e.target.value }))} /></label>
+          <label>등록 후 상승폭 (선택)<input type="number" value={rf.up} onChange={e => setRf(v => ({ ...v, up: e.target.value }))} /></label>
+        </div>
+        <button type="button" className="btn ghost" disabled={!!busy || !rf.keyword.trim() || !rf.rank} onClick={addMine}>{busy === 'rf' ? '처리 중…' : '레퍼런스 추가'}</button>
+        {refs.length > 0 && <div style={{ display: 'grid', gap: 4, maxHeight: 220, overflow: 'auto' }}>{refs.map(r => <div key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 8px', border: `1px solid ${C.line}`, borderRadius: 8 }}>
+          <div style={{ minWidth: 0, flex: 1 }}><b>{r.keyword}</b><div className="cell-sub">{[r.slots ? `${r.slots}개` : '', r.rank_now ? `${r.rank_now}위` : '', r.vol ? `월 ${r.vol.toLocaleString()}` : '', r.up ? `▲${r.up}` : ''].filter(Boolean).join(' · ')}</div></div>
+          <button type="button" className="btn ghost xs" disabled={!!busy} onClick={() => add(r.keyword)}>브리핑</button><button type="button" className="btn ghost xs" disabled={!!busy} onClick={() => delMine(r.id)}>삭제</button></div>)}</div>}
       </div>
     </div>
 
