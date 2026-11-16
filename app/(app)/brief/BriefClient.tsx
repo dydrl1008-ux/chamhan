@@ -182,7 +182,7 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
             </tbody>
           </table>}
           <div style={{ padding: '16px 30px 18px', background: C.bg, display: 'grid', gap: 6 }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: C.ink, lineHeight: 1.5 }}>상품 URL만 보내 주세요. {one ? `「${one.k}」에서 ` : ''}대표님 상품의 현재 순위부터 확인해 드립니다.</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: C.ink, lineHeight: 1.5 }}>상품 URL만 보내 주세요. {one ? `「${one.k}」 기준으로 ` : ''}대표님 상품 분석부터 해 드립니다.</div>
             {who.trim() && <div style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>{who.trim()}</div>}
             <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.6 }}>비율과 구간으로 표기했습니다 · 1페이지는 40위 이내 · 상승·유지는 등록 시점 대비 · 순위는 매일 바뀔 수 있습니다</div></div>
         </div>
