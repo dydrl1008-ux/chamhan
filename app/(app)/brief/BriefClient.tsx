@@ -35,7 +35,7 @@ function parseAny(html: string, text: string): BriefRow[] {
   return parseTable(text.split(/\r?\n/).map(l => l.split('\t').map(c => c.trim())));
 }
 
-export default function BriefClient({ list, buckets, at, n, err, initKws, summary }: { list: BriefKw[]; buckets: Buckets; at: string | null; n: number; err: string; initKws?: string; summary: BriefSummary | null }) {
+export default function BriefClient({ list, buckets, at, n, err, initKws, summary, canEdit = true }: { canEdit?: boolean; list: BriefKw[]; buckets: Buckets; at: string | null; n: number; err: string; initKws?: string; summary: BriefSummary | null }) {
   const router = useRouter(); const sheet = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(''); const [kwText, setKwText] = useState(initKws ?? ''); const [q, setQ] = useState('');
   const [slots, setSlots] = useState(buckets.slots.join(', ')); const [ranks, setRanks] = useState(buckets.ranks.join(', '));
@@ -89,13 +89,13 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
     <style dangerouslySetInnerHTML={{ __html: FONT_CSS }} />
     <div style={{ display: 'grid', gap: 14 }}>
       {err && <div className="card" style={{ padding: 14, color: '#B42318' }}>{err}</div>}
-      <div className="card" style={{ padding: 16, display: 'grid', gap: 8 }}>
+      {canEdit && <div className="card" style={{ padding: 16, display: 'grid', gap: 8 }}>
         <b>① 진행 현황 넣기</b>
         <div className="cell-sub">셀팜 「슬롯 운영」 화면에서 <b>Ctrl+A → Ctrl+C</b> 한 뒤 아래 칸을 누르고 <b>Ctrl+V</b>. (또는 Ctrl+S 로 저장한 .html 파일 올리기)</div>
         <textarea rows={2} readOnly value="" placeholder={busy === 'up' ? '읽는 중…' : '여기를 누르고 Ctrl+V'} onPaste={onPaste} style={{ resize: 'none' }} />
         <input type="file" accept=".html,.htm,.txt" onChange={e => { onFile(e.target.files?.[0]); e.target.value = ''; }} />
         <div className="cell-sub">{at ? `마지막 반영: ${new Date(at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${n.toLocaleString()}건 · 키워드 ${list.length.toLocaleString()}개` : '아직 넣은 데이터가 없습니다'}</div>
-      </div>
+      </div>}
       <div className="card" style={{ padding: 16, display: 'grid', gap: 8 }}>
         <b>② 브리핑할 키워드</b>
         <div className="cell-sub"><b>1개</b>면 그 키워드 제안 브리핑 한 장(전화 뒤에 남기는 용도), <b>여러 개</b>면 표로 나옵니다. 진행 현황에 있는 키워드만 나옵니다.</div>
@@ -114,11 +114,11 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
         <label>제목 (비우면 자동)<input value={title} onChange={e => setTitle(e.target.value)} placeholder={autoTitle} /></label>
         <label>표시 이름<input value={brand} onChange={e => setBrand(e.target.value)} /></label>
         <label>담당자 · 연락처 (맨 아래 표시)<input value={who} onChange={e => { setWho(e.target.value); keep('wh.brief.who', e.target.value); }} placeholder="예: 홍길동 010-0000-0000" /></label>
-        <label>슬롯 구간 경계<input value={slots} onChange={e => setSlots(e.target.value)} placeholder="5, 10, 20, 30, 50" /></label>
+        {canEdit && <><label>슬롯 구간 경계<input value={slots} onChange={e => setSlots(e.target.value)} placeholder="5, 10, 20, 30, 50" /></label>
         <label>순위 구간 경계<input value={ranks} onChange={e => setRanks(e.target.value)} placeholder="5, 10, 20, 40, 100" /></label>
         <div className="cell-sub">예) 슬롯 경계 5, 10 → 10개는 「5~10개」 · 순위 경계 5, 10 → 3위·5위는 「5위 이내」</div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>{([['dist', '10위·1페이지 비율'], ['keep', '상승·유지 비율'], ['band', '같은 조건 비율'], ['risers', '급상승']] as const).map(([k, l]) => <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><input type="checkbox" style={{ width: 'auto' }} checked={show[k]} onChange={e => setShow(v => ({ ...v, [k]: e.target.checked }))} />{l}</label>)}</div>
-        <button type="button" className="btn ghost" disabled={!!busy} onClick={saveBk}>{busy === 'bk' ? '저장 중…' : '구간 저장'}</button>
+        <button type="button" className="btn ghost" disabled={!!busy} onClick={saveBk}>{busy === 'bk' ? '저장 중…' : '구간 저장'}</button></>}
       </div>
     </div>
 

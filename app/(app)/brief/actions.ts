@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { canBrief, fixBuckets, toBrief, summarize, type BriefRow, type Buckets, type BriefKw, type BriefSummary } from '@/lib/brief';
+import { canBrief, canBriefEdit, fixBuckets, toBrief, summarize, type BriefRow, type Buckets, type BriefKw, type BriefSummary } from '@/lib/brief';
 
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 const KEY = 'brief_buckets';
@@ -23,7 +23,7 @@ export async function getBrief(): Promise<R<{ list: BriefKw[]; buckets: Buckets;
 
 /** 셀팜 화면에서 읽은 행 저장 (최신 1건이 쓰이고, 14일 지난 것은 지움) */
 export async function saveBrief(rows: BriefRow[]): Promise<R> {
-  const me = await getProfile(); if (!me || !canBrief(me)) return { ok: false, msg: '권한 없음' };
+  const me = await getProfile(); if (!me || !canBriefEdit(me)) return { ok: false, msg: '권한 없음' };
   const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? Math.round(x) : null);
   const clean = (Array.isArray(rows) ? rows : []).slice(0, 20000).map(r => ({ k: String(r?.k ?? '').trim().slice(0, 60), v: num(r?.v), s: num(r?.s), r: num(r?.r), b: num(r?.b), d: num(r?.d), p: num(r?.p) })).filter(r => r.k);
   if (!clean.length) return { ok: false, msg: '읽힌 행이 없습니다 — 셀팜 「슬롯 운영」 화면 전체를 복사했는지 확인해 주세요' };
@@ -36,7 +36,7 @@ export async function saveBrief(rows: BriefRow[]): Promise<R> {
 }
 
 export async function saveBuckets(b: Buckets): Promise<R> {
-  const me = await getProfile(); if (!me || !canBrief(me)) return { ok: false, msg: '권한 없음' };
+  const me = await getProfile(); if (!me || !canBriefEdit(me)) return { ok: false, msg: '권한 없음' };
   const v = fixBuckets(b);
   const { error } = await supabaseAdmin().from('app_settings').upsert({ key: KEY, value: JSON.stringify(v), updated_at: new Date().toISOString() }, { onConflict: 'key' });
   if (error) return { ok: false, msg: error.message };
