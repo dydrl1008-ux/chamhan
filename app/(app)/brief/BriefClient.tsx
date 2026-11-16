@@ -149,8 +149,8 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
           
           {summary && (show.dist || show.keep || show.band || show.risers) && <div style={{ padding: one ? '12px 30px 18px' : '20px 30px 6px', display: 'grid', gap: 12, background: one ? '#fff' : C.bg }}>
             {(show.dist || show.keep) && <div style={{ background: C.navy, borderRadius: 16, padding: '20px 22px', color: '#fff' }}>
-              <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.02em', lineHeight: 1.45 }}>저희가 진행하는 키워드 10개 중 <span style={{ color: '#7CF0BE' }}>{Math.round(page1 / 10)}개</span>는 지금 1페이지에 있습니다.</div>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${show.dist && show.keep && summary.keep != null ? 3 : show.dist ? 2 : 1}, 1fr)`, gap: 10, marginTop: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#9FB2E8', letterSpacing: '.04em' }}>진행 중인 키워드 순위 분포</div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${show.dist && show.keep && summary.keep != null ? 3 : show.dist ? 2 : 1}, 1fr)`, gap: 10, marginTop: 10 }}>
                 {show.dist && <div style={hk}><div style={hkN}>{pc(top10)}</div><div style={hkL}>10위 이내</div></div>}
                 {show.dist && <div style={hk}><div style={hkN}>{pc(page1)}</div><div style={hkL}>1페이지 (40위 이내)</div></div>}
                 {show.keep && summary.keep != null && <div style={hk}><div style={hkN}>{pc(summary.keep)}</div><div style={hkL}>등록 후 상승·유지</div></div>}
