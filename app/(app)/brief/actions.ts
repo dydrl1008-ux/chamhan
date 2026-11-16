@@ -32,7 +32,7 @@ export async function saveBrief(rows: BriefRow[]): Promise<R> {
   if (error) return { ok: false, msg: /sales_brief/.test(error.message) ? '0081 SQL(sales_brief 표)을 먼저 실행해 주세요' : error.message };
   await sb.from('sales_brief').delete().lt('uploaded_at', new Date(Date.now() - 14 * 86400e3).toISOString());
   revalidatePath('/brief');
-  return { ok: true, msg: `${clean.length}건 · 키워드 ${new Set(clean.map(r => r.k)).size}개 반영` };
+  return { ok: true, msg: '진행 현황 반영됨' };
 }
 
 export async function saveBuckets(b: Buckets): Promise<R> {

@@ -5,14 +5,14 @@ export const canBriefEdit = (me: { email?: string | null } | null) => !!me?.emai
 export const canBrief = (me: { email?: string | null } | null) => !!me?.email && BRIEF_VIEWERS.includes(me.email.toLowerCase());
 
 export type BriefRow = { k: string; v: number | null; s: number | null; r: number | null; b: number | null; d: number | null; p?: number | null };   // d 등록 대비 · p 전일 대비 (+상승)
-export type Buckets = { slots: number[]; ranks: number[] };
-export const DEFAULT_BUCKETS: Buckets = { slots: [5, 10, 20, 30, 50], ranks: [5, 10, 20, 40, 100] };
+export type Buckets = { slots: number[]; ranks: number[]; good?: number };   // good: 이 순위 안에 있는 건만 브리핑에 낸다 (좋은 데이터만)
+export const DEFAULT_BUCKETS: Buckets = { slots: [5, 10, 20, 30, 50], ranks: [5, 10, 20, 40, 100], good: 40 };
 export type BriefCase = { slot: string; rank: string; best: string; trend: '상승' | '유지' | '하락' | '' };
 export type BriefKw = { k: string; key: string; vol: string; v: number | null; ro: number; sb: string; cases: BriefCase[]; more: number; line: string };   // v 검색량(공개 수치) · ro 순위 구간 순서(정렬용)
 
 export const normKw = (t: string) => t.toLowerCase().replace(/\s+/g, '');
 const clean = (a: number[]) => [...new Set(a.filter(n => Number.isFinite(n) && n > 0).map(n => Math.round(n)))].sort((x, y) => x - y);
-export const fixBuckets = (b?: Partial<Buckets> | null): Buckets => { const s = clean(b?.slots ?? []), r = clean(b?.ranks ?? []); return { slots: s.length ? s : DEFAULT_BUCKETS.slots, ranks: r.length ? r : DEFAULT_BUCKETS.ranks }; };
+export const fixBuckets = (b?: Partial<Buckets> | null): Buckets => { const s = clean(b?.slots ?? []), r = clean(b?.ranks ?? []); const g = Math.round(Number(b?.good)); return { slots: s.length ? s : DEFAULT_BUCKETS.slots, ranks: r.length ? r : DEFAULT_BUCKETS.ranks, good: g > 0 ? g : DEFAULT_BUCKETS.good }; };
 /** 슬롯 10개 · 경계 [5,10,20] → "5~10개" (위 경계 포함) */
 export function slotLabel(n: number | null, b: number[]) { if (!n || n <= 0) return ''; let lo = 1; for (const hi of b) { if (n <= hi) return `${lo}~${hi}개`; lo = hi; } return `${b[b.length - 1]}개 이상`; }
 /** 3위 · 경계 [5,10,20] → "5위 이내" */
@@ -24,15 +24,18 @@ export function toBrief(rows: BriefRow[], bk: Buckets, maxCases = 8): BriefKw[] 
   const g = new Map<string, BriefRow[]>();
   for (const r of rows) { const key = normKw(r.k); if (!key) continue; (g.get(key) ?? g.set(key, []).get(key)!).push(r); }
   const out: BriefKw[] = [];
-  for (const [key, rs] of g) {
+  const good = bk.good ?? 40;
+  for (const [key, all] of g) {
+    // 좋은 데이터만: 표시 기준 순위 안에 있는 건만 쓴다. 그런 건이 하나도 없는 키워드는 브리핑에 나오지 않는다 (없는 키워드와 같게 취급)
+    const rs = all.filter(r => !!r.r && r.r > 0 && r.r <= good); if (!rs.length) continue;
     rs.sort((a, b) => (a.r ?? 9999) - (b.r ?? 9999));
-    const cases: BriefCase[] = rs.map(r => ({ slot: slotLabel(r.s, bk.slots), rank: rankLabel(r.r, bk.ranks), best: rankLabel(r.b, bk.ranks), trend: r.d == null ? '' : r.d > 0 ? '상승' : r.d < 0 ? '하락' : '유지' }));
+    const cases: BriefCase[] = rs.map(r => ({ slot: slotLabel(r.s, bk.slots), rank: rankLabel(r.r, bk.ranks), best: rankLabel(r.b, bk.ranks), trend: r.d == null || r.d < 0 ? '' : r.d > 0 ? '상승' : '유지' }));   // 하락은 표기하지 않는다
     // 같은 구간 조합은 한 줄로
     const seen = new Set<string>(); const uniq = cases.filter(c => { const s = `${c.slot}|${c.rank}|${c.trend}`; if (seen.has(s)) return false; seen.add(s); return true; });
     const top = uniq[0]; const vol = volLabel(rs.find(r => r.v != null)?.v ?? null);
     const line = top ? `「${rs[0].k}」 진행 사례 있음 — ${top.slot ? `${top.slot} 구간으로 ` : ''}현재 ${top.rank}${top.trend === '상승' ? ' (등록 대비 상승)' : ''}` : '';
     const r0 = rs[0].r; const ro = !r0 || r0 <= 0 ? 999 : (bk.ranks.findIndex(h => r0 <= h) + 1 || 998);
-    out.push({ k: rs[0].k, key, vol, v: rs.find(r => r.v != null)?.v ?? null, ro, sb: slotBandOf(rs[0].s), cases: uniq.slice(0, maxCases), more: Math.max(0, uniq.length - maxCases), line });
+    out.push({ k: rs[0].k, key, vol, v: rs.find(r => r.v != null)?.v ?? null, ro, sb: slotLabel(rs[0].s, bk.slots), cases: uniq.slice(0, maxCases), more: Math.max(0, uniq.length - maxCases), line });
   }
   return out.sort((a, b) => a.k.localeCompare(b.k, 'ko'));
 }
@@ -55,7 +58,9 @@ export function summarize(rows: BriefRow[], bk: Buckets): BriefSummary {
   const page1 = (r: BriefRow) => !!r.r && r.r > 0 && r.r <= 40;
   const group = (labels: string[], idx: (r: BriefRow) => number) => labels.map((label, i) => { const g = rows.filter(r => idx(r) === i); return { label, pct: pct(g.filter(page1).length, g.length), n: g.length }; }).filter(x => x.n >= MIN_N).map(({ label, pct }) => ({ label, pct }));
   const byVol = group(['1만 미만', '1~3만', '3~5만', '5~10만', '10만 이상'], r => r.v == null ? -1 : r.v < 10000 ? 0 : r.v < 30000 ? 1 : r.v < 50000 ? 2 : r.v < 100000 ? 3 : 4);
-  const bySlot = group(['1~2개', '3~5개', '6~10개', '11~20개', '21개 이상'], r => !r.s ? -1 : r.s <= 2 ? 0 : r.s <= 5 ? 1 : r.s <= 10 ? 2 : r.s <= 20 ? 3 : 4);
+  // 진행 규모 구간은 화면의 구간 설정과 같은 이름으로 (타일의 '1~5개'와 아래 칸의 구간 이름이 어긋나지 않게)
+  const slotLabels = [...bk.slots.map(h => slotLabel(h, bk.slots)), slotLabel(bk.slots[bk.slots.length - 1] + 1, bk.slots)];
+  const bySlot = group(slotLabels, r => !r.s ? -1 : slotLabels.indexOf(slotLabel(r.s, bk.slots)));
   const seen = new Set<string>();
   const risers = rows.filter(r => (r.p ?? 0) > 0).sort((a, b) => (b.p ?? 0) - (a.p ?? 0)).filter(r => { const k = normKw(r.k); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5).map(r => ({ vol: volBandOf(r.v), up: r.p ?? 0 }));
   return { dist, keep, byVol, bySlot, risers };

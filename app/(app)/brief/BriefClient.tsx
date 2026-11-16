@@ -38,7 +38,7 @@ function parseAny(html: string, text: string): BriefRow[] {
 export default function BriefClient({ list, buckets, at, n, err, initKws, summary, canEdit = true }: { canEdit?: boolean; list: BriefKw[]; buckets: Buckets; at: string | null; n: number; err: string; initKws?: string; summary: BriefSummary | null }) {
   const router = useRouter(); const sheet = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(''); const [kwText, setKwText] = useState(initKws ?? ''); const [q, setQ] = useState('');
-  const [slots, setSlots] = useState(buckets.slots.join(', ')); const [ranks, setRanks] = useState(buckets.ranks.join(', '));
+  const [slots, setSlots] = useState(buckets.slots.join(', ')); const [ranks, setRanks] = useState(buckets.ranks.join(', ')); const [good, setGood] = useState(String(buckets.good ?? 40));
   const [title, setTitle] = useState(''); const [who, setWho] = useState(''); const [brand, setBrand] = useState('참한기획');
   const [show, setShow] = useState({ dist: true, keep: true, band: true, risers: true });
   useEffect(() => { try { if (!initKws) setKwText(localStorage.getItem('wh.brief.kws') ?? ''); setWho(localStorage.getItem('wh.brief.who') ?? ''); } catch {} }, []);
@@ -59,7 +59,7 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
   const onPaste = (e: React.ClipboardEvent) => { e.preventDefault(); upload(e.clipboardData.getData('text/html'), e.clipboardData.getData('text/plain')); };
   const onFile = async (f?: File | null) => { if (!f) return; const t = await f.text(); upload(/<table/i.test(t) ? t : '', t); };
   const nums = (t: string) => t.split(/[,\s]+/).map(Number).filter(x => x > 0);
-  const saveBk = async () => { setBusy('bk'); const r = await saveBuckets({ slots: nums(slots), ranks: nums(ranks) }); setBusy(''); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) router.refresh(); };
+  const saveBk = async () => { setBusy('bk'); const r = await saveBuckets({ slots: nums(slots), ranks: nums(ranks), good: Number(good) || 40 }); setBusy(''); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) router.refresh(); };
 
   const png = async () => { if (!sheet.current) return null; const { toPng } = await import('html-to-image'); return toPng(sheet.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true }); };
   const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -67,14 +67,15 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
   const autoTitle = one ? `「${one.k}」 키워드 제안 브리핑` : '키워드 제안 브리핑'; const shownTitle = title.trim() || autoTitle;
   const volBand = volBandOf;
   const top10 = summary?.dist[0]?.pct ?? 0, page1 = top10 + (summary?.dist[1]?.pct ?? 0);   // 41위 밖은 이미지에 넣지 않는다
-  const sameVol = one && summary ? summary.byVol.find(x => x.label === volBandOf(one.v)) : undefined; const sameSlot = one && summary ? summary.bySlot.find(x => x.label === one.sb) : undefined;
+  const GOOD_PCT = 80;   // 같은 조건 칸은 수치가 좋을 때만 넣는다
+  const sameVol = one && summary ? summary.byVol.find(x => x.label === volBandOf(one.v) && x.pct >= GOOD_PCT) : undefined; const sameSlot = one && summary ? summary.bySlot.find(x => x.label === one.sb && x.pct >= GOOD_PCT) : undefined;
   const hk: React.CSSProperties = { background: 'rgba(255,255,255,.08)', borderRadius: 12, padding: '14px 14px', textAlign: 'center' }; const hkN: React.CSSProperties = { fontSize: 38, fontWeight: 800, letterSpacing: '-.03em', color: '#7CF0BE', lineHeight: 1.1 }; const hkL: React.CSSProperties = { fontSize: 13, color: '#C9D3EA', marginTop: 4 };
   const hot = one ? one.ro <= 2 : false;   // 10위 이내 구간에 있는 키워드
   const copy = async () => { setBusy('copy'); try { const u = await png(); if (!u) return; const blob = await (await fetch(u)).blob(); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); notify('이미지 복사됨 — 카톡 창에 Ctrl+V', 'ok'); } catch (e: any) { notify('복사 실패 — 「PNG 저장」을 써 주세요 (' + (e?.message ?? '') + ')', 'bad'); } finally { setBusy(''); } };
   const save = async () => { setBusy('png'); try { const u = await png(); if (!u) return; const a = document.createElement('a'); a.href = u; a.download = `키워드브리핑_${one ? one.k + '_' : ''}${today}.png`; a.click(); notify('PNG 저장됨', 'ok'); } catch (e: any) { notify('저장 실패: ' + (e?.message ?? ''), 'bad'); } finally { setBusy(''); } };
 
   const rankTone = (ro: number) => ro === 1 ? [C.green, C.greenSoft] : ro === 2 ? [C.blue, C.blueSoft] : ro <= 3 ? [C.amber, C.amberSoft] : [C.sub, C.bg];
-  const trend = (t: string) => t === '상승' || t === '유지' ? <b style={{ color: C.green }}>▲ 상승·유지</b> : t === '하락' ? <span style={{ color: C.mute }}>조정</span> : <span style={{ color: C.mute }}>―</span>;   // 상승·유지는 묶어서 표기
+  const trend = (t: string) => t === '상승' || t === '유지' ? <b style={{ color: C.green }}>▲ 상승·유지</b> : null;   // 상승·유지는 묶어서 표기
   const DIST = [C.green, C.blue, '#8FA5F5', '#D5DBE8']; const pc = (v: number) => `${Math.round(v)}%`;
   const box: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 14, padding: '16px 18px', background: '#fff' };
   const cap: React.CSSProperties = { fontSize: 12.5, fontWeight: 600, color: C.sub, letterSpacing: '.02em' };
@@ -94,16 +95,16 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
         <div className="cell-sub">셀팜 「슬롯 운영」 화면에서 <b>Ctrl+A → Ctrl+C</b> 한 뒤 아래 칸을 누르고 <b>Ctrl+V</b>. (또는 Ctrl+S 로 저장한 .html 파일 올리기)</div>
         <textarea rows={2} readOnly value="" placeholder={busy === 'up' ? '읽는 중…' : '여기를 누르고 Ctrl+V'} onPaste={onPaste} style={{ resize: 'none' }} />
         <input type="file" accept=".html,.htm,.txt" onChange={e => { onFile(e.target.files?.[0]); e.target.value = ''; }} />
-        <div className="cell-sub">{at ? `마지막 반영: ${new Date(at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${n.toLocaleString()}건 · 키워드 ${list.length.toLocaleString()}개` : '아직 넣은 데이터가 없습니다'}</div>
+        <div className="cell-sub">{at ? `마지막 반영: ${new Date(at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 넣은 데이터가 없습니다'}</div>
       </div>}
       <div className="card" style={{ padding: 16, display: 'grid', gap: 8 }}>
         <b>② 브리핑할 키워드</b>
         <div className="cell-sub"><b>1개</b>면 그 키워드 제안 브리핑 한 장(전화 뒤에 남기는 용도), <b>여러 개</b>면 표로 나옵니다. 진행 현황에 있는 키워드만 나옵니다.</div>
         <textarea rows={6} value={kwText} onChange={e => { setKwText(e.target.value); keep('wh.brief.kws', e.target.value); }} placeholder={'가습기\n제모기\n식전영상'} />
-        {missing.length > 0 && <div className="cell-sub">진행 현황에 없음 (표에 안 나옴): {missing.slice(0, 12).join(', ')}{missing.length > 12 ? ` 외 ${missing.length - 12}` : ''}</div>}
+        {missing.length > 0 && <div className="cell-sub">브리핑에 안 나옴 (진행 현황에 없거나 표시 기준 밖): {missing.slice(0, 12).join(', ')}{missing.length > 12 ? ` 외 ${missing.length - 12}` : ''}</div>}
         <label>키워드 검색<input value={q} onChange={e => setQ(e.target.value)} placeholder="일부만 입력해도 찾습니다" /></label>
         {q.trim() && <div style={{ display: 'grid', gap: 4, maxHeight: 260, overflow: 'auto' }}>
-          {found.length === 0 && <div className="cell-sub">진행 현황에 없는 키워드입니다</div>}
+          {found.length === 0 && <div className="cell-sub">브리핑할 수 있는 키워드가 아닙니다 (진행 현황에 없거나 표시 기준 밖)</div>}
           {found.map(x => <div key={x.key} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 8px', border: `1px solid ${C.line}`, borderRadius: 8 }}>
             <div style={{ minWidth: 0, flex: 1 }}><b>{x.k}</b><div className="cell-sub">{[x.vol, x.cases[0]?.slot, x.cases[0]?.rank, x.cases[0]?.trend].filter(Boolean).join(' · ')}</div></div>
             {rows.some(r => r.key === x.key) ? <span className="cell-sub">추가됨</span> : <button type="button" className="btn ghost xs" onClick={() => add(x.k)}>추가</button>}</div>)}
@@ -116,6 +117,7 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
         <label>담당자 · 연락처 (맨 아래 표시)<input value={who} onChange={e => { setWho(e.target.value); keep('wh.brief.who', e.target.value); }} placeholder="예: 홍길동 010-0000-0000" /></label>
         {canEdit && <><label>슬롯 구간 경계<input value={slots} onChange={e => setSlots(e.target.value)} placeholder="5, 10, 20, 30, 50" /></label>
         <label>순위 구간 경계<input value={ranks} onChange={e => setRanks(e.target.value)} placeholder="5, 10, 20, 40, 100" /></label>
+        <label>표시 기준 순위 (이 순위 안에 있는 키워드만 브리핑에 나옴)<input type="number" value={good} onChange={e => setGood(e.target.value)} /></label>
         <div className="cell-sub">예) 슬롯 경계 5, 10 → 10개는 「5~10개」 · 순위 경계 5, 10 → 3위·5위는 「5위 이내」</div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>{([['dist', '10위·1페이지 비율'], ['keep', '상승·유지 비율'], ['band', '같은 조건 비율'], ['risers', '급상승']] as const).map(([k, l]) => <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><input type="checkbox" style={{ width: 'auto' }} checked={show[k]} onChange={e => setShow(v => ({ ...v, [k]: e.target.checked }))} />{l}</label>)}</div>
         <button type="button" className="btn ghost" disabled={!!busy} onClick={saveBk}>{busy === 'bk' ? '저장 중…' : '구간 저장'}</button></>}
@@ -126,7 +128,7 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" className="btn" disabled={!!busy || (!rows.length && !summary)} onClick={copy}>{busy === 'copy' ? '복사 중…' : '이미지 복사'}</button>
         <button type="button" className="btn ghost" disabled={!!busy || (!rows.length && !summary)} onClick={save}>{busy === 'png' ? '저장 중…' : 'PNG 저장'}</button>
-        <span className="cell-sub" style={{ alignSelf: 'center' }}>{rows.length ? `${rows.length}개 키워드` : '왼쪽에서 키워드를 넣으면 표가 만들어집니다'}</span>
+        <span className="cell-sub" style={{ alignSelf: 'center' }}>{rows.length ? '' : '왼쪽에서 키워드를 넣으면 브리핑이 만들어집니다'}</span>
       </div>
       <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
         <div ref={sheet} style={{ width: 760, background: '#fff', fontFamily: "'BriefPretendard','Pretendard',system-ui,sans-serif", color: C.ink, border: `1px solid ${C.line}`, wordBreak: 'keep-all', overflowWrap: 'break-word' }}>
@@ -141,10 +143,10 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.03em', color: C.ink }}>{one.k}</div>
               {one.v != null && <div style={{ fontSize: 15, color: C.sub }}>월 검색량 <b style={{ color: C.ink, fontSize: 18 }}>{one.v.toLocaleString('ko-KR')}</b>회</div>}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 14 }}>
-              {([['진행 규모', one.cases[0]?.slot || '—', C.ink, C.bg], ['현재 순위', one.cases[0]?.rank ?? '—', rankTone(one.ro)[0], rankTone(one.ro)[1]], ['등록 대비', one.cases[0]?.trend === '하락' ? '조정' : one.cases[0]?.trend ? '상승·유지' : '—', one.cases[0]?.trend === '하락' ? C.sub : C.green, one.cases[0]?.trend === '하락' ? C.bg : C.greenSoft]] as [string, string, string, string][]).map(([l, v, fg, bg]) => <div key={l} style={{ background: bg, borderRadius: 14, padding: '14px 16px' }}><div style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}>{l}</div><div style={{ fontSize: 24, fontWeight: 800, color: fg, letterSpacing: '-.02em', marginTop: 2 }}>{v}</div></div>)}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${one.cases[0]?.trend ? 3 : 2}, 1fr)`, gap: 10, marginTop: 14 }}>
+              {([['진행 규모', one.cases[0]?.slot || '—', C.ink, C.bg], ['현재 순위', one.cases[0]?.rank ?? '—', rankTone(one.ro)[0], rankTone(one.ro)[1]], ...(one.cases[0]?.trend ? [['등록 대비', '상승·유지', C.green, C.greenSoft]] : [])] as [string, string, string, string][]).map(([l, v, fg, bg]) => <div key={l} style={{ background: bg, borderRadius: 14, padding: '14px 16px' }}><div style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}>{l}</div><div style={{ fontSize: 24, fontWeight: 800, color: fg, letterSpacing: '-.02em', marginTop: 2 }}>{v}</div></div>)}</div>
             <div style={{ fontSize: 15.5, lineHeight: 1.65, color: C.text, marginTop: 14 }}><div>「{one.k}」{josa(one.k, '은/는')} <b style={{ color: C.ink }}>지금 저희가 직접 진행하고 있는 키워드</b>입니다.</div><div>{hot ? <>이 키워드에서 <b style={{ color: C.ink }}>{one.cases[0]?.rank}</b> 자리를 잡는 방법을 이미 알고 있습니다.</> : <>현재 <b style={{ color: C.ink }}>{one.cases[0]?.rank}</b>에 있으며, 진행 규모는 <b style={{ color: C.ink }}>{one.cases[0]?.slot || '확인 후 안내'}</b> 구간입니다.</>}</div></div>
-            {one.cases.length > 1 && <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>{one.cases.slice(1, 4).map((c, i) => <div key={i} style={{ display: 'flex', gap: 10, fontSize: 14, color: C.sub, padding: '8px 12px', background: C.bg, borderRadius: 10 }}><span style={{ minWidth: 150 }}>같은 키워드 다른 진행 건</span><b style={{ color: C.text, minWidth: 70 }}>{c.slot || '—'}</b><b style={{ color: C.text, minWidth: 84 }}>{c.rank}</b>{c.trend && c.trend !== '하락' && <span style={{ color: C.green, fontWeight: 600 }}>▲ 상승·유지</span>}</div>)}</div>}
+            {one.cases.length > 1 && <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>{one.cases.slice(1, 4).map((c, i) => <div key={i} style={{ display: 'flex', gap: 10, fontSize: 14, color: C.sub, padding: '8px 12px', background: C.bg, borderRadius: 10 }}><span style={{ minWidth: 150 }}>같은 키워드 다른 진행 건</span><b style={{ color: C.text, minWidth: 70 }}>{c.slot || '—'}</b><b style={{ color: C.text, minWidth: 84 }}>{c.rank}</b>{c.trend && <span style={{ color: C.green, fontWeight: 600 }}>▲ 상승·유지</span>}</div>)}</div>}
           </div>}
           
           {summary && (show.dist || show.keep || show.band || show.risers) && <div style={{ padding: one ? '12px 30px 18px' : '20px 30px 6px', display: 'grid', gap: 12, background: one ? '#fff' : C.bg }}>
@@ -160,20 +162,20 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
               {sameSlot && <div style={{ ...box, borderColor: C.green, borderWidth: 1.5 }}><div style={cap}>진행 규모 {sameSlot.label} 구간은</div><div style={{ fontSize: 30, fontWeight: 800, color: C.green, letterSpacing: '-.03em', marginTop: 4 }}>{pc(sameSlot.pct)}<span style={{ fontSize: 15, fontWeight: 600, color: C.sub, marginLeft: 8 }}>가 1페이지</span></div></div>}
             </div>}
             {show.band && !one && (summary.byVol.length > 0 || summary.bySlot.length > 0) && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {summary.byVol.length > 0 && <div style={box}><div style={cap}>월 검색량별 1페이지 비율</div><Bars items={summary.byVol} /></div>}
-              {summary.bySlot.length > 0 && <div style={box}><div style={cap}>진행 규모별 1페이지 비율</div><Bars items={summary.bySlot} /></div>}
+              {summary.byVol.length > 0 && <div style={box}><div style={cap}>월 검색량별 1페이지 비율</div><Bars items={summary.byVol.filter(x => x.pct >= GOOD_PCT)} /></div>}
+              {summary.bySlot.length > 0 && <div style={box}><div style={cap}>진행 규모별 1페이지 비율</div><Bars items={summary.bySlot.filter(x => x.pct >= GOOD_PCT)} /></div>}
             </div>}
             {show.risers && summary.risers.length > 0 && <div style={box}><div style={cap}>오늘 순위가 크게 오른 키워드 (전일 대비)</div>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${summary.risers.length}, 1fr)`, gap: 8, marginTop: 10 }}>{summary.risers.map((x, i) => <div key={i} style={{ background: C.bg, borderRadius: 10, padding: '10px 10px', textAlign: 'center', minWidth: 0 }}><div style={{ fontSize: 19, fontWeight: 800, color: C.green }}>▲ {x.up}</div><div style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{x.vol ? `월 검색량 ${x.vol}` : '진행 키워드'}</div></div>)}</div></div>}
           </div>}
           {rows.length > 1 && summary && <div style={{ padding: '14px 30px 10px', background: C.bg, fontSize: 13, fontWeight: 800, color: C.ink }}>말씀드린 키워드</div>}
           {(rows.length > 1 || (!summary && !one)) && <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-            <colgroup><col style={{ width: 44 }} /><col /><col style={{ width: 116 }} /><col style={{ width: 104 }} /><col style={{ width: 124 }} /><col style={{ width: 132 }} /></colgroup>
+            <colgroup><col style={{ width: 16 }} /><col /><col style={{ width: 116 }} /><col style={{ width: 104 }} /><col style={{ width: 124 }} /><col style={{ width: 132 }} /></colgroup>
             <thead><tr style={{ background: '#1B2A55' }}><th style={th}></th><th style={th}>키워드</th><th style={{ ...th, textAlign: 'right' }}>월 검색량</th><th style={{ ...th, textAlign: 'center' }}>진행 규모</th><th style={{ ...th, textAlign: 'center' }}>현재 순위</th><th style={{ ...th, textAlign: 'center' }}>흐름</th></tr></thead>
             <tbody>
               {rows.length === 0 && !summary && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: C.mute, padding: '40px 14px' }}>표시할 키워드가 없습니다</td></tr>}
               {rows.map((x, i) => { const c = x.cases[0]; const [fg, bg] = rankTone(x.ro); return <tr key={x.key} style={{ background: i % 2 ? '#FAFBFD' : '#fff' }}>
-                <td style={{ ...td, color: C.mute, fontSize: 13, textAlign: 'center' }}>{i + 1}</td>
+                <td style={td}></td>
                 <td style={{ ...td, fontWeight: 800, fontSize: 16.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.k}</td>
                 <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: C.sub }}>{x.v != null ? x.v.toLocaleString('ko-KR') : '—'}</td>
                 <td style={{ ...td, textAlign: 'center', fontWeight: 600 }}>{c?.slot || '—'}</td>
