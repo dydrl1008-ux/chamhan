@@ -20,14 +20,14 @@ export default async function EmployeePage({ params }: { params: { id: string } 
     sb.from('v_leave_monthly').select('*').eq('user_id', p.id).eq('month', ms).maybeSingle(),
     sb.from('profiles').select('email,annual_leave_granted,hired_at').eq('id', p.id).maybeSingle(),
     sb.from('weekly_member_notes').select('directive,feedback,report_id,weekly_reports(week_start,status,common_directive)').eq('user_id', p.id).order('report_id', { ascending: false }).limit(6),
-    sb.from('leave_requests').select('type,start_date,end_date,status').eq('user_id', p.id).gte('end_date', ms).order('start_date', { ascending: false }).limit(10),
+    sb.from('leave_requests').select('type,start_date,end_date,status,reason').eq('user_id', p.id).gte('end_date', ms).order('start_date', { ascending: false }).limit(10),
     sb.from('plans').select('title,type,is_done,start_date,end_date').eq('user_id', p.id).eq('is_active', true).lte('start_date', meD).gte('end_date', ms).order('start_date', { ascending: false }).limit(12),
   ]);
   const granted = Number((prof as any)?.annual_leave_granted ?? 0), used = Number(yl?.annual_used ?? 0);
   const canEdit = me.role === 'admin' || me.role === 'head';
   const initial = p.name.slice(0, 1);
   const dirRows = (notes ?? []).map((n: any) => ({ week: n.weekly_reports?.week_start as string | undefined, status: n.weekly_reports?.status, common: n.weekly_reports?.common_directive, directive: n.directive, feedback: n.feedback })).filter(x => x.week);
-  const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각' };
+  const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각', meeting: '미팅(외근)', etc: '기타' };
   return (
     <div style={{ display: 'grid', gap: 22 }}>
       <a href="/overview" className="help" style={{ fontSize: 13 }}>← 직원 현황</a>
@@ -50,7 +50,7 @@ export default async function EmployeePage({ params }: { params: { id: string } 
             <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="muted">잔여 연차</span><b>{granted - used}일 <span className="cell-sub" style={{ display: 'inline' }}>(부여 {granted} · 사용 {used})</span></b></div>
             {p.pendingLeaves > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="muted">근태 승인 대기</span><Status kind="wait">{p.pendingLeaves}건</Status></div>}
           </div>
-          {(leaves ?? []).length > 0 && <div style={{ marginTop: 12 }}><div className="cell-sub" style={{ marginBottom: 4 }}>이달 근태 기록</div>{(leaves ?? []).map((l, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderTop: '1px solid var(--line)' }}><span>{leaveName[l.type] ?? l.type} <span className="cell-sub" style={{ display: 'inline' }}>{fmtMD(l.start_date)}{l.end_date !== l.start_date ? `~${fmtMD(l.end_date)}` : ''}</span></span><Status kind={l.status === 'approved' ? 'ok' : l.status === 'pending' ? 'wait' : 'off'}>{l.status === 'approved' ? '승인' : l.status === 'pending' ? '대기' : l.status}</Status></div>)}</div>}
+          {(leaves ?? []).length > 0 && <div style={{ marginTop: 12 }}><div className="cell-sub" style={{ marginBottom: 4 }}>이달 근태 기록</div>{(leaves ?? []).map((l, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderTop: '1px solid var(--line)' }}><span>{l.type === 'etc' && l.reason ? `기타(${l.reason})` : leaveName[l.type] ?? l.type} <span className="cell-sub" style={{ display: 'inline' }}>{fmtMD(l.start_date)}{l.end_date !== l.start_date ? `~${fmtMD(l.end_date)}` : ''}</span></span><Status kind={l.status === 'approved' ? 'ok' : l.status === 'pending' ? 'wait' : 'off'}>{l.status === 'approved' ? '승인' : l.status === 'pending' ? '대기' : l.status}</Status></div>)}</div>}
         </Section>
         <Section title="계획" sub={bizLabel(bm)}>
           {p.plan ? <div style={{ marginBottom: 10 }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><b>{p.plan.done}/{p.plan.total} 완료</b><span>{p.plan.total ? Math.round(p.plan.done / p.plan.total * 100) : 0}%</span></div><div className="bar"><i style={{ width: `${p.plan.total ? p.plan.done / p.plan.total * 100 : 0}%` }} /></div></div> : <Empty>이달 계획 없음</Empty>}

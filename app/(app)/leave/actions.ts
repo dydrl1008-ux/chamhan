@@ -7,6 +7,7 @@ export async function requestLeave(fd: FormData): Promise<{ ok: boolean; msg: st
   const user_id = String(fd.get('user_id') || me.id);
   const type = String(fd.get('type')); const s = String(fd.get('start_date')); const e = String(fd.get('end_date') || s);
   const reason = String(fd.get('reason') || '').trim();
+  if (type === 'etc' && !reason) return { ok: false, msg: '기타는 사유를 적어 주세요 (예: 예비군)' };
   const isFinal = me.role === 'admin' || me.role === 'head';          // 총괄·어드민: 즉시 확정
   const isManager = me.role === 'manager';                            // 팀장: 팀승인 상태로 등록, 최종 대기
   const row: Record<string, unknown> = { user_id, type, start_date: s, end_date: e, reason, requested_by: me.id, status: isFinal ? 'approved' : 'pending' };

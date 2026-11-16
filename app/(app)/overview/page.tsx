@@ -33,7 +33,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: { t
     sb.from('v_margin_monthly').select('team_id,month,margin').gte('month', sixStart),
     sb.from('kpi_daily').select('user_id,team_id,work_date,margin').gte('work_date', pms).lte('work_date', pme).limit(5000),
   ]);
-  const leaveName: Record<string, string> = { annual: '연차', half_am: '반차', half_pm: '반차', monthly: '월차', sick: '병가', absent: '결근', late: '지각' };
+  const leaveName: Record<string, string> = { annual: '연차', half_am: '반차', half_pm: '반차', monthly: '월차', sick: '병가', absent: '결근', late: '지각', meeting: '미팅(외근)', etc: '기타' };
   const st = await peopleStatus({ teamId: teamFilter || undefined, month: bm });
   const rows = people.filter(p => !teamFilter || p.team_id === teamFilter);
   const tn = (id: number | null) => teams.find(t => t.id === id)?.name ?? '-';

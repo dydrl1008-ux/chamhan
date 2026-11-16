@@ -5,7 +5,7 @@ import { bizMonthOf, bizMonthRange } from '@/lib/date/period';
 import { teamReportStatus } from '@/lib/reports';
 import { evaluatePeople, type PersonEval } from '@/lib/eval';
 
-export const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '결근', late: '지각' };
+export const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '결근', late: '지각', meeting: '미팅(외근)', etc: '기타' };
 export type PersonStatus = PersonEval & {
   teamName: string;
   att: { kind: 'leave' | 'in' | 'none'; text: string; late: boolean; out?: string };

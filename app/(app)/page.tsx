@@ -11,7 +11,7 @@ import { endingSoon, dLabel, type SlotEx } from '@/lib/slots';
 export const dynamic = 'force-dynamic';
 
 const pct = (a: number, b: number) => b ? Math.round(a / b * 100) : 0;
-const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각', meeting: '미팅(외근)' };
+const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각', meeting: '미팅(외근)', etc: '기타' };
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const dayLabel = (d: string) => `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일 (${DOW[new Date(d + 'T00:00:00Z').getUTCDay()]})`;
 const Bar = ({ p }: { p: number }) => <div className="bar"><i style={{ width: `${Math.min(100, Math.max(0, p))}%`, background: p >= 100 ? 'var(--ok)' : p >= 70 ? 'var(--wait)' : p > 0 && p < 40 ? 'var(--bad)' : undefined }} /></div>;
@@ -135,7 +135,7 @@ export default async function Home() {
     evaluatePeople(today),
     sb.from('attendance').select('user_id,check_in,is_late').eq('work_date', today),
     sb.from('kpi_daily').select('user_id,margin,margin_pending').eq('work_date', today),
-    sb.from('leave_requests').select('user_id,type').eq('status', 'approved').lte('start_date', today).gte('end_date', today),
+    sb.from('leave_requests').select('user_id,type,reason').eq('status', 'approved').lte('start_date', today).gte('end_date', today),
     sb.from('leave_requests').select('user_id,type,team_approved_at,start_date').eq('status', 'pending'),
     sb.from('monthly_targets').select('user_id,margin').eq('month', bm + '-01'),
     sb.from('weekly_reports').select('team_id,week_start,week_end,status').gte('week_start', wsFrom),
@@ -161,7 +161,7 @@ export default async function Home() {
   const wrMissing = wrTeams.filter(t => wrCur(t.id)?.status !== 'submitted');
   const tgOf = (id: string) => Number(targets?.find(t => t.user_id === id)?.margin ?? 0);
   const todayM = (id: string) => Number(kpiT?.find(k => k.user_id === id)?.margin ?? 0);
-  const attOf = (x: PersonEval) => { const l = lvToday?.find(y => y.user_id === x.id); const a = att?.find(y => y.user_id === x.id); return l ? <Status kind="off">{leaveName[l.type] ?? '휴가'}</Status> : a ? <Status kind={a.is_late ? 'wait' : 'ok'}>{a.check_in?.slice(0, 5)}{a.is_late ? ' 지각' : ''}</Status> : <Status kind="bad">미출근</Status>; };
+  const attOf = (x: PersonEval) => { const l = lvToday?.find(y => y.user_id === x.id); const a = att?.find(y => y.user_id === x.id); return l ? <Status kind="off">{l.type === 'etc' && l.reason ? `기타(${String(l.reason).slice(0, 10)})` : leaveName[l.type] ?? '휴가'}</Status> : a ? <Status kind={a.is_late ? 'wait' : 'ok'}>{a.check_in?.slice(0, 5)}{a.is_late ? ' 지각' : ''}</Status> : <Status kind="bad">미출근</Status>; };
   const kpiOf = (x: PersonEval) => kpiT?.some(k => k.user_id === x.id) ? <Status kind="ok">제출</Status> : <Status kind="bad">미제출</Status>;
   const risk = staff.map(x => { const t = tgOf(x.id); const r = t ? pct(x.monthMargin, t) : null; const items: { kind: 'ok' | 'wait' | 'bad'; text: string }[] = [];
     if (x.promo?.ok) items.push({ kind: 'ok', text: `진급 기준 도달 (${x.promo.c.from_position} → ${x.promo.c.to_position})` });
@@ -251,7 +251,7 @@ export default async function Home() {
             <div style={{ display: 'grid', gap: 6, fontSize: 14 }}>
               <div><Status kind={noAtt.length ? 'bad' : 'ok'}>미출근 {noAtt.length}</Status>{noAtt.length > 0 && <span className="cell-sub" style={{ display: 'inline', marginLeft: 8 }}>{noAtt.map(x => x.name).join(' · ')}</span>}</div>
               <div><Status kind={lateList.length ? 'wait' : 'ok'}>지각 {lateList.length}</Status>{lateList.length > 0 && <span className="cell-sub" style={{ display: 'inline', marginLeft: 8 }}>{lateList.map(a => `${nm(a.user_id)} ${a.check_in?.slice(0, 5)}`).join(' · ')}</span>}</div>
-              <div><Status kind="off">휴가 {lvList.length}</Status>{lvList.length > 0 && <span className="cell-sub" style={{ display: 'inline', marginLeft: 8 }}>{lvList.map(l => `${nm(l.user_id)} ${leaveName[l.type] ?? ''}`).join(' · ')}</span>}</div>
+              <div><Status kind="off">휴가 {lvList.length}</Status>{lvList.length > 0 && <span className="cell-sub" style={{ display: 'inline', marginLeft: 8 }}>{lvList.map(l => `${nm(l.user_id)} ${l.type === 'etc' && l.reason ? `기타(${l.reason})` : leaveName[l.type] ?? ''}`).join(' · ')}</span>}</div>
               <div><Status kind={noKpi.length ? 'wait' : 'ok'}>KPI 미제출 {noKpi.length}</Status>{noKpi.length > 0 && <span className="cell-sub" style={{ display: 'inline', marginLeft: 8 }}>{noKpi.map(x => x.name).join(' · ')}</span>}</div>
               {risk.length > 0 && <div style={{ borderTop: '1px solid var(--line-soft)', paddingTop: 8, marginTop: 2, display: 'grid', gap: 4 }}>{risk.slice(0, 4).map((r, i) => <div key={i}><Status kind={r.kind}>{r.name}</Status> <span className="cell-sub" style={{ display: 'inline' }}>{r.text}</span></div>)}</div>}
             </div>

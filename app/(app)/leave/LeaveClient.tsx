@@ -7,11 +7,11 @@ import type { Profile } from '@/lib/auth/session';
 type P = { id: string; name: string; team_id: number | null; role: string; position: string | null; annual_leave_granted: number; monthly_leave_granted: number; hired_at: string | null };
 type L = { id: number; user_id: string; type: string; start_date: string; end_date: string; days: number; reason: string | null; status: string; source: string; team_approved_at: string | null };
 type Agg = { user_id: string; month?: string; year?: number; late_cnt: number; absent_cnt: number; sick_cnt: number; annual_cnt: number; half_cnt: number; monthly_cnt: number; annual_used: number; monthly_used: number };
-const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각', meeting: '미팅(외근)' };
+const leaveName: Record<string, string> = { annual: '연차', half_am: '반차(오전)', half_pm: '반차(오후)', monthly: '월차', sick: '병가', absent: '무단결근', late: '지각', meeting: '미팅(외근)', etc: '기타' };
 const stName: Record<string, [string, React.CSSProperties]> = { pending: ['대기', { background: '#FDF1DD', color: '#D97706' }], approved: ['승인', { background: 'var(--ok-soft, #E7F7EC)', color: 'var(--ok)' }], rejected: ['반려', { background: 'var(--bad-soft)', color: 'var(--bad)' }], cancelled: ['취소', { background: 'var(--bg)', color: 'var(--muted)' }] };
 
 export default function LeaveClient({ me, people, leaves, monthly, yearly, teams, month, range, today, selUser }: { me: Profile; people: P[]; leaves: L[]; monthly: Agg[]; yearly: Agg[]; teams: { id: number; name: string }[]; month: string; range: [string, string]; today: string; selUser: string }) {
-  const r = useRouter(); const [msg, setMsg] = useState('');
+  const r = useRouter(); const [msg, setMsg] = useState(''); const [ty0, setTy0] = useState('annual');
   const canManage = me.role !== 'staff';
   const canSeeAll = me.role === 'admin' || me.role === 'head';
   const isFinal = canSeeAll;
@@ -78,9 +78,9 @@ export default function LeaveClient({ me, people, leaves, monthly, yearly, teams
           <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{canManage ? '근태 등록' : '휴가 신청'}</h3>
           <form action={async fd => { const x = await requestLeave(fd); { notify(x.msg); setMsg(x.msg); }; if (x.ok) r.refresh(); }} style={{ display: 'grid', gap: 10 }}>
             {canManage && <select name="user_id" defaultValue={one?.id ?? pool[0]?.id}>{pool.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
-            <select name="type">{Object.entries(leaveName).filter(([k]) => canManage || !['absent', 'late'].includes(k)).map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
+            <select name="type" value={ty0} onChange={e => setTy0(e.target.value)}>{Object.entries(leaveName).filter(([k]) => canManage || !['absent', 'late'].includes(k)).map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}><input type="date" name="start_date" defaultValue={today} required /><input type="date" name="end_date" defaultValue={today} /></div>
-            <input name="reason" placeholder="사유" />
+            <input name="reason" placeholder={ty0 === 'etc' ? '사유 (필수) — 예: 예비군, 민방위, 경조사' : '사유'} required={ty0 === 'etc'} />
             <button className="btn">{isFinal ? '등록 (즉시 확정)' : canManage ? '등록 (최종 승인 대기)' : '신청'}</button>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>{isFinal ? '총괄·어드민 등록은 바로 확정됩니다.' : canManage ? '팀장 등록은 팀 승인 상태로 들어가고 총괄 최종 승인 후 확정. 무단결근·지각은 여기서만 등록.' : '팀장 승인 → 총괄 최종 승인 후 반영. 잔여 연차를 넘으면 신청이 막힙니다.'}</div>
           </form>
