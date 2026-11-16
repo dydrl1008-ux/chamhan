@@ -125,7 +125,7 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
         <span className="cell-sub" style={{ alignSelf: 'center' }}>{rows.length ? `${rows.length}개 키워드` : '왼쪽에서 키워드를 넣으면 표가 만들어집니다'}</span>
       </div>
       <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
-        <div ref={sheet} style={{ width: 760, background: '#fff', fontFamily: "'BriefPretendard','Pretendard',system-ui,sans-serif", color: C.ink, border: `1px solid ${C.line}` }}>
+        <div ref={sheet} style={{ width: 760, background: '#fff', fontFamily: "'BriefPretendard','Pretendard',system-ui,sans-serif", color: C.ink, border: `1px solid ${C.line}`, wordBreak: 'keep-all', overflowWrap: 'break-word' }}>
           <div style={{ background: C.navy, color: '#fff', padding: '26px 30px 22px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#9FB2E8', letterSpacing: '.08em' }}>KEYWORD BRIEFING{brand.trim() ? ` · ${brand.trim()}` : ''}</div>
@@ -139,8 +139,8 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
               {one.v != null && <div style={{ fontSize: 15, color: C.sub }}>월 검색량 <b style={{ color: C.ink, fontSize: 18 }}>{one.v.toLocaleString('ko-KR')}</b>회</div>}</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 14 }}>
               {([['진행 규모', one.cases[0]?.slot || '—', C.ink, C.bg], ['현재 순위', one.cases[0]?.rank ?? '—', rankTone(one.ro)[0], rankTone(one.ro)[1]], ['등록 대비', one.cases[0]?.trend === '하락' ? '조정' : one.cases[0]?.trend ? '상승·유지' : '—', one.cases[0]?.trend === '하락' ? C.sub : C.green, one.cases[0]?.trend === '하락' ? C.bg : C.greenSoft]] as [string, string, string, string][]).map(([l, v, fg, bg]) => <div key={l} style={{ background: bg, borderRadius: 14, padding: '14px 16px' }}><div style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}>{l}</div><div style={{ fontSize: 24, fontWeight: 800, color: fg, letterSpacing: '-.02em', marginTop: 2 }}>{v}</div></div>)}</div>
-            <div style={{ fontSize: 15.5, lineHeight: 1.65, color: C.text, marginTop: 14 }}>「{one.k}」{josa(one.k, '은/는')} 지금 저희가 진행하고 있는 키워드입니다. 현재 <b style={{ color: C.ink }}>{one.cases[0]?.rank}</b>에 있으며, 진행 규모는 <b style={{ color: C.ink }}>{one.cases[0]?.slot || '확인 후 안내'}</b> 구간입니다.</div>
-            {one.cases.length > 1 && <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>{one.cases.slice(1, 4).map((c, i) => <div key={i} style={{ display: 'flex', gap: 10, fontSize: 14, color: C.sub, padding: '8px 12px', background: C.bg, borderRadius: 10 }}><span>같은 키워드 다른 진행 건</span><b style={{ color: C.text }}>{c.slot || '—'}</b><span>·</span><b style={{ color: C.text }}>{c.rank}</b>{c.trend && c.trend !== '하락' && <span style={{ color: C.green, fontWeight: 600 }}>▲ 상승·유지</span>}</div>)}</div>}
+            <div style={{ fontSize: 15.5, lineHeight: 1.65, color: C.text, marginTop: 14 }}><div>「{one.k}」{josa(one.k, '은/는')} 지금 저희가 진행하고 있는 키워드입니다.</div><div>현재 <b style={{ color: C.ink }}>{one.cases[0]?.rank}</b>에 있으며, 진행 규모는 <b style={{ color: C.ink }}>{one.cases[0]?.slot || '확인 후 안내'}</b> 구간입니다.</div></div>
+            {one.cases.length > 1 && <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>{one.cases.slice(1, 4).map((c, i) => <div key={i} style={{ display: 'flex', gap: 10, fontSize: 14, color: C.sub, padding: '8px 12px', background: C.bg, borderRadius: 10 }}><span style={{ minWidth: 150 }}>같은 키워드 다른 진행 건</span><b style={{ color: C.text, minWidth: 70 }}>{c.slot || '—'}</b><b style={{ color: C.text, minWidth: 84 }}>{c.rank}</b>{c.trend && c.trend !== '하락' && <span style={{ color: C.green, fontWeight: 600 }}>▲ 상승·유지</span>}</div>)}</div>}
           </div>}
           {one && summary && <div style={{ padding: '16px 30px 0', background: '#fff', fontSize: 13, fontWeight: 800, color: C.ink }}>저희가 진행 중인 키워드 전체 기준</div>}
           {summary && (show.dist || show.keep || show.band || show.risers) && <div style={{ padding: one ? '12px 30px 18px' : '20px 30px 6px', display: 'grid', gap: 12, background: one ? '#fff' : C.bg }}>
@@ -173,7 +173,8 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
             </tbody>
           </table>}
           <div style={{ padding: '16px 30px 18px', background: C.bg, display: 'grid', gap: 6 }}>
-            <div style={{ fontSize: 15, color: C.text, lineHeight: 1.6 }}>상품 URL을 보내 주시면 현재 순위부터 확인해서 안내드리겠습니다.{who.trim() ? <b style={{ color: C.ink }}> {who.trim()}</b> : null}</div>
+            <div style={{ fontSize: 15, color: C.text, lineHeight: 1.6 }}>상품 URL을 보내 주시면 현재 순위부터 확인해서 안내드리겠습니다.</div>
+            {who.trim() && <div style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>{who.trim()}</div>}
             <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.6 }}>비율과 구간으로 표기했습니다 · 상승·유지는 등록 시점 대비 · 순위는 매일 바뀔 수 있습니다</div></div>
         </div>
       </div>
