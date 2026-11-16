@@ -6,7 +6,7 @@ export type BriefRow = { k: string; v: number | null; s: number | null; r: numbe
 export type Buckets = { slots: number[]; ranks: number[] };
 export const DEFAULT_BUCKETS: Buckets = { slots: [5, 10, 20, 30, 50], ranks: [5, 10, 20, 40, 100] };
 export type BriefCase = { slot: string; rank: string; best: string; trend: '상승' | '유지' | '하락' | '' };
-export type BriefKw = { k: string; key: string; vol: string; v: number | null; ro: number; cases: BriefCase[]; more: number; line: string };   // v 검색량(공개 수치) · ro 순위 구간 순서(정렬용)
+export type BriefKw = { k: string; key: string; vol: string; v: number | null; ro: number; sb: string; cases: BriefCase[]; more: number; line: string };   // v 검색량(공개 수치) · ro 순위 구간 순서(정렬용)
 
 export const normKw = (t: string) => t.toLowerCase().replace(/\s+/g, '');
 const clean = (a: number[]) => [...new Set(a.filter(n => Number.isFinite(n) && n > 0).map(n => Math.round(n)))].sort((x, y) => x - y);
@@ -30,7 +30,7 @@ export function toBrief(rows: BriefRow[], bk: Buckets, maxCases = 8): BriefKw[] 
     const top = uniq[0]; const vol = volLabel(rs.find(r => r.v != null)?.v ?? null);
     const line = top ? `「${rs[0].k}」 진행 사례 있음 — ${top.slot ? `${top.slot} 구간으로 ` : ''}현재 ${top.rank}${top.trend === '상승' ? ' (등록 대비 상승)' : ''}` : '';
     const r0 = rs[0].r; const ro = !r0 || r0 <= 0 ? 999 : (bk.ranks.findIndex(h => r0 <= h) + 1 || 998);
-    out.push({ k: rs[0].k, key, vol, v: rs.find(r => r.v != null)?.v ?? null, ro, cases: uniq.slice(0, maxCases), more: Math.max(0, uniq.length - maxCases), line });
+    out.push({ k: rs[0].k, key, vol, v: rs.find(r => r.v != null)?.v ?? null, ro, sb: slotBandOf(rs[0].s), cases: uniq.slice(0, maxCases), more: Math.max(0, uniq.length - maxCases), line });
   }
   return out.sort((a, b) => a.k.localeCompare(b.k, 'ko'));
 }
@@ -40,6 +40,7 @@ export type Pct = { label: string; pct: number };
 export type BriefSummary = { dist: Pct[]; keep: number | null; byVol: Pct[]; bySlot: Pct[]; risers: { vol: string; up: number }[] };   // 급상승은 키워드 이름 없이 검색량 구간으로만
 const pct = (a: number, b: number) => b > 0 ? Math.round(1000 * a / b) / 10 : 0;
 export const volBandOf = (v: number | null) => v == null ? '' : v < 10000 ? '1만 미만' : v < 30000 ? '1~3만' : v < 50000 ? '3~5만' : v < 100000 ? '5~10만' : '10만 이상';
+export const slotBandOf = (n: number | null) => !n ? '' : n <= 2 ? '1~2개' : n <= 5 ? '3~5개' : n <= 10 ? '6~10개' : n <= 20 ? '11~20개' : '21개 이상';
 const MIN_N = 5;   // 표본이 너무 적은 구간은 숨김 (2건 중 2건 = 100% 같은 숫자 방지)
 export function summarize(rows: BriefRow[], bk: Buckets): BriefSummary {
   const n = rows.length;
