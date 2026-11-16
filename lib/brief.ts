@@ -1,8 +1,7 @@
 // 영업 브리핑 — 셀팜 진행 현황을 '구간'으로만 보여 준다 (슬롯 10개 → "5~10개", 3위 → "5위 이내"). 상품·MID·파트너는 저장도 표시도 하지 않는다.
-export const BRIEF_VIEWERS = ['dydrl1008@naver.com'];   // 일단 이 계정만 공개
 export const BRIEF_ADMINS = ['dydrl1008@naver.com'];    // 진행 현황 넣기·구간 설정은 이 계정만 (나중에 다른 직원에게 화면을 열어도 원본은 못 넣고 못 봄)
 export const canBriefEdit = (me: { email?: string | null } | null) => !!me?.email && BRIEF_ADMINS.includes(me.email.toLowerCase());
-export const canBrief = (me: { email?: string | null } | null) => !!me?.email && BRIEF_VIEWERS.includes(me.email.toLowerCase());
+export const canBrief = (me: { email?: string | null } | null) => !!me;   // 화면은 로그인한 직원 전체 공개 — 원본 넣기·구간 설정만 BRIEF_ADMINS
 
 export type BriefRow = { k: string; v: number | null; s: number | null; r: number | null; b: number | null; d: number | null; p?: number | null };   // d 등록 대비 · p 전일 대비 (+상승)
 export type Buckets = { slots: number[]; ranks: number[]; good?: number };   // good: 이 순위 안에 있는 건만 브리핑에 낸다 (좋은 데이터만)
