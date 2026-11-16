@@ -48,7 +48,9 @@ export function summarize(rows: BriefRow[], bk: Buckets): BriefSummary {
   const dist = ['1~10위', '11~40위', '41~100위', '100위 밖'].map((label, i) => ({ label, pct: pct(cnt[i], n) }));
   const live = rows.filter(r => r.d != null); const ok = (r: BriefRow) => (r.d ?? 0) >= 0;   // 상승·유지 묶음
   const keep = live.length ? pct(live.filter(ok).length, live.length) : null;
-  const group = (labels: string[], idx: (r: BriefRow) => number) => labels.map((label, i) => { const g = live.filter(r => idx(r) === i); return { label, pct: pct(g.filter(ok).length, g.length), n: g.length }; }).filter(x => x.n >= MIN_N).map(({ label, pct }) => ({ label, pct }));
+  // 구간별로는 '1페이지(40위 이내)에 있는 비율' — 상승·유지 비율은 구간마다 거의 같아서(87~89%) 차이를 보여 주지 못한다
+  const page1 = (r: BriefRow) => !!r.r && r.r > 0 && r.r <= 40;
+  const group = (labels: string[], idx: (r: BriefRow) => number) => labels.map((label, i) => { const g = rows.filter(r => idx(r) === i); return { label, pct: pct(g.filter(page1).length, g.length), n: g.length }; }).filter(x => x.n >= MIN_N).map(({ label, pct }) => ({ label, pct }));
   const byVol = group(['1만 미만', '1~3만', '3~5만', '5~10만', '10만 이상'], r => r.v == null ? -1 : r.v < 10000 ? 0 : r.v < 30000 ? 1 : r.v < 50000 ? 2 : r.v < 100000 ? 3 : 4);
   const bySlot = group(['1~2개', '3~5개', '6~10개', '11~20개', '21개 이상'], r => !r.s ? -1 : r.s <= 2 ? 0 : r.s <= 5 ? 1 : r.s <= 10 ? 2 : r.s <= 20 ? 3 : 4);
   const seen = new Set<string>();

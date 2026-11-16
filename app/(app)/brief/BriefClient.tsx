@@ -113,7 +113,7 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
         <label>슬롯 구간 경계<input value={slots} onChange={e => setSlots(e.target.value)} placeholder="5, 10, 20, 30, 50" /></label>
         <label>순위 구간 경계<input value={ranks} onChange={e => setRanks(e.target.value)} placeholder="5, 10, 20, 40, 100" /></label>
         <div className="cell-sub">예) 슬롯 경계 5, 10 → 10개는 「5~10개」 · 순위 경계 5, 10 → 3위·5위는 「5위 이내」</div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>{([['dist', '순위 분포'], ['keep', '상승·유지 비율'], ['band', '구간별 비율'], ['risers', '급상승']] as const).map(([k, l]) => <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><input type="checkbox" style={{ width: 'auto' }} checked={show[k]} onChange={e => setShow(v => ({ ...v, [k]: e.target.checked }))} />{l}</label>)}</div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>{([['dist', '순위 분포'], ['keep', '상승·유지 비율'], ['band', '구간별 1페이지 비율'], ['risers', '급상승']] as const).map(([k, l]) => <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><input type="checkbox" style={{ width: 'auto' }} checked={show[k]} onChange={e => setShow(v => ({ ...v, [k]: e.target.checked }))} />{l}</label>)}</div>
         <button type="button" className="btn ghost" disabled={!!busy} onClick={saveBk}>{busy === 'bk' ? '저장 중…' : '구간 저장'}</button>
       </div>
     </div>
@@ -151,8 +151,8 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
               {show.keep && summary.keep != null && <div style={{ ...box, background: C.greenSoft, borderColor: '#BFE8D6', display: 'grid', alignContent: 'center' }}><div style={{ ...cap, color: C.green }}>등록 대비 상승·유지</div><div style={{ fontSize: 44, fontWeight: 800, color: C.green, letterSpacing: '-.03em', lineHeight: 1.1, marginTop: 4 }}>{pc(summary.keep)}</div><div style={{ fontSize: 12.5, color: C.sub, marginTop: 4 }}>진행 중인 키워드 기준</div></div>}
             </div>}
             {show.band && (summary.byVol.length > 0 || summary.bySlot.length > 0) && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {summary.byVol.length > 0 && <div style={box}><div style={cap}>월 검색량별 상승·유지{one && volBand(one.v) ? ` · 이 키워드는 ${volBand(one.v)}` : ''}</div><Bars items={summary.byVol} hi={one ? volBand(one.v) : undefined} /></div>}
-              {summary.bySlot.length > 0 && <div style={box}><div style={cap}>진행 규모별 상승·유지</div><Bars items={summary.bySlot} /></div>}
+              {summary.byVol.length > 0 && <div style={box}><div style={cap}>월 검색량별 1페이지 비율{one && volBand(one.v) ? ` · 이 키워드는 ${volBand(one.v)}` : ''}</div><Bars items={summary.byVol} hi={one ? volBand(one.v) : undefined} /></div>}
+              {summary.bySlot.length > 0 && <div style={box}><div style={cap}>진행 규모별 1페이지 비율</div><Bars items={summary.bySlot} /></div>}
             </div>}
             {show.risers && summary.risers.length > 0 && <div style={box}><div style={cap}>오늘 순위가 크게 오른 키워드 (전일 대비)</div>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${summary.risers.length}, 1fr)`, gap: 8, marginTop: 10 }}>{summary.risers.map((x, i) => <div key={i} style={{ background: C.bg, borderRadius: 10, padding: '10px 10px', textAlign: 'center', minWidth: 0 }}><div style={{ fontSize: 19, fontWeight: 800, color: C.green }}>▲ {x.up}</div><div style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{x.vol ? `월 검색량 ${x.vol}` : '진행 키워드'}</div></div>)}</div></div>}
@@ -175,7 +175,7 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
           <div style={{ padding: '16px 30px 18px', background: C.bg, display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 15, color: C.text, lineHeight: 1.6 }}>상품 URL을 보내 주시면 현재 순위부터 확인해서 안내드리겠습니다.</div>
             {who.trim() && <div style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>{who.trim()}</div>}
-            <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.6 }}>비율과 구간으로 표기했습니다 · 상승·유지는 등록 시점 대비 · 순위는 매일 바뀔 수 있습니다</div></div>
+            <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.6 }}>비율과 구간으로 표기했습니다 · 1페이지는 40위 이내 · 상승·유지는 등록 시점 대비 · 순위는 매일 바뀔 수 있습니다</div></div>
         </div>
       </div>
     </div>
