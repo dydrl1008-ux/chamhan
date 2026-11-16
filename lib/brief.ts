@@ -42,7 +42,7 @@ export function toBrief(rows: BriefRow[], bk: Buckets, maxCases = 8): BriefKw[] 
 
 // ── 전체 요약 (이미지 표 위쪽) — 전부 %로만. 건수·합계는 내보내지 않아 전체 수량을 짐작할 수 없게 한다 ──
 export type Pct = { label: string; pct: number };
-export type BriefSummary = { dist: Pct[]; keep: number | null; byVol: Pct[]; bySlot: Pct[]; risers: { vol: string; up: number }[] };   // 급상승은 키워드 이름 없이 검색량 구간으로만
+export type BriefSummary = { dist: Pct[]; keep: number | null; byVol: Pct[]; bySlot: Pct[]; risers: { vol: string; up: number }[]; wins: { key: string; vol: string; slot: string; rank: string; up: number }[] };   // wins: 검색량 높은 키워드 중 등록 후 많이 오른 건 (키워드 이름 없이)   // 급상승은 키워드 이름 없이 검색량 구간으로만
 const pct = (a: number, b: number) => b > 0 ? Math.round(1000 * a / b) / 10 : 0;
 export const volBandOf = (v: number | null) => v == null ? '' : v < 10000 ? '1만 미만' : v < 30000 ? '1~3만' : v < 50000 ? '3~5만' : v < 100000 ? '5~10만' : '10만 이상';
 export const slotBandOf = (n: number | null) => !n ? '' : n <= 2 ? '1~2개' : n <= 5 ? '3~5개' : n <= 10 ? '6~10개' : n <= 20 ? '11~20개' : '21개 이상';
@@ -63,5 +63,10 @@ export function summarize(rows: BriefRow[], bk: Buckets): BriefSummary {
   const bySlot = group(slotLabels, r => !r.s ? -1 : slotLabels.indexOf(slotLabel(r.s, bk.slots)));
   const seen = new Set<string>();
   const risers = rows.filter(r => (r.p ?? 0) > 0).sort((a, b) => (b.p ?? 0) - (a.p ?? 0)).filter(r => { const k = normKw(r.k); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 5).map(r => ({ vol: volBandOf(r.v), up: r.p ?? 0 }));
-  return { dist, keep, byVol, bySlot, risers };
+  // 검색량 높은 키워드 중 '등록 후 많이 올라 지금 10위 안'인 건 — 키워드 이름은 내보내지 않고 검색량도 어림값으로만
+  const approx = (v: number) => v >= 100000 ? `약 ${Math.round(v / 100000) * 10}만` : v >= 10000 ? `약 ${Math.round(v / 10000)}만` : `약 ${Math.max(1, Math.round(v / 1000))}천`;
+  const pick = (minVol: number) => { const sn = new Set<string>(); return rows.filter(r => (r.v ?? 0) >= minVol && !!r.r && r.r <= 10 && (r.d ?? 0) > 0).sort((a, b) => (b.d ?? 0) - (a.d ?? 0)).filter(r => { const k = normKw(r.k); if (sn.has(k)) return false; sn.add(k); return true; }).slice(0, 8); };
+  let w = pick(50000); if (w.length < 4) w = pick(30000); if (w.length < 4) w = pick(10000);
+  const wins = w.map(r => ({ key: normKw(r.k), vol: approx(r.v ?? 0), slot: slotLabel(r.s, bk.slots), rank: rankLabel(r.r, bk.ranks), up: r.d ?? 0 }));
+  return { dist, keep, byVol, bySlot, risers, wins };
 }
