@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { ingestAi, queueMissingRenders } from '@/lib/pv3Tasks';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { autoDiscover } from '@/lib/kwDiscover';
 
 const KEEP_DAYS = 30;
 /** 30일 지난 제안서 이미지 삭제 — 한 번에 최대 500개. 밀린 게 없으면 6시간에 한 번만 확인 (0080 SQL 필요, 없으면 아무것도 안 함) */
@@ -26,6 +27,7 @@ export async function GET(req: Request) {
   try {
     const r = await ingestAi(); const renders = await queueMissingRenders();
     let gc = 0; try { gc = await gcImages(); } catch { /* 정리 실패는 발송에 영향 없음 */ }
-    return NextResponse.json({ ok: true, ...r, renders, gc });
+    let kw = ''; try { kw = await autoDiscover(); } catch (e: any) { kw = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 키워드 발굴(자동) — 15분에 한 번, 실패해도 발송에 영향 없음
+    return NextResponse.json({ ok: true, ...r, renders, gc, kw });
   } catch (e: any) { return NextResponse.json({ ok: false, msg: e.message }, { status: 500 }); }
 }

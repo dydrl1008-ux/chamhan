@@ -1,7 +1,8 @@
 'use server';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { keywordVolumes, adConfigured } from '@/lib/naverAd';
+import { adConfigured } from '@/lib/naverAd';
+import { discoverCore, kwAutoState, kwAutoSet, type KwAuto } from '@/lib/kwDiscover';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
 export type PoolRow = { keyword: string; vol: number; seed: string };
 const head = async () => { const me = await getProfile(); return me && me.role === 'head' ? me : null; };
@@ -34,29 +35,13 @@ export async function poolState(): Promise<R<{ wait: number; taken: number; have
     return { ok: true, msg: '', wait: w ?? 0, taken: t ?? 0, have: set.size, top: await waiting(sb, set, 60), ad: adConfigured() };
   } catch (e: any) { return { ok: false, msg: String(e?.message ?? e) }; }
 }
-/** 연관 키워드 찾기 — 씨앗(직접 입력, 없으면 수집된 키워드 중 무작위 25개)을 5개씩 묶어 검색광고 API 5번 호출. 이미 수집·후보에 있는 건 빼고 쌓는다 */
 export async function discover(seedText: string, minVol: number): Promise<R<{ added: number; seen: number; seeds: string[] }>> {
   const me = await head(); if (!me) return { ok: false, msg: '총괄만' };
-  if (!adConfigured()) return { ok: false, msg: '검색광고 API 환경변수가 없습니다 (NAVER_AD_CUSTOMER_ID / NAVER_AD_API_KEY / NAVER_AD_SECRET)' };
-  const sb = supabaseAdmin(); const { set: have, list } = await haveSet(sb); const min = Math.max(0, Math.round(Number(minVol) || 0));
-  let seeds = Array.from(new Set(String(seedText ?? '').split(/[\n,]+/).map(s => s.trim()).filter(Boolean))).slice(0, 25);
-  if (!seeds.length) { const pool = [...list]; for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; } seeds = pool.slice(0, 25); }
-  if (!seeds.length) return { ok: false, msg: '씨앗 키워드가 없습니다 — 위 칸에 키워드를 몇 개 적어 주세요' };
-  const found = new Map<string, { keyword: string; vol: number; seed: string }>(); let seen = 0; const errs: string[] = [];
-  for (let i = 0; i < seeds.length; i += 5) {
-    const g = seeds.slice(i, i + 5);
-    try { for (const k of await keywordVolumes(g)) { seen++; const kw = k.keyword.trim(); const key = norm(kw); if (!kw || kw.length > 20 || k.total < min || have.has(key) || found.has(key)) continue; found.set(key, { keyword: kw, vol: k.total, seed: g[0] }); } }
-    catch (e: any) { errs.push(String(e?.message ?? e).slice(0, 80)); }
-    await new Promise(r => setTimeout(r, 400));
-  }
-  if (!found.size) return errs.length ? { ok: false, msg: '검색광고 API 오류: ' + errs[0] } : { ok: true, msg: `새 키워드 없음 (연관 ${seen}개 확인 — 이미 있거나 검색량 ${min} 미만)`, added: 0, seen, seeds };
-  const rows = [...found.values()]; let added = 0;
-  for (let i = 0; i < rows.length; i += 500) {
-    const { data, error } = await sb.from('mail_kw_pool').upsert(rows.slice(i, i + 500), { onConflict: 'keyword', ignoreDuplicates: true }).select('keyword');
-    if (error) return { ok: false, msg: needSql(error.message) }; added += data?.length ?? 0;
-  }
-  return { ok: true, msg: `새 키워드 ${added}개 추가 (연관 ${seen}개 확인${errs.length ? ` · 일부 실패 ${errs.length}` : ''})`, added, seen, seeds };
+  const r = await discoverCore(supabaseAdmin(), String(seedText ?? '').split(/[\n,]+/), minVol);
+  return r.ok ? { ok: true, msg: r.msg, added: r.added, seen: r.seen, seeds: r.seeds } : { ok: false, msg: r.msg };
 }
+export async function autoState(): Promise<KwAuto | null> { const me = await head(); if (!me) return null; return kwAutoState(supabaseAdmin()); }
+export async function autoSet(v: { on?: boolean; minVol?: number }): Promise<R> { const me = await head(); if (!me) return { ok: false, msg: '총괄만' }; await kwAutoSet(supabaseAdmin(), v); return { ok: true, msg: '저장됨' }; }
 /** 검색량 높은 순으로 n개 가져가기 — 가져간 것으로 표시 */
 export async function take(n: number): Promise<R<{ list: PoolRow[] }>> {
   const me = await head(); if (!me) return { ok: false, msg: '총괄만' };
