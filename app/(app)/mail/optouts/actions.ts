@@ -12,6 +12,14 @@ export async function addOptouts(text: string): Promise<R> {
   if (error) return { ok: false, msg: error.message };
   revalidatePath('/mail/optouts'); return { ok: true, msg: `${list.length}개 추가됨 (이미 있던 주소는 그대로)` };
 }
+export async function saveUnsubUrl(raw: string): Promise<R> {
+  const me = await getProfile(); if (!can(me)) return { ok: false, msg: '권한 없음' };
+  let v = String(raw ?? '').trim().replace(/\/+$/, ''); if (v && !/^https?:\/\//i.test(v)) v = 'https://' + v;
+  if (v && !/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s]*)?$/i.test(v)) return { ok: false, msg: '주소 형식을 확인해 주세요 (예: https://이름-unsub.vercel.app)' };
+  const { error } = await supabaseAdmin().from('app_settings').upsert({ key: 'unsub_url', value: v, updated_at: new Date().toISOString() });
+  if (error) return { ok: false, msg: error.message };
+  revalidatePath('/mail/optouts'); return { ok: true, msg: v ? '전용 주소 저장됨' : '전용 주소 지움' };
+}
 export async function removeOptout(email: string): Promise<R> {
   const me = await getProfile(); if (!can(me)) return { ok: false, msg: '권한 없음' };
   const { error } = await supabaseAdmin().from('email_optouts').delete().eq('email', String(email ?? '').toLowerCase());

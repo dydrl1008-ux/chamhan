@@ -33,6 +33,12 @@ export function clientIp(req: NextRequest) {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // 0) 수신거부 전용 주소(이름에 unsub·optout 이 든 도메인, 또는 UNSUB_HOSTS) — 수신거부 페이지만 보여 주고 워크허브 화면은 전부 없는 페이지로
+  const host = (req.headers.get('host') ?? '').toLowerCase().split(':')[0];
+  if (/unsub|optout/.test(host) || (process.env.UNSUB_HOSTS ?? '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean).includes(host)) {
+    if (pathname === '/') { const u = req.nextUrl.clone(); u.pathname = '/unsub'; return NextResponse.rewrite(u); }
+    return new NextResponse('Not Found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8', 'x-robots-tag': 'noindex' } });
+  }
   const ip = clientIp(req);
 
   // 1) IP 차단 — 로그인 전 단계에서 먼저. /blocked 자체와 정적파일은 제외

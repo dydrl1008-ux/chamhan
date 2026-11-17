@@ -11,5 +11,6 @@ export default async function OptoutsPage() {
     const { data, error } = await sb.from('email_optouts').select('email,code,created_at').order('created_at', { ascending: false }).range(from, from + 999);
     if (error || !data?.length) break; rows.push(...data); if (data.length < 1000) break;
   }
-  return <OptoutsClient rows={rows} />;
+  const { data: st } = await sb.from('app_settings').select('value').eq('key', 'unsub_url').maybeSingle();
+  return <OptoutsClient rows={rows} savedUrl={String(st?.value ?? '').replace(/"/g, '')} />;
 }
