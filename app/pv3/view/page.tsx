@@ -4,6 +4,7 @@ import { getProfile } from '@/lib/auth/session';
 import Pv3Doc, { PV3_CSS, PV3_FONT, PV3_PAGES, PV3_COMMON_PAGES } from '@/components/Pv3Doc';
 import { computeStore, fallbackKwAi, fallbackStoreAi, PV3_DATA_VER, type KwData, type KwAi, type StoreData, type StoreAi } from '@/lib/proposalV3';
 import { BRAND } from '@/lib/proposalDoc';
+import PdfButton from './PdfButton';
 export const dynamic = 'force-dynamic';
 
 // 키워드 데이터(상위 100 통째)는 크다 — 렌더 PC 가 업체마다 7장씩 열 때마다 DB 에서 새로 꺼내면 DB 가 버티지 못한다(2026-11-17 522 장애).
@@ -43,8 +44,8 @@ export default async function Pv3View({ searchParams }: { searchParams: { kind?:
   const kakao = await loadKakao(sb);
   const brand = { name: BRAND.name, email: BRAND.email, kakao: kakao || 'https://open.kakao.com/o/saz4cuKi' };
   return <html lang="ko"><head><meta charSet="utf-8" />
-    <link rel="stylesheet" href={PV3_FONT} />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" />
+    <link rel="stylesheet" href={PV3_FONT} crossOrigin="anonymous" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" crossOrigin="anonymous" />
     <style dangerouslySetInnerHTML={{ __html: PV3_CSS + `\nhtml,body{margin:0;background:#E9ECF3}#pv3-page{width:720px;margin:0 auto}` }} /></head>
-    <body><div id="pv3-page">{all ? (searchParams.kind === 'store' ? Array.from({ length: PV3_PAGES }, (_, i) => i + 1) : PV3_COMMON_PAGES).map(n => <div key={n} style={{ marginBottom: 2 }}><Pv3Doc k={k!} ka={ka!} s={s!} sa={sa!} brand={brand} page={n} /></div>) : <Pv3Doc k={k} ka={ka} s={s} sa={sa} brand={brand} page={page} />}</div></body></html>;
+    <body>{all && <PdfButton name={`제안서_${searchParams.kind === 'store' ? (s as { store?: string }).store ?? '' : ''}_${(k as { keyword?: string }).keyword ?? String(searchParams.ref ?? '')}`} />}<div id="pv3-page">{all ? (searchParams.kind === 'store' ? Array.from({ length: PV3_PAGES }, (_, i) => i + 1) : PV3_COMMON_PAGES).map(n => <div key={n} style={{ marginBottom: 2 }}><Pv3Doc k={k!} ka={ka!} s={s!} sa={sa!} brand={brand} page={n} /></div>) : <Pv3Doc k={k} ka={ka} s={s} sa={sa} brand={brand} page={page} />}</div></body></html>;
 }
