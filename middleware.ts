@@ -10,11 +10,12 @@ async function loadAllowed() {
   if (cache && Date.now() - cache.at < 60_000) return cache;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!, key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const h = { apikey: key, Authorization: `Bearer ${key}` };
-  const [ips, st] = await Promise.all([
-    fetch(`${url}/rest/v1/allowed_ips?select=cidr&is_active=eq.true`, { headers: h, cache: 'no-store' }).then(r => r.ok ? r.json() : []),
-    fetch(`${url}/rest/v1/app_settings?select=value&key=eq.admin_bypass_ip`, { headers: h, cache: 'no-store' }).then(r => r.ok ? r.json() : []),
-  ]);
-  cache = { at: Date.now(), rows: ips as IpRow[], bypass: (st?.[0]?.value ?? 'false') === 'true' };
+  // DB 가 응답을 못 하면(재시작·과부하) 목록을 '빈 것'으로 기억하지 않는다 — 예전엔 그 1분 동안 등록된 사무실 IP 까지 전부 차단 화면이 떴다.
+  // 실패하면 마지막으로 읽은 목록을 그대로 쓰고(10초 뒤 다시 시도), 한 번도 못 읽은 상태면 이번 요청만 차단한다
+  const get = (path: string) => fetch(`${url}/rest/v1/${path}`, { headers: h, cache: 'no-store', signal: AbortSignal.timeout(4000) }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const [ips, st] = await Promise.all([get('allowed_ips?select=cidr&is_active=eq.true'), get('app_settings?select=value&key=eq.admin_bypass_ip')]);
+  if (!Array.isArray(ips)) { if (cache) { cache.at = Date.now() - 50_000; return cache; } return { at: 0, rows: [] as IpRow[], bypass: false }; }
+  cache = { at: Date.now(), rows: ips as IpRow[], bypass: Array.isArray(st) ? (st?.[0]?.value ?? 'false') === 'true' : (cache?.bypass ?? false) };
   return cache;
 }
 function ipToInt(ip: string) { const p = ip.split('.').map(Number); return p.length === 4 && p.every(n => n >= 0 && n <= 255) ? ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3] : null; }
