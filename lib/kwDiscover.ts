@@ -72,9 +72,11 @@ export async function autoDiscover(): Promise<string> {
   }
   if ((count ?? 0) >= 3000) { await setS(sb, 'kw_ai_seeds', JSON.stringify(seedsQ)); await setS(sb, 'kw_auto_msg', '후보가 3,000개 이상 쌓여 있어 쉬는 중'); return 'full'; }
   // 2) 한 번 찾기
-  const use = seedsQ.slice(0, 25); const r = await discoverCore(sb, use, Number(s.get('kw_min_vol') || 1000) || 1000);
-  seedsQ = seedsQ.slice(use.length); await setS(sb, 'kw_ai_seeds', JSON.stringify(seedsQ));
-  await setS(sb, 'kw_auto_last', new Date().toISOString()); await setS(sb, 'kw_auto_msg', `${use.length ? 'AI 씨앗' : '기존 키워드 씨앗'} · ${r.msg}`.slice(0, 200));
+  // 자동 실행은 가볍게 — 씨앗 10개(API 2번). cron 한 번이 60초를 넘기지 않게
+  const { list: haveList } = seedsQ.length ? { list: [] as string[] } : await haveKeywords(sb);
+  const use = seedsQ.length ? seedsQ.slice(0, 10) : shuffle(haveList).slice(0, 10); const fromAi = seedsQ.length > 0; const r = await discoverCore(sb, use, Number(s.get('kw_min_vol') || 1000) || 1000);
+  if (fromAi) seedsQ = seedsQ.slice(use.length); await setS(sb, 'kw_ai_seeds', JSON.stringify(seedsQ));
+  await setS(sb, 'kw_auto_last', new Date().toISOString()); await setS(sb, 'kw_auto_msg', `${fromAi ? 'AI 씨앗' : '기존 키워드 씨앗'} · ${r.msg}`.slice(0, 200));
   // 3) 씨앗이 떨어졌고 대기 중인 작업이 없으면 6시간에 한 번 AI 워커에 요청
   if (!seedsQ.length && !taskId && (!s.get('kw_ai_last') || Date.now() - new Date(s.get('kw_ai_last')!).getTime() > 6 * 3600e3)) {
     const { list } = await haveKeywords(sb); const sample = shuffle(list).slice(0, 80).join(', ');

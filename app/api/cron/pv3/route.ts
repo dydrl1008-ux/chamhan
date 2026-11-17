@@ -25,9 +25,11 @@ export const dynamic = 'force-dynamic'; export const maxDuration = 60;
 export async function GET(req: Request) {
   if (!process.env.CRON_SECRET || req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) return NextResponse.json({ ok: false }, { status: 401 });
   try {
+    const t0 = Date.now();
     const r = await ingestAi(); const renders = await queueMissingRenders();
     let gc = 0; try { gc = await gcImages(); } catch { /* 정리 실패는 발송에 영향 없음 */ }
-    let kw = ''; try { kw = await autoDiscover(); } catch (e: any) { kw = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 키워드 발굴(자동) — 15분에 한 번, 실패해도 발송에 영향 없음
+    let kw = 'skip'; try { if (Date.now() - t0 < 15_000) kw = await autoDiscover(); }   // 앞 단계가 오래 걸린 회차(DB 가 바쁠 때)는 건너뜀
+    catch (e: any) { kw = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 키워드 발굴(자동) — 15분에 한 번, 실패해도 발송에 영향 없음
     return NextResponse.json({ ok: true, ...r, renders, gc, kw });
   } catch (e: any) { return NextResponse.json({ ok: false, msg: e.message }, { status: 500 }); }
 }
