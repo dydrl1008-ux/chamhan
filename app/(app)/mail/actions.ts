@@ -188,7 +188,7 @@ export async function manualPlan(total: number, perKeyword: number, from = 0): P
   const { data: kws, error } = await sb.rpc('mail_keywords_json'); if (error) return { ok: false, msg: error.message };
   const list = ((kws ?? []) as { keyword: string; n: number }[]).sort((a, b) => b.n - a.n || a.keyword.localeCompare(b.keyword));   // 순서 고정 (나눠 부를 때 어긋나지 않게)
   const plan: { keyword: string; n: number }[] = []; let left = Math.max(1, Math.min(100000, total)); let available = 0;
-  const count = async (kw: string) => { const { data: cand } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); return ((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by).length; };
+  const count = async (kw: string) => { const { data: cand } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); return uniqEmail(((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by)).length; };
   // 한 번 호출에 키워드 16개까지만 센다 — 전체 뽑기처럼 키워드가 수백 개면 한 번에 다 세다가 시간 초과로 끊기던 문제. 화면이 next 를 받아 이어서 부른다
   const end = Math.min(list.length, Math.max(0, from) + 16); let x = Math.max(0, from);
   for (; x < end && left > 0; x += 8) {
@@ -202,13 +202,14 @@ export async function manualPlan(total: number, perKeyword: number, from = 0): P
   return { ok: true, msg: `${plan.reduce((a, p) => a + p.n, 0)}건 · 키워드 ${plan.length}개`, plan, available, next, totalKw: list.length };
 }
 
+const uniqEmail = (cs: Candidate[]) => { const seen = new Set<string>(); return cs.filter(c => { const e = c.email.trim().toLowerCase(); if (seen.has(e)) return false; seen.add(e); return true; }); };
 const MANUAL_MARK = '수동 엑셀';   // mail_queue.error 에 넣는 표시 — 수동 발송 엑셀로 뽑은 건
 /** 2단계: 키워드 1개 — 제안서(캐시 지수) 1개 만들고 대상 n건을 엑셀 행으로 반환. 뽑은 대상은 '수동 엑셀' 표시로 발송 내역에 남긴다 (2026-11-14 변경: 다시 뽑히지 않게) */
 export async function manualExport(i: { keyword: string; n: number; owner: string; phone: string; offer: { basic: string; rec: string }; tpl: Tpl; tplB: Tpl; tplC: Tpl; startNo: number; kakao?: string }): Promise<R<{ rows: ManualRow[] }>> {
   const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
   const kw = i.keyword.trim(); const sb = supabaseAdmin(); const { days } = await settings();
   const { data: cand, error } = await sb.rpc('mail_candidates_json', { p_keyword: kw, p_days: days }); if (error) return { ok: false, msg: error.message };
-  const picks = ((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by).slice(0, Math.max(1, i.n));
+  const picks = uniqEmail(((cand ?? []) as Candidate[]).filter(c => c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by)).slice(0, Math.max(1, i.n));   // 같은 이메일(한 판매자의 스토어 여러 개)은 순위가 가장 높은 한 곳만
   if (!picks.length) return { ok: true, msg: '대상 없음', rows: [] };
   let doc: Doc;
   try { const r = await search(kw, me.id); doc = buildDoc(r, { ...BRAND, owner: i.owner.trim() || me.name, phone: i.phone.trim() }, null, { basic: i.offer.basic.trim().slice(0, 40), rec: i.offer.rec.trim().slice(0, 40) }); }

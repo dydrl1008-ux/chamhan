@@ -123,14 +123,15 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
     if (!plan?.length) return notify('먼저 「대상 확인」', 'bad');
     if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건 엑셀을 만듭니다. 뽑은 대상은 발송 내역에 '수동 엑셀'로 기록되어, 재발송 금지 기간 동안 다시 뽑히지 않고 자동 발송에서도 빠집니다. 진행할까요?`)) return;
     setBusy(true); const rows: ManualRow[] = []; let no = 1; const lg: string[] = [];
-    const failed: { keyword: string; n: number }[] = [];
+    const failed: { keyword: string; n: number }[] = []; const seenEmail = new Set<string>(); let dup = 0;   // 한 번에 뽑는 엑셀 안에서 같은 이메일은 한 번만 (여러 키워드에 걸친 업체)
     for (const p of plan) {
       let r: Awaited<ReturnType<typeof manualExport>>;
       try { r = await manualExport({ keyword: p.keyword, n: p.n, owner, phone, offer: { basic, rec }, tpl, tplB, tplC, startNo: no, kakao }); }
       catch (e: any) { r = { ok: false, msg: `${p.keyword}: 서버 호출 실패 — ${String(e?.message ?? e).slice(0, 60)}` }; }
       lg.push(`${r.ok ? '✓' : '✕'} ${r.msg}`); setLog([...lg]);
-      if (r.ok && r.rows) { rows.push(...r.rows); no += r.rows.length; } else if (!r.ok) failed.push(p);
+      if (r.ok && r.rows) { for (const row of r.rows) { const e = row.email.trim().toLowerCase(); if (seenEmail.has(e)) { dup++; continue; } seenEmail.add(e); row.no = no++; rows.push(row); } } else if (!r.ok) failed.push(p);
     }
+    if (dup) { lg.push(`— 같은 이메일 ${dup}건은 한 번만 남겼습니다`); setLog([...lg]); }
     saveFailed(failed);   // 조회 한도 등으로 못 뽑은 키워드 — 다음에 그것만 다시 뽑을 수 있게 이 브라우저에 기억
     if (failed.length) { lg.push(`— 못 뽑은 키워드 ${failed.length}개는 「못 뽑은 키워드만 다시」로 이어서 뽑을 수 있습니다 (조회 한도는 자정에 풀림)`); setLog([...lg]); }
     setBusy(false);
