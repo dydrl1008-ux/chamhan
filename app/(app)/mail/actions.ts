@@ -54,7 +54,7 @@ export async function loadCandidates(keyword: string): Promise<R<{ rows: Candida
   const { days } = await settings();
   const { data, error } = await supabaseAdmin().rpc('mail_candidates_json', { p_keyword: keyword.trim(), p_days: days });   // jsonb — 1,000행 상한 없음
   if (error) return { ok: false, msg: error.message };
-  return { ok: true, msg: '', rows: (data ?? []) as Candidate[] };
+  return { ok: true, msg: '', rows: ((data ?? []) as Candidate[]).filter(c => !c.manual_only) };   // 수동 전용(추출기 CSV) 대상은 메일 발송 화면에 안 보임
 }
 
 /** 3단계 미리보기용 제안서 (키워드 시장 분석, 대상 업체 없음) — 시크릿 지수 오늘 데이터 */
@@ -245,6 +245,18 @@ export async function recordManualSent(rows: { email: string; store?: string; ke
   }
   return { ok: true, msg: '', n: clean.length };
 }
+/** 추출기 CSV → 메일 대상(수동 전용). 화면이 1,000행씩 나눠 부른다. 기존 업체와 겹치면 일반 대상 그대로 두고 키워드만 더해짐 */
+export async function importManualTargets(rows: { store_name: string; store_url?: string; keyword?: string; email: string; phone?: string }[]): Promise<R<{ added: number; updated: number; skipped: number }>> {
+  const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
+  const clean = (rows ?? []).slice(0, 1000).map(r => ({ store_name: String(r.store_name ?? '').trim().slice(0, 100), store_url: String(r.store_url ?? '').trim().slice(0, 300), product_url: '', keyword: String(r.keyword ?? '').trim().slice(0, 60),
+    email: String(r.email ?? '').trim().toLowerCase(), phone: String(r.phone ?? '').replace(/[^\d-]/g, ''), category: '', rank_now: null, review_cnt: null, opened_on: null })).filter(r => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(r.email) && r.store_name);
+  if (!clean.length) return { ok: true, msg: '', added: 0, updated: 0, skipped: (rows ?? []).length };
+  const { data, error } = await supabaseAdmin().rpc('mail_targets_import2', { p_rows: clean, p_manual: true });
+  if (error) return { ok: false, msg: /mail_targets_import2|manual_only/.test(error.message) ? '0084 SQL(수동 전용 대상)을 먼저 실행해 주세요' : error.message };
+  const d = (data ?? {}) as { added?: number; updated?: number; skipped?: number };
+  return { ok: true, msg: '', added: d.added ?? 0, updated: d.updated ?? 0, skipped: (d.skipped ?? 0) + ((rows ?? []).length - clean.length) };
+}
+
 /** 수동 발송 엑셀 화면의 입력값(문구 A/B/C·오픈채팅·담당자 등) — 본인 것으로 저장·불러오기 */
 export async function getExportForm(): Promise<Record<string, unknown> | null> {
   const me = await getProfile(); if (!me || !isHeadOnly(me)) return null;

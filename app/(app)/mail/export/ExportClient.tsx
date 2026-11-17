@@ -4,7 +4,7 @@ import { Pv3CommonDoc, PV3_CSS, PV3_FONT, PV3G_PAGES } from '@/components/Pv3Doc
 import type { KwData, KwAi } from '@/lib/proposalV3';
 import { BRAND } from '@/lib/proposalDoc';
 import { notify } from '@/components/Toast';
-import { manualPlan, manualExport, manualCommonV3, recordManualSent, getRecontactDays, setRecontactDays, getExportForm, saveExportForm, type ManualRow, type Tpl } from '../actions';
+import { manualPlan, manualExport, manualCommonV3, recordManualSent, getRecontactDays, setRecontactDays, getExportForm, saveExportForm, importManualTargets, type ManualRow, type Tpl } from '../actions';
 
 const A: Tpl = { subject: "{업체명} '{키워드}' 지수 확인 후 연락드립니다 — 카톡 주시면 테스트부터 봐드립니다", body: `안녕하세요, {업체명} 대표님. {담당자}입니다.
 
@@ -120,6 +120,31 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       notify(`${done.toLocaleString()}개 기록됨 — ${days}일 동안 다시 뽑히지 않습니다`, 'ok'); setLog(l => [...l, `이미 보낸 엑셀 ${done.toLocaleString()}개를 발송 기록에 넣었습니다 (금지 기간 ${days}일)`]);
     } catch (e: any) { notify('엑셀 읽기 실패: ' + String(e?.message ?? e).slice(0, 80), 'bad'); } finally { setUpBusy(''); }
   };
+  // 추출기 CSV 올리기 — 메일 대상에 '수동 전용'으로 추가 (자동 발송에는 안 나옴)
+  const [impBusy, setImpBusy] = useState('');
+  const uploadTargets = async (files: FileList | null) => {
+    if (!files?.length || impBusy) return; setImpBusy('읽는 중…');
+    try {
+      const XLSX = await import('xlsx'); const all: { store_name: string; store_url: string; keyword: string; email: string; phone: string }[] = []; const seen = new Set<string>(); let banned = 0, noMail = 0;
+      for (const f of Array.from(files)) {
+        const buf = await f.arrayBuffer();
+        const wb = /\.csv$/i.test(f.name) ? XLSX.read(new TextDecoder('utf-8').decode(buf).replace(/^\uFEFF/, ''), { type: 'string', raw: true }) : XLSX.read(buf, { type: 'array' });
+        for (const name of wb.SheetNames) for (const row of XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[name], { defval: '', raw: false })) {
+          const pick = (...ks: string[]) => { for (const k of Object.keys(row)) if (ks.some(x => k.replace(/\s/g, '').includes(x))) return String(row[k] ?? '').trim(); return ''; };
+          if (pick('상태').includes('영업금지')) { banned++; continue; }
+          const email = pick('이메일', '메일주소', 'email', 'Email').toLowerCase(); const store_name = pick('스토어명', '업체명') || pick('판매자명', '상호'); const keyword = pick('키워드');
+          if (!email.includes('@') || !store_name) { noMail++; continue; }
+          const key = `${keyword}|${email}|${store_name}`; if (seen.has(key)) continue; seen.add(key);
+          all.push({ store_name, store_url: pick('스토어링크', '스토어URL', '링크'), keyword, email, phone: pick('전화번호', '연락처') });
+        }
+      }
+      if (!all.length) { notify(`올릴 수 있는 행이 없습니다 (이메일 없음 ${noMail} · 영업금지 ${banned})`, 'bad'); return; }
+      if (!confirm(`업체 ${all.length.toLocaleString()}행을 메일 대상에 '수동 전용'으로 넣습니다 (이메일 없음 ${noMail} · 영업금지 ${banned} 제외).\n수동 뽑기에만 나오고 직원 자동 발송에는 안 나옵니다. 진행할까요?`)) return;
+      let add = 0, upd = 0, skip = 0, done = 0;
+      for (let i = 0; i < all.length; i += 1000) { setImpBusy(`넣는 중 ${done.toLocaleString()}/${all.length.toLocaleString()}`); const r = await importManualTargets(all.slice(i, i + 1000)); if (!r.ok) { notify(`${done.toLocaleString()}행까지 넣고 멈춤 — ${r.msg}`, 'bad'); return; } add += r.added ?? 0; upd += r.updated ?? 0; skip += r.skipped ?? 0; done += Math.min(1000, all.length - i); }
+      const m = `추출기 CSV: 새 업체 ${add.toLocaleString()} · 기존 업체에 키워드 추가 ${upd.toLocaleString()}${skip ? ` · 건너뜀 ${skip}` : ''}`; notify(m, 'ok'); setLog(l => [...l, m]);
+    } catch (e: any) { notify('파일 읽기 실패: ' + String(e?.message ?? e).slice(0, 80), 'bad'); } finally { setImpBusy(''); }
+  };
   // 입력값 저장·불러오기 (문구 A/B/C·오픈채팅·담당자·연락처·가격·A형만)
   const [formBusy, setFormBusy] = useState(false); const [savedAt, setSavedAt] = useState('');
   useEffect(() => { getExportForm().then(f => { if (!f) return; const s = (x: unknown) => typeof x === 'string' ? x : null; const t = (x: any): Tpl | null => x && typeof x.subject === 'string' && typeof x.body === 'string' ? { subject: x.subject, body: x.body } : null;
@@ -226,6 +251,11 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
         <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? (imgBusy ? `이미지 만드는 중 ${imgBusy}` : '만드는 중…') : imgMode ? '2. 엑셀 + 제안서 이미지 받기' : '2. 엑셀 받기'}</button>
         <button className="btn ghost" disabled={busy || !!imgBusy || !imgKws.length} onClick={getImages} title="키워드마다 맞춤 제안서 공용판 9장을 만들어 zip 하나로 받습니다 (키워드별 폴더)">{imgBusy && !busy ? `이미지 만드는 중 ${imgBusy}` : `이미지만 다시 받기${imgKws.length ? ` (키워드 ${imgKws.length}개)` : ''}`}</button>
         {plan && <span className="help">키워드 {plan.length}개 · {plan.reduce((a, p) => a + p.n, 0)}건</span>}
+      </div>
+      <div className="card" style={{ display: 'grid', gap: 8 }}>
+        <b style={{ fontSize: 13 }}>추출기 CSV 올리기 (수동 전용 대상 추가)</b>
+        <div className="help">추출기에서 받은 CSV·엑셀(여러 개 가능)을 올리면 메일 대상에 '수동 전용'으로 들어갑니다. 수동 뽑기에만 나오고 직원 자동 발송에는 안 나옵니다. 이미 있는 업체는 그대로 두고 키워드만 더합니다. 필요한 열: 키워드 · 스토어명 · 이메일 (스토어 링크 · 전화번호는 있으면 같이).</div>
+        <div><label className="btn ghost" style={{ cursor: impBusy ? 'default' : 'pointer' }}>{impBusy || 'CSV 올리기 (.csv / .xlsx)'}<input type="file" accept=".csv,.xlsx,.xls" multiple hidden disabled={!!impBusy || busy} onChange={e => { const f = e.target.files; uploadTargets(f).finally(() => { e.target.value = ''; }); }} /></label></div>
       </div>
       <div className="card" style={{ display: 'grid', gap: 8 }}>
         <b style={{ fontSize: 13 }}>이미 보낸 엑셀 올리기 · 재발송 금지 기간</b>

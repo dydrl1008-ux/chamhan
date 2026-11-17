@@ -9,7 +9,7 @@ import { autoPrepareV3 } from '@/lib/pv3Tasks';
 import { hasPages, PV3_PAGES, PV3_STORE_PAGES, PV3_COMMON_PAGES, PV3_DESIGN, type Pv3Img } from '@/lib/proposalV3';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
-export type Candidate = { id: number; store_name: string; store_url: string; email: string; phone: string; rank_now: number | null; review_cnt: number | null; optout: boolean; replied: boolean; ours: string | null; interest: string | null; recent_by: string | null; recent_at: string | null };
+export type Candidate = { id: number; store_name: string; store_url: string; email: string; phone: string; rank_now: number | null; review_cnt: number | null; optout: boolean; replied: boolean; ours: string | null; interest: string | null; recent_by: string | null; recent_at: string | null; manual_only?: boolean };
 export type AgentItem = { id: number; to: string; subject: string; body: string; message_id: string; store: string; html?: string };   // html 있으면 SNS_Manager 가 그걸 HTML 파트로 (제안서 v3 이미지 인라인)
 export type AgentJob = { job_id: string; sender_email: string; password: string; sender_name: string; items: AgentItem[]; gap_sec: number; callback_url: string; callback_token: string };
 
@@ -21,7 +21,7 @@ export async function settings() {
 export const kstDayStart = () => { const d = new Date(Date.now() + 9 * 3600_000); d.setUTCHours(0, 0, 0, 0); return new Date(d.getTime() - 9 * 3600_000).toISOString(); };
 export const siteBase = () => (process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');
 export const linkBase = () => (process.env.NEXT_PUBLIC_PROPOSAL_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://chamhan.vercel.app').replace(/\/$/, '');
-export const eligible = (c: Candidate) => !!c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by;
+export const eligible = (c: Candidate) => !!c.email && !c.optout && !c.replied && !c.ours && !c.interest && !c.recent_by && !c.manual_only;   // manual_only = 추출기 CSV 로 올린 수동 전용 대상 (자동 발송 제외)
 
 /** 제안서 v3 이미지: 업체별 장 + 키워드 공통 장이 현재 디자인 버전으로 다 있어야 발송 가능. urls = 1~N장 순서 */
 export async function v3ImagesFor(keyword: string, targetIds: number[]): Promise<Map<number, { storeId: number; urls: string[] }>> {
