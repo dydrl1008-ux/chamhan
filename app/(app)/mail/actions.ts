@@ -245,6 +245,18 @@ export async function recordManualSent(rows: { email: string; store?: string; ke
   }
   return { ok: true, msg: '', n: clean.length };
 }
+/** 수동 발송 엑셀 화면의 입력값(문구 A/B/C·오픈채팅·담당자 등) — 본인 것으로 저장·불러오기 */
+export async function getExportForm(): Promise<Record<string, unknown> | null> {
+  const me = await getProfile(); if (!me || !isHeadOnly(me)) return null;
+  const { data } = await supabaseAdmin().from('app_settings').select('value').eq('key', `mail_export_form:${me.id}`).maybeSingle();
+  try { const j = JSON.parse(String(data?.value ?? '')); return j && typeof j === 'object' ? j : null; } catch { return null; }
+}
+export async function saveExportForm(form: Record<string, unknown>): Promise<R> {
+  const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
+  const v = JSON.stringify(form ?? {}); if (v.length > 60000) return { ok: false, msg: '문구가 너무 깁니다' };
+  const { error } = await supabaseAdmin().from('app_settings').upsert({ key: `mail_export_form:${me.id}`, value: v, updated_at: new Date().toISOString() });
+  return error ? { ok: false, msg: '저장 실패: ' + error.message } : { ok: true, msg: '문구 저장됨 — 다음에 열어도 그대로 나옵니다' };
+}
 export async function getRecontactDays(): Promise<number> { const me = await getProfile(); if (!me) return 3; return (await settings()).days; }
 export async function setRecontactDays(n: number): Promise<R> {
   const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };

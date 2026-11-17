@@ -4,7 +4,7 @@ import { Pv3CommonDoc, PV3_CSS, PV3_FONT, PV3G_PAGES } from '@/components/Pv3Doc
 import type { KwData, KwAi } from '@/lib/proposalV3';
 import { BRAND } from '@/lib/proposalDoc';
 import { notify } from '@/components/Toast';
-import { manualPlan, manualExport, manualCommonV3, recordManualSent, getRecontactDays, setRecontactDays, type ManualRow, type Tpl } from '../actions';
+import { manualPlan, manualExport, manualCommonV3, recordManualSent, getRecontactDays, setRecontactDays, getExportForm, saveExportForm, type ManualRow, type Tpl } from '../actions';
 
 const A: Tpl = { subject: "{업체명} '{키워드}' 지수 확인 후 연락드립니다 — 카톡 주시면 테스트부터 봐드립니다", body: `안녕하세요, {업체명} 대표님. {담당자}입니다.
 
@@ -94,7 +94,7 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       if (fails.length) setLog(l => [...l, ...fails.map(f => `✕ 이미지: ${f}`)]);
     } catch (e: any) { notify('이미지 만들기 실패: ' + (e?.message ?? e), 'bad'); } finally { setImgBusy(''); setCur(null); }
   };
-  const T = ({ v, set, label }: { v: Tpl; set: (t: Tpl) => void; label: string }) => <div className="card" style={{ display: 'grid', gap: 8 }}><div style={{ fontWeight: 800 }}>{label}</div><input value={v.subject} onChange={e => set({ ...v, subject: e.target.value })} placeholder="제목" /><textarea value={v.body} onChange={e => set({ ...v, body: e.target.value })} rows={12} style={{ fontSize: 13, lineHeight: 1.6 }} /></div>;
+  const T = ({ v, set, label }: { v: Tpl; set: (t: Tpl) => void; label: string }) => <div key={label} className="card" style={{ display: 'grid', gap: 8 }}><div style={{ fontWeight: 800 }}>{label}</div><input value={v.subject} onChange={e => set({ ...v, subject: e.target.value })} placeholder="제목" /><textarea value={v.body} onChange={e => set({ ...v, body: e.target.value })} rows={12} style={{ fontSize: 13, lineHeight: 1.6 }} /></div>;
 
   const [planMsg, setPlanMsg] = useState('');
   // 이미 보낸 엑셀 올리기 — 기록 기능 이전에 뽑은 엑셀의 주소를 발송 기록으로 넣어 다음 뽑기에서 빠지게
@@ -120,6 +120,13 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       notify(`${done.toLocaleString()}개 기록됨 — ${days}일 동안 다시 뽑히지 않습니다`, 'ok'); setLog(l => [...l, `이미 보낸 엑셀 ${done.toLocaleString()}개를 발송 기록에 넣었습니다 (금지 기간 ${days}일)`]);
     } catch (e: any) { notify('엑셀 읽기 실패: ' + String(e?.message ?? e).slice(0, 80), 'bad'); } finally { setUpBusy(''); }
   };
+  // 입력값 저장·불러오기 (문구 A/B/C·오픈채팅·담당자·연락처·가격·A형만)
+  const [formBusy, setFormBusy] = useState(false); const [savedAt, setSavedAt] = useState('');
+  useEffect(() => { getExportForm().then(f => { if (!f) return; const s = (x: unknown) => typeof x === 'string' ? x : null; const t = (x: any): Tpl | null => x && typeof x.subject === 'string' && typeof x.body === 'string' ? { subject: x.subject, body: x.body } : null;
+    const a = t(f.tpl), b = t(f.tplB), c = t(f.tplC); if (a) setTpl(a); if (b) setTplB(b); if (c) setTplC(c);
+    if (s(f.kakao) !== null) setKakao(s(f.kakao)!); if (s(f.owner)) setOwner(s(f.owner)!); if (s(f.phone) !== null && s(f.phone)) setPhone(s(f.phone)!); if (s(f.basic) !== null) setBasic(s(f.basic)!); if (s(f.rec) !== null) setRec(s(f.rec)!);
+    if (typeof f.onlyA === 'boolean') setOnlyA(f.onlyA); if (s(f.at)) setSavedAt(s(f.at)!); }).catch(() => {}); }, []);
+  const saveForm = async () => { setFormBusy(true); const at = new Date().toISOString(); const r = await saveExportForm({ tpl, tplB, tplC, kakao, owner, phone, basic, rec, onlyA, at }).catch(e => ({ ok: false, msg: '저장 실패: ' + String(e?.message ?? e).slice(0, 60) })); setFormBusy(false); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) setSavedAt(at); };
   const FAILED_KEY = 'wh.export.failed'; const [failedKws, setFailedKws] = useState<{ keyword: string; n: number }[]>([]);
   useEffect(() => { try { const j = JSON.parse(localStorage.getItem(FAILED_KEY) || 'null'); if (j?.kws?.length && Date.now() - j.at < 3 * 86400e3) setFailedKws(j.kws); } catch {} }, []);
   const saveFailed = (kws: { keyword: string; n: number }[]) => { setFailedKws(kws); try { if (kws.length) localStorage.setItem(FAILED_KEY, JSON.stringify({ at: Date.now(), kws })); else localStorage.removeItem(FAILED_KEY); } catch {} };
@@ -205,9 +212,13 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'end' }} title="본문에 맞춤 제안서 이미지를 넣어 보내는 방식 — 엑셀의 제안서링크 칸과 본문 속 링크를 비웁니다"><input type="checkbox" checked={imgMode} onChange={e => setImgMode(e.target.checked)} style={{ width: 'auto' }} /> 맞춤 제안서 이미지로 (링크 없음)</label>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
-        <T v={tpl} set={setTpl} label="A (기본)" />{!onlyA && <><T v={tplB} set={setTplB} label="B (변형)" /><T v={tplC} set={setTplC} label="C (변형)" /></>}
+        {T({ v: tpl, set: setTpl, label: 'A (기본)' })}{!onlyA && <>{T({ v: tplB, set: setTplB, label: 'B (변형)' })}{T({ v: tplC, set: setTplC, label: 'C (변형)' })}</>}
       </div>
       <div className="help">변수: {'{업체명} {키워드} {순위} {담당자} {연락처} {제안서링크} {수신거부링크} {오픈채팅}'} · {'{수신거부링크}'}는 「수신거부 목록」에 저장한 전용 페이지 주소로 들어갑니다</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button type="button" className="btn" disabled={formBusy} onClick={saveForm}>{formBusy ? '저장 중…' : '문구 저장'}</button>
+        <span className="help">{savedAt ? `마지막 저장 ${new Date(new Date(savedAt).getTime() + 9 * 3600e3).toISOString().slice(5, 16).replace('T', ' ')} — 제목·본문·오픈채팅·담당자·연락처·가격이 같이 저장됩니다` : '저장하지 않으면 새로고침할 때 기본 문구로 돌아갑니다'}</span>
+      </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn ghost" disabled={busy} onClick={() => doPlan()}>{busy ? (planMsg || '확인 중…') : '1. 대상 확인'}</button>
         <button className="btn ghost" disabled={busy} onClick={() => doPlan(true)} title="총 건수·키워드당 최대와 상관없이, 지금 보낼 수 있는 대상을 전부 뽑습니다">전체 뽑기</button>
