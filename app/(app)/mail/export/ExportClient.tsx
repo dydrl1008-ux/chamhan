@@ -4,7 +4,7 @@ import { Pv3CommonDoc, PV3_CSS, PV3_FONT, PV3G_PAGES } from '@/components/Pv3Doc
 import type { KwData, KwAi } from '@/lib/proposalV3';
 import { BRAND } from '@/lib/proposalDoc';
 import { notify } from '@/components/Toast';
-import { manualPlan, manualExport, manualCommonV3, type ManualRow, type Tpl } from '../actions';
+import { manualPlan, manualExport, manualCommonV3, recordManualSent, getRecontactDays, setRecontactDays, type ManualRow, type Tpl } from '../actions';
 
 const A: Tpl = { subject: "{업체명} '{키워드}' 지수 확인 후 연락드립니다 — 카톡 주시면 테스트부터 봐드립니다", body: `안녕하세요, {업체명} 대표님. {담당자}입니다.
 
@@ -97,6 +97,29 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
   const T = ({ v, set, label }: { v: Tpl; set: (t: Tpl) => void; label: string }) => <div className="card" style={{ display: 'grid', gap: 8 }}><div style={{ fontWeight: 800 }}>{label}</div><input value={v.subject} onChange={e => set({ ...v, subject: e.target.value })} placeholder="제목" /><textarea value={v.body} onChange={e => set({ ...v, body: e.target.value })} rows={12} style={{ fontSize: 13, lineHeight: 1.6 }} /></div>;
 
   const [planMsg, setPlanMsg] = useState('');
+  // 이미 보낸 엑셀 올리기 — 기록 기능 이전에 뽑은 엑셀의 주소를 발송 기록으로 넣어 다음 뽑기에서 빠지게
+  const [days, setDays] = useState(3); const [daysIn, setDaysIn] = useState('3'); const [upBusy, setUpBusy] = useState('');
+  useEffect(() => { getRecontactDays().then(d => { setDays(d); setDaysIn(String(d)); }).catch(() => {}); }, []);
+  const saveDays = async () => { const r = await setRecontactDays(Number(daysIn)); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) setDays(Math.max(1, Math.min(365, Math.round(Number(daysIn))))); };
+  const uploadSent = async (files: FileList | null) => {
+    if (!files?.length || upBusy) return; setUpBusy('읽는 중…');
+    try {
+      const XLSX = await import('xlsx'); const all: { email: string; store: string; keyword: string }[] = []; const seen = new Set<string>();
+      for (const f of Array.from(files)) {
+        const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+        for (const name of wb.SheetNames) for (const row of XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[name], { defval: '' })) {
+          const pick = (...ks: string[]) => { for (const k of Object.keys(row)) if (ks.some(x => k.replace(/\s/g, '').includes(x))) return String(row[k] ?? '').trim(); return ''; };
+          const e = pick('메일주소', '이메일', 'email', 'Email', 'E-mail').toLowerCase(); if (!e.includes('@') || seen.has(e)) continue; seen.add(e);
+          all.push({ email: e, store: pick('스토어명', '업체명'), keyword: pick('키워드') });
+        }
+      }
+      if (!all.length) { notify('메일 주소가 든 열(메일주소·이메일)을 찾지 못했습니다', 'bad'); return; }
+      if (!confirm(`메일 주소 ${all.length.toLocaleString()}개를 '수동 엑셀' 발송 기록으로 넣습니다.\n지금부터 ${days}일 동안 수동 뽑기·자동 발송에서 빠집니다. 진행할까요?`)) return;
+      let done = 0;
+      for (let i = 0; i < all.length; i += 2000) { setUpBusy(`기록 중 ${done.toLocaleString()}/${all.length.toLocaleString()}`); const r = await recordManualSent(all.slice(i, i + 2000)); if (!r.ok) { notify(`${done.toLocaleString()}개까지 넣고 멈춤 — ${r.msg}`, 'bad'); return; } done += r.n ?? 0; }
+      notify(`${done.toLocaleString()}개 기록됨 — ${days}일 동안 다시 뽑히지 않습니다`, 'ok'); setLog(l => [...l, `이미 보낸 엑셀 ${done.toLocaleString()}개를 발송 기록에 넣었습니다 (금지 기간 ${days}일)`]);
+    } catch (e: any) { notify('엑셀 읽기 실패: ' + String(e?.message ?? e).slice(0, 80), 'bad'); } finally { setUpBusy(''); }
+  };
   const FAILED_KEY = 'wh.export.failed'; const [failedKws, setFailedKws] = useState<{ keyword: string; n: number }[]>([]);
   useEffect(() => { try { const j = JSON.parse(localStorage.getItem(FAILED_KEY) || 'null'); if (j?.kws?.length && Date.now() - j.at < 3 * 86400e3) setFailedKws(j.kws); } catch {} }, []);
   const saveFailed = (kws: { keyword: string; n: number }[]) => { setFailedKws(kws); try { if (kws.length) localStorage.setItem(FAILED_KEY, JSON.stringify({ at: Date.now(), kws })); else localStorage.removeItem(FAILED_KEY); } catch {} };
@@ -192,6 +215,17 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
         <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? (imgBusy ? `이미지 만드는 중 ${imgBusy}` : '만드는 중…') : imgMode ? '2. 엑셀 + 제안서 이미지 받기' : '2. 엑셀 받기'}</button>
         <button className="btn ghost" disabled={busy || !!imgBusy || !imgKws.length} onClick={getImages} title="키워드마다 맞춤 제안서 공용판 9장을 만들어 zip 하나로 받습니다 (키워드별 폴더)">{imgBusy && !busy ? `이미지 만드는 중 ${imgBusy}` : `이미지만 다시 받기${imgKws.length ? ` (키워드 ${imgKws.length}개)` : ''}`}</button>
         {plan && <span className="help">키워드 {plan.length}개 · {plan.reduce((a, p) => a + p.n, 0)}건</span>}
+      </div>
+      <div className="card" style={{ display: 'grid', gap: 8 }}>
+        <b style={{ fontSize: 13 }}>이미 보낸 엑셀 올리기 · 재발송 금지 기간</b>
+        <div className="help">예전에 받아서 이미 보낸 엑셀(여러 개 가능)을 올리면, 그 안의 메일 주소가 발송 기록으로 들어가 다음 뽑기와 자동 발송에서 빠집니다. 금지 기간은 올린 시점부터 셉니다.</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label className="btn ghost" style={{ cursor: upBusy ? 'default' : 'pointer' }}>{upBusy || '엑셀 올리기 (.xlsx)'}<input type="file" accept=".xlsx,.xls,.csv" multiple hidden disabled={!!upBusy || busy} onChange={e => { const f = e.target.files; uploadSent(f).finally(() => { e.target.value = ''; }); }} /></label>
+          <span className="help">재발송 금지 기간</span>
+          <input type="number" min={1} max={365} value={daysIn} onChange={e => setDaysIn(e.target.value)} style={{ width: 80 }} /><span className="help">일</span>
+          <button type="button" className="btn ghost" disabled={Number(daysIn) === days || !Number(daysIn)} onClick={saveDays}>저장</button>
+          <span className="help">(자동 발송에도 같이 적용)</span>
+        </div>
       </div>
       {plan && <div className="card" style={{ fontSize: 13, display: 'flex', gap: 6, flexWrap: 'wrap' }}>{plan.map(p => <span key={p.keyword} className="chip">{p.keyword} {p.n}</span>)}</div>}
       <link rel="stylesheet" href={PV3_FONT} crossOrigin="anonymous" /><style dangerouslySetInnerHTML={{ __html: PV3_CSS }} />

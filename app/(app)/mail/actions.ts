@@ -232,6 +232,27 @@ export async function manualExport(i: { keyword: string; n: number; owner: strin
   return { ok: true, msg: `${kw} ${rows.length}건${rec}`, rows };
 }
 
+/** 예전에 받은 수동 엑셀(기록 기능 이전에 뽑은 것)을 발송 기록으로 넣는다 — 다음 뽑기·자동 발송에서 재발송 금지 기간 동안 빠지게. 화면이 2,000행씩 나눠 부른다 */
+export async function recordManualSent(rows: { email: string; store?: string; keyword?: string }[]): Promise<R<{ n: number }>> {
+  const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
+  const seen = new Set<string>(); const clean: { email: string; store: string; keyword: string }[] = [];
+  for (const r of (rows ?? []).slice(0, 2000)) { const e = String(r?.email ?? '').trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) || seen.has(e)) continue; seen.add(e); clean.push({ email: e, store: String(r.store ?? '').slice(0, 100), keyword: String(r.keyword ?? '').slice(0, 60) }); }
+  if (!clean.length) return { ok: true, msg: '', n: 0 };
+  const now = new Date().toISOString(); const sb = supabaseAdmin();
+  for (let i = 0; i < clean.length; i += 500) {
+    const { error } = await sb.from('mail_queue').insert(clean.slice(i, i + 500).map(c => ({ sender_id: me.id, to_email: c.email, store_name: c.store, keyword: c.keyword, subject: '', body: '', status: 'sent', error: MANUAL_MARK, queued_at: now, sent_at: now })));
+    if (error) return { ok: false, msg: '기록 실패: ' + error.message };
+  }
+  return { ok: true, msg: '', n: clean.length };
+}
+export async function getRecontactDays(): Promise<number> { const me = await getProfile(); if (!me) return 3; return (await settings()).days; }
+export async function setRecontactDays(n: number): Promise<R> {
+  const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
+  const v = Math.max(1, Math.min(365, Math.round(Number(n) || 0))); if (!v) return { ok: false, msg: '1~365 사이로 적어 주세요' };
+  const { error } = await supabaseAdmin().from('app_settings').upsert({ key: 'mail_recontact_days', value: String(v), updated_at: new Date().toISOString() });
+  return error ? { ok: false, msg: error.message } : { ok: true, msg: `재발송 금지 기간 ${v}일로 저장 — 자동 발송·수동 뽑기 모두 적용` };
+}
+
 // ── 자동 발송 캠페인 (SNS_Manager 가 서버에서 끌어감 — 브라우저 없어도 PC만 켜져 있으면 진행) ──
 export type Campaign = { id: number; account_id: number; keywords: string[]; per_kw: number; daily_cap: number; subject: string; status: 'active' | 'paused' | 'done'; progress: { done: string[]; sent: number; log: string[] }; last_pull_at: string | null; created_at: string; use_v3?: boolean };
 export async function listCampaigns(): Promise<R<{ rows: Campaign[] }>> {
