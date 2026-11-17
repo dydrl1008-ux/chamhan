@@ -10,9 +10,12 @@ export async function haveKeywords(sb: Sb): Promise<{ set: Set<string>; list: st
   const { data } = await sb.rpc('mail_keywords_json'); const list = ((data ?? []) as { keyword: string }[]).map(k => k.keyword);
   return { set: new Set(list.map(kwNorm)), list };
 }
+/** 상품이 아닌 검색어(맛집·레시피·관광·정보성) 거르기 — 검색광고 연관 키워드는 이런 말로 쉽게 샌다 */
+const NOT_PRODUCT = /맛집|식당|밥집|술집|카페$|뷔페|레시피|만들기|만드는|담그는|끓이는|하는법|방법$|가볼만한|여행|관광|축제|시장$|마트$|근처|주변|메뉴|추천$|순위$|효능|부작용|칼로리|제철|보관법|뜻$|차이$|후기$|가격$|시세|날씨|영화|드라마|노래|가사|주가|주식|로또|운세|조회|고객센터|채용|알바|병원|의원|약국|학원|학교|호텔|펜션|숙소|리조트|예약|배달|역$|공항|터미널|휴게소|국밥|찌개|탕$|전골|무국|볶음$|조림$|구이$|무침$|겉절이|정식$|국$|해장|철$/;
+export const looksProduct = (kw: string) => !NOT_PRODUCT.test(kw.replace(/\s+/g, ''));
 const shuffle = <T,>(a: T[]) => { const p = [...a]; for (let i = p.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; } return p; };
 
-/** 씨앗(최대 25개, 없으면 수집된 키워드 중 무작위)을 5개씩 묶어 검색광고 API 호출 → 미수집·미후보만 쌓기 */
+/** 쌓는 기준: 검색량 min 이상 · 경쟁도 높음(광고주가 돈 쓰는 키워드 = 파는 상품) · 맛집·레시피 등 제외. 씨앗(최대 25개, 없으면 수집된 키워드 중 무작위)을 5개씩 묶어 검색광고 API 호출 → 미수집·미후보만 쌓기 */
 export async function discoverCore(sb: Sb, seedsIn: string[], minVol: number): Promise<{ ok: boolean; msg: string; added: number; seen: number; seeds: string[] }> {
   if (!adConfigured()) return { ok: false, msg: '검색광고 API 환경변수가 없습니다 (NAVER_AD_CUSTOMER_ID / NAVER_AD_API_KEY / NAVER_AD_SECRET)', added: 0, seen: 0, seeds: [] };
   const { set: have, list } = await haveKeywords(sb); const min = Math.max(0, Math.round(Number(minVol) || 0));
@@ -21,11 +24,11 @@ export async function discoverCore(sb: Sb, seedsIn: string[], minVol: number): P
   const found = new Map<string, { keyword: string; vol: number; seed: string }>(); let seen = 0; const errs: string[] = [];
   for (let i = 0; i < seeds.length; i += 5) {
     const g = seeds.slice(i, i + 5);
-    try { for (const k of await keywordVolumes(g)) { seen++; const kw = k.keyword.trim(); const key = kwNorm(kw); if (!kw || kw.length > 20 || k.total < min || have.has(key) || found.has(key)) continue; found.set(key, { keyword: kw, vol: k.total, seed: g[0] }); } }
+    try { for (const k of await keywordVolumes(g)) { seen++; const kw = k.keyword.trim(); const key = kwNorm(kw); if (!kw || kw.length > 20 || k.total < min || k.comp !== '높음' || !looksProduct(kw) || have.has(key) || found.has(key)) continue; found.set(key, { keyword: kw, vol: k.total, seed: g[0] }); } }
     catch (e: any) { errs.push(String(e?.message ?? e).slice(0, 80)); }
     await new Promise(r => setTimeout(r, 400));
   }
-  if (!found.size) return errs.length ? { ok: false, msg: '검색광고 API 오류: ' + errs[0], added: 0, seen, seeds } : { ok: true, msg: `새 키워드 없음 (연관 ${seen}개 확인 — 이미 있거나 검색량 ${min} 미만)`, added: 0, seen, seeds };
+  if (!found.size) return errs.length ? { ok: false, msg: '검색광고 API 오류: ' + errs[0], added: 0, seen, seeds } : { ok: true, msg: `새 키워드 없음 (연관 ${seen}개 확인 — 이미 있거나 검색량 ${min} 미만·상품 아님)`, added: 0, seen, seeds };
   const rows = [...found.values()]; let added = 0;
   for (let i = 0; i < rows.length; i += 500) {
     const { data, error } = await sb.from('mail_kw_pool').upsert(rows.slice(i, i + 500), { onConflict: 'keyword', ignoreDuplicates: true }).select('keyword');
@@ -63,7 +66,7 @@ export async function autoDiscover(): Promise<string> {
     if (!t || ['rejected', 'failed', 'cancelled'].includes(t.status)) { taskId = 0; await setS(sb, 'kw_ai_task', ''); }
     else if (t.status === 'done') {
       const j = parseLoose(t.result); const arr: unknown[] = Array.isArray(j) ? j : Array.isArray(j?.keywords) ? j.keywords : String(t.result ?? '').split(/[\n,]+/);
-      const got = Array.from(new Set(arr.map(x => String(x ?? '').replace(/^[\s\-\d.)"'\[]+|["'\],\s]+$/g, '').trim()).filter(x => x && x.length <= 20 && !/[{}:]/.test(x)))).slice(0, 300);
+      const got = Array.from(new Set(arr.map(x => String(x ?? '').replace(/^[\s\-\d.)"'\[]+|["'\],\s]+$/g, '').trim()).filter(x => x && x.length <= 20 && !/[{}:]/.test(x) && looksProduct(x)))).slice(0, 300);
       seedsQ = [...seedsQ, ...got]; taskId = 0; await setS(sb, 'kw_ai_task', '');
     }
   }

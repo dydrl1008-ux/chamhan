@@ -34,7 +34,7 @@ export default function DiscoverClient({ init, err, auto0 }: { init: St | null; 
         <button type="button" className="btn ghost" disabled={!!busy} onClick={reload}>새로고침</button>
         <button type="button" className="btn ghost" onClick={() => setOpen(o => !o)}>{open ? '직접 찾기 닫기' : '직접 찾기 · 기준 바꾸기'}</button>
       </div>
-      <div className="help">15분마다 스스로 연관 키워드를 찾아 쌓습니다 (후보가 3,000개 넘으면 쉼). AI 워커가 6시간마다 새 씨앗 키워드를 제안하고, 워커가 꺼져 있으면 기존 키워드에서 무작위로 이어 갑니다. 기준: 월 검색량 {auto.minVol.toLocaleString()} 이상.</div>
+      <div className="help">15분마다 스스로 연관 키워드를 찾아 쌓습니다 (후보가 3,000개 넘으면 쉼). AI 워커가 6시간마다 새 씨앗 키워드를 제안하고, 워커가 꺼져 있으면 기존 키워드에서 무작위로 이어 갑니다. 기준: 월 검색량 {auto.minVol.toLocaleString()} 이상 · 검색광고 경쟁도 높음 · 맛집·레시피·관광 등 상품 아닌 검색어 제외.</div>
       <div className="help">마지막 실행 {kst(auto.lastAt)} · {auto.lastMsg || '아직 실행 전 — 렌더 PC(pv3_render.py)가 켜져 있어야 돕니다'} · AI 씨앗 대기 {auto.aiSeeds}개{auto.aiTask ? ` · AI 작업 #${auto.aiTask} 진행 중` : ''}</div>
     </div>}
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16, alignItems: 'start' }}>
