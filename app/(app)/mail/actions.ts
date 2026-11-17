@@ -6,7 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { encrypt, decrypt } from '@/lib/crypto/secret';
 import { searchFresh, search } from '@/lib/nsc';
 import { buildDoc, BRAND, type Doc } from '@/lib/proposalDoc';
-import { fillVars } from '@/lib/mail';
+import { fillVars, unsubPageUrl } from '@/lib/mail';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
 import { autoPrepareV3, v3Status, ensureKeyword } from '@/lib/pv3Tasks';
@@ -101,7 +101,7 @@ export async function testSend(i: { keyword: string; to: string; subject: string
   const { data: q, error: qe } = await sb.from('mail_queue').insert({ sender_id: me.id, account_id: null, target_id: null, to_email: to, store_name: '테스트 발송', keyword: kw, proposal_code: code, job_token: token, status: 'queued', error: '테스트' }).select('id').single();
   if (qe || !q) return { ok: false, msg: qe?.message ?? '큐 등록 실패' };
   const base = linkBase(); const mid = `wh.${q.id}.${randomBytes(4).toString('hex')}@inquirydesk.bid`;
-  const v = { 업체명: '테스트업체', 키워드: kw, 순위: '23위', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}` };
+  const v = { 업체명: '테스트업체', 키워드: kw, 순위: '23위', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}`, 수신거부페이지: await unsubPageUrl(sb) };
   let html: string | undefined;
   if (i.v3) {
     const { data: st } = await sb.from('pv3_stores').select('target_id').eq('keyword', kw).not('target_id', 'is', null).limit(50);
@@ -216,10 +216,10 @@ export async function manualExport(i: { keyword: string; n: number; owner: strin
   const code = randomBytes(6).toString('base64url').slice(0, 8);
   const { error: pe } = await sb.from('proposals').insert({ code, title: `${kw} 상위노출 제안서`, target_url: '', kind: 'native', data: doc, owner_id: me.id });
   if (pe) return { ok: false, msg: '제안서 저장 실패: ' + pe.message };
-  const base = linkBase(); const rows: ManualRow[] = []; let no = i.startNo;
+  const base = linkBase(); const rows: ManualRow[] = []; let no = i.startNo; const unsubPage = await unsubPageUrl(sb);   // 묶음(BCC) 발송은 수신자별 링크를 못 쓰므로, 전용 페이지 주소가 저장돼 있으면 {수신거부링크} 도 그 주소로
   for (const c of picks) {
     const em = c.email.toLowerCase(); const e = Buffer.from(em).toString('base64url');
-    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}`, 수신거부링크: `${base}/p/${code}?unsub=1&e=${e}`, 오픈채팅: (i.kakao ?? '').trim() };
+    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: `${base}/p/${code}`, 수신거부링크: unsubPage || `${base}/p/${code}?unsub=1&e=${e}`, 수신거부페이지: unsubPage, 오픈채팅: (i.kakao ?? '').trim() };
     const f = (t: Tpl) => [fillVars(t.subject, v).slice(0, 200), fillVars(t.body, v)] as const;
     const [s1, b1] = f(i.tpl), [s2, b2] = f(i.tplB), [s3, b3] = f(i.tplC);
     rows.push({ no: no++, store: c.store_name, email: em, keyword: kw, rank: v.순위, subject: s1, body: b1, subjectB: s2, bodyB: b2, subjectC: s3, bodyC: b3, link: v.제안서링크, unsub: v.수신거부링크 });

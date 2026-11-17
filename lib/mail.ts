@@ -1,5 +1,5 @@
 // 메일 영업 공용: 스토어 키 추출, 기본 템플릿, 변수 치환
-export const MAIL_VARS = ['{업체명}', '{키워드}', '{순위}', '{담당자}', '{연락처}', '{제안서링크}', '{수신거부링크}'] as const;
+export const MAIL_VARS = ['{업체명}', '{키워드}', '{순위}', '{담당자}', '{연락처}', '{제안서링크}', '{수신거부링크}', '{수신거부페이지}'] as const;
 
 export const DEFAULT_SUBJECT = "'{키워드}' 검색 결과 확인 후 연락드립니다 — {업체명}";
 export const DEFAULT_BODY = `안녕하세요, {업체명} 담당자님.
@@ -21,7 +21,7 @@ export const DEFAULT_BODY = `안녕하세요, {업체명} 담당자님.
 
 export function fillVars(t: string, v: Record<string, string>) {
   // 비어 있는 변수 앞뒤의 구분자(·, -, |)는 같이 지움 — 연락처 비우면 "이름 · " 처럼 남지 않게
-  return t.replace(/\{(업체명|키워드|순위|담당자|연락처|제안서링크|수신거부링크|오픈채팅)\}/g, (_, k) => v[k] ?? '')
+  return t.replace(/\{(업체명|키워드|순위|담당자|연락처|제안서링크|수신거부링크|수신거부페이지|오픈채팅)\}/g, (_, k) => v[k] ?? '')
     .replace(/[ \t]*[·\-|][ \t]*$/gm, '').replace(/^[ \t]*[·\-|][ \t]*/gm, '').replace(/[ \t]+[·|]\s+[·|][ \t]+/g, ' · ');
 }
 
@@ -38,4 +38,9 @@ export function storeKey(url: string): { key: string; storeUrl: string } | null 
     if (/naver\.com$/.test(host)) return null;           // 네이버 쇼핑 카탈로그 등 — 스토어 아님
     return { key: `host:${host.toLowerCase()}`, storeUrl: `https://${host}` };
   } catch { return null; }
+}
+
+/** 수신거부 전용 페이지 주소 (수신거부 목록 화면에서 저장한 값). {수신거부페이지} 변수와 수동 발송의 {수신거부링크} 에 쓰인다 */
+export async function unsubPageUrl(sb: { from: (t: string) => any }): Promise<string> {
+  try { const { data } = await sb.from('app_settings').select('value').eq('key', 'unsub_url').maybeSingle(); return String(data?.value ?? '').replace(/"/g, '').trim(); } catch { return ''; }
 }

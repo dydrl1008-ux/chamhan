@@ -2,7 +2,7 @@
 import { randomBytes } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { decrypt } from '@/lib/crypto/secret';
-import { fillVars } from '@/lib/mail';
+import { fillVars, unsubPageUrl } from '@/lib/mail';
 import { search } from '@/lib/nsc';
 import { buildDoc, BRAND, type Doc } from '@/lib/proposalDoc';
 import { autoPrepareV3 } from '@/lib/pv3Tasks';
@@ -87,11 +87,11 @@ export async function prepareCore(me: { id: string; name: string }, i: { keyword
   const token = randomBytes(16).toString('base64url'); const jobId = `${Date.now().toString(36)}${randomBytes(3).toString('hex')}`;
   const { data: ins, error: qe } = await sb.from('mail_queue').insert(picks.map(c => ({ sender_id: me.id, account_id: acct.id, target_id: c.id, to_email: c.email.toLowerCase(), store_name: c.store_name, keyword: kw, proposal_code: code, job_token: token, status: 'queued', campaign_id: i.campaignId ?? null, pv3_store_id: v3map?.get(c.id)?.storeId ?? null }))).select('id,target_id');
   if (qe) return { ok: false, msg: qe.message };
-  const byT = new Map(picks.map(c => [c.id, c])); const base = linkBase(); const items: AgentItem[] = [];
+  const byT = new Map(picks.map(c => [c.id, c])); const base = linkBase(); const items: AgentItem[] = []; const unsubPage = await unsubPageUrl(sb);
   await Promise.all((ins ?? []).map(q => {
     const c = byT.get(q.target_id!)!; const mid = `wh.${q.id}.${randomBytes(4).toString('hex')}@inquirydesk.bid`;
     const v3 = v3map?.get(c.id);
-    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: v3 ? '' : `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}` };
+    const v = { 업체명: c.store_name || '담당자', 키워드: kw, 순위: c.rank_now ? `${c.rank_now}위` : '-', 담당자: i.owner.trim() || me.name, 연락처: i.phone.trim(), 제안서링크: v3 ? '' : `${base}/p/${code}?m=${q.id}`, 수신거부링크: `${base}/p/${code}?unsub=1&m=${q.id}`, 수신거부페이지: unsubPage };
     const subject = fillVars(i.subject, v).slice(0, 200), body = fillVars(i.body, v);
     items.push({ id: q.id, to: c.email.toLowerCase(), subject, body, message_id: `<${mid}>`, store: c.store_name, ...(v3 ? { html: v3Html(body, v3.urls) } : {}) });
     return sb.from('mail_queue').update({ subject, body, message_id: `<${mid}>` }).eq('id', q.id);

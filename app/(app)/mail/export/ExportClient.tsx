@@ -183,7 +183,7 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
         <T v={tpl} set={setTpl} label="A (기본)" />{!onlyA && <><T v={tplB} set={setTplB} label="B (변형)" /><T v={tplC} set={setTplC} label="C (변형)" /></>}
       </div>
-      <div className="help">변수: {'{업체명} {키워드} {순위} {담당자} {연락처} {제안서링크} {수신거부링크} {오픈채팅}'}</div>
+      <div className="help">변수: {'{업체명} {키워드} {순위} {담당자} {연락처} {제안서링크} {수신거부링크} {오픈채팅}'} · {'{수신거부링크}'}는 「수신거부 목록」에 저장한 전용 페이지 주소로 들어갑니다</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn ghost" disabled={busy} onClick={() => doPlan()}>{busy ? (planMsg || '확인 중…') : '1. 대상 확인'}</button>
         <button className="btn ghost" disabled={busy} onClick={() => doPlan(true)} title="총 건수·키워드당 최대와 상관없이, 지금 보낼 수 있는 대상을 전부 뽑습니다">전체 뽑기</button>

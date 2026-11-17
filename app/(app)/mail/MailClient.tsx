@@ -244,7 +244,7 @@ export default function MailClient({ me, accounts, tpl, hist, teamHist = [], bas
   }, [v3st, pendTest]);
 
   const sample = rows.find(c => sel.has(c.id)) ?? rows[0];
-  const vars = sample ? { 업체명: sample.store_name || '담당자', 키워드: loadedKw, 순위: sample.rank_now ? `${sample.rank_now}위` : '-', 담당자: owner || me.name, 연락처: phone, 제안서링크: '(발송 시 수신자마다 다른 제안서 링크)', 수신거부링크: '(수신자별 수신거부 링크)' } : null;
+  const vars = sample ? { 업체명: sample.store_name || '담당자', 키워드: loadedKw, 순위: sample.rank_now ? `${sample.rank_now}위` : '-', 담당자: owner || me.name, 연락처: phone, 제안서링크: '(발송 시 수신자마다 다른 제안서 링크)', 수신거부링크: '(수신자별 수신거부 링크)', 수신거부페이지: '(수신거부 전용 페이지 주소)' } : null;
   const nSel = sel.size, nElig = rows.filter(eligible).length;
 
   return <div style={{ display: 'grid', gap: 14 }}>
