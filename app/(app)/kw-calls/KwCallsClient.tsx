@@ -1,10 +1,16 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { notify } from '@/components/Toast';
-import { kwContacts, kwSetResult, type KwCount, type Contact } from './actions';
+import { kwContacts, kwSetResult, kwRequest, kwRequests, kwCloseRequest, type KwCount, type Contact, type KwReq } from './actions';
 const RESULTS = ['부재', '관심', '재연락', '거절', '계약'];
 const COLOR: Record<string, string> = { 관심: '#067647', 계약: '#175CD3', 재연락: '#B54708', 거절: '#B42318', 부재: '#667085' };
-export default function KwCallsClient({ me, keywords, err }: { me: { id: string; boss: boolean }; keywords: KwCount[]; err: string }) {
+export default function KwCallsClient({ me, keywords, err, reqs0, reqErr }: { me: { id: string; boss: boolean }; keywords: KwCount[]; err: string; reqs0: { mine: KwReq[]; open: KwReq[] }; reqErr: string }) {
+  const [reqs, setReqs] = useState(reqs0); const [rq, setRq] = useState(''); const [rbusy, setRbusy] = useState(false); const [sel, setSel] = useState<Set<number>>(new Set());
+  const md = (t: string) => new Date(new Date(t).getTime() + 9 * 3600e3).toISOString().slice(5, 16).replace('T', ' ');
+  const reloadReq = async () => { const r = await kwRequests(); if (r.ok) { setReqs({ mine: r.mine, open: r.open }); setSel(new Set()); } };
+  const ask = async () => { if (!rq.trim() || rbusy) return; setRbusy(true); const r = await kwRequest(rq); setRbusy(false); notify(r.msg, r.ok && r.added.length ? 'ok' : 'bad'); if (r.ok) { if (r.added.length) setRq(''); reloadReq(); } };
+  const closeSel = async (status: 'done' | 'rejected') => { const ids = [...sel]; if (!ids.length) return notify('먼저 요청을 체크해 주세요', 'bad'); setRbusy(true); const r = await kwCloseRequest(ids, status); setRbusy(false); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) reloadReq(); };
+  const openKws = Array.from(new Set(reqs.open.map(r => r.keyword)));
   const [q, setQ] = useState(''); const [kw, setKw] = useState(''); const [rows, setRows] = useState<Contact[]>([]); const [busy, setBusy] = useState(false);
   const [only010, setOnly010] = useState(true); const [onlyOpen, setOnlyOpen] = useState(false); const [memo, setMemo] = useState<Record<number, string>>({});
   const kws = useMemo(() => { const k = q.trim().replace(/\s/g, ''); return (k ? keywords.filter(x => x.keyword.replace(/\s/g, '').includes(k)) : keywords).slice(0, 300); }, [keywords, q]);
@@ -16,7 +22,29 @@ export default function KwCallsClient({ me, keywords, err }: { me: { id: string;
     setRows(rs => rs.map(y => y.id === r.id ? { ...y, result, memo: m, claimed_by: !result && !m ? null : y.claimed_by ?? me.id, claimed_name: !result && !m ? '' : y.claimed_name || '나' } : y));
   };
   const copy = async (t: string) => { try { await navigator.clipboard.writeText(t); notify('복사됨', 'ok'); } catch { notify('복사 실패', 'bad'); } };
-  return <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) 1fr', gap: 16, alignItems: 'start' }}>
+  return <div style={{ display: 'grid', gap: 16 }}>
+    {me.boss && reqs.open.length > 0 && <div className="card" style={{ display: 'grid', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <b>직원 키워드 요청 <span style={{ color: '#B54708' }}>{openKws.length}개 대기</span></b>
+        <button type="button" className="btn" onClick={() => copy(openKws.join(','))}>전체 복사 (콤마)</button>
+        <button type="button" className="btn ghost" disabled={rbusy || !sel.size} onClick={() => closeSel('done')}>체크한 것 완료</button>
+        <button type="button" className="btn ghost" disabled={rbusy || !sel.size} onClick={() => closeSel('rejected')} title="추출해도 업체가 안 나온 키워드">체크한 것 반려</button>
+        <span className="help">복사해서 추출기에 붙여 넣고, 끝나면 CSV 를 「수동 발송 엑셀」에 올리면 자동으로 완료 처리됩니다</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{reqs.open.map(r => <label key={r.id} className="chip" style={{ display: 'inline-flex', gap: 5, alignItems: 'center', cursor: 'pointer' }} title={md(r.created_at)}>
+        <input type="checkbox" checked={sel.has(r.id)} onChange={e => setSel(s => { const n = new Set(s); if (e.target.checked) n.add(r.id); else n.delete(r.id); return n; })} style={{ width: 'auto' }} />{r.keyword} <span style={{ color: 'var(--muted)' }}>{r.by}</span></label>)}</div>
+    </div>}
+  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) 1fr', gap: 16, alignItems: 'start' }}>
+    <div style={{ display: 'grid', gap: 16 }}>
+    <div className="card" style={{ display: 'grid', gap: 8 }}>
+      <b>키워드 요청</b>
+      <div className="help">리스트에 없는 키워드를 요청하면 추출해서 올려 드립니다. 올라오면 알림이 갑니다. 콤마로 여러 개 가능.</div>
+      <div style={{ display: 'flex', gap: 6 }}><input value={rq} onChange={e => setRq(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') ask(); }} placeholder="예: 캠핑의자, 전기장판" style={{ flex: 1, minWidth: 0 }} /><button type="button" className="btn" disabled={rbusy || !rq.trim()} onClick={ask}>요청</button></div>
+      {reqErr && <div style={{ color: '#B42318', fontSize: 13 }}>{reqErr}</div>}
+      {reqs.mine.length > 0 && <div style={{ display: 'grid', gap: 3, maxHeight: 170, overflow: 'auto' }}>{reqs.mine.map(r => <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
+        {r.status === 'done' ? <button type="button" onClick={() => load(r.keyword)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', fontWeight: 700, color: 'inherit', fontSize: 13, textAlign: 'left' }}>{r.keyword}</button> : <span>{r.keyword}</span>}
+        <span style={{ whiteSpace: 'nowrap', fontWeight: 700, color: r.status === 'done' ? '#067647' : r.status === 'rejected' ? '#B42318' : '#B54708' }}>{r.status === 'done' ? '올라옴' : r.status === 'rejected' ? '업체 없음' : '대기'}</span></div>)}</div>}
+    </div>
     <div className="card" style={{ display: 'grid', gap: 8 }}>
       <b>키워드 <span className="cell-sub" style={{ fontWeight: 400 }}>{keywords.length.toLocaleString()}개</span></b>
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="키워드 검색" />
@@ -26,6 +54,7 @@ export default function KwCallsClient({ me, keywords, err }: { me: { id: string;
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.keyword}</span><span className="cell-sub" style={{ whiteSpace: 'nowrap' }}>미연락 {k.open} / {k.n}</span></button>)}
         {!kws.length && !err && <div className="cell-sub" style={{ padding: 8 }}>{keywords.length ? '검색 결과 없음' : '아직 업체가 없습니다 — 총괄이 「수동 발송 엑셀」에서 추출기 CSV 를 올리면 쌓입니다'}</div>}
       </div>
+    </div>
     </div>
     <div className="card" style={{ minWidth: 0 }}>
       {!kw ? <div className="cell-sub" style={{ padding: 24, textAlign: 'center' }}>왼쪽에서 키워드를 골라 주세요</div> : <>
@@ -48,5 +77,6 @@ export default function KwCallsClient({ me, keywords, err }: { me: { id: string;
             {!view.length && !busy && <tr><td colSpan={6} style={{ color: 'var(--muted)', textAlign: 'center', padding: 24 }}>조건에 맞는 업체가 없습니다 — 위 체크를 풀어 보세요</td></tr>}</tbody></table></div>
       </>}
     </div>
+  </div>
   </div>;
 }
