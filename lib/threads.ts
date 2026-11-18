@@ -6,7 +6,14 @@ type Sb = ReturnType<typeof supabaseAdmin>;
 const G = 'https://graph.threads.net';
 export const TH_AI_TITLE = '[쓰레드] 글 작성';
 export const TH_RV_TITLE = '[쓰레드] 글 검수';
-export type ThAccount = { id: number; owner_id: string; username: string; th_user_id: string; token_enc: string; token_expires_at: string | null; enabled: boolean; per_day: number; hours: string; tail: string; tone: string };
+export type ThAccount = { id: number; owner_id: string; username: string; th_user_id: string; token_enc: string; token_expires_at: string | null; enabled: boolean; per_day: number; hours: string; tail: string; tone: string; persona?: Persona | null };
+export type Persona = { who?: string; audience?: string; voice?: string; view?: string; samples?: string };
+/** 글 작성·검수 지시문에 붙는 페르소나 설명 (없으면 빈 문자열) */
+export function personaText(a: { persona?: Persona | null; tone?: string }): string {
+  const p = a.persona ?? {}; const L = [p.who && `나는 누구: ${p.who}`, p.audience && `누구에게 말하나: ${p.audience}`, (p.voice || a.tone) && `말투: ${p.voice || a.tone}`, p.view && `관점·주제: ${p.view}`].filter(Boolean) as string[];
+  if (p.samples?.trim()) L.push(`예시 글 (말투·호흡만 참고하고 내용·숫자는 베끼지 않는다)\n${p.samples.trim().slice(0, 1500)}`);
+  return L.length ? `\n\n페르소나 (이 사람이 쓴 것처럼)\n${L.join('\n')}` : '';
+}
 
 async function api(path: string, init?: RequestInit): Promise<any> {
   const r = await fetch(`${G}${path}`, { ...init, cache: 'no-store', signal: AbortSignal.timeout(20000) });
@@ -61,7 +68,7 @@ export async function requestPosts(sb: Sb, a: ThAccount, n = 6): Promise<{ ok: b
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   const { data: rows } = await sb.from('pv3_keywords').select('keyword,data').in('keyword', pool.slice(0, n));
   const fs = (rows ?? []).map(r => { try { return facts(r.data as KwData); } catch { return ''; } }).filter(Boolean); if (!fs.length) return { ok: false, msg: '키워드 데이터를 읽지 못했습니다' };
-  const instruction = `쓰레드(Threads)에 올릴 짧은 글을 키워드마다 1개씩, 총 ${fs.length}개 써 주세요.\n\n누가 쓰는 글인가: 네이버 쇼핑 판매자를 돕는 일을 하는 사람이, 자기가 본 키워드 데이터를 판매자들에게 툭 던지듯 공유하는 글.${a.tone ? `\n말투 메모: ${a.tone}` : ''}\n\n규칙\n- 아래 "데이터"에 있는 숫자만 쓴다. 없는 숫자·순위·매출·효과를 지어내지 않는다. 숫자는 그대로 옮긴다\n- 광고·영업 문구 금지 ("문의 주세요", "저희가 해 드립니다" 등). 업체명·브랜드명·매체명·작업 방식 언급 금지\n- 판매자가 "어, 내 얘기네" 할 만한 관찰 한 가지를 중심으로. 첫 줄에서 바로 본론\n- 반말·존댓말은 한 글 안에서 섞지 않는다. 해시태그·이모지·"안녕하세요" 없이\n- 한 글 150~350자, 줄바꿈으로 2~4문단. 글마다 시작 방식과 구조를 다르게\n\n데이터\n${fs.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\n출력은 설명 없이 JSON 배열 하나만: [{"keyword":"키워드","text":"글"}, ...]`;
+  const instruction = `쓰레드(Threads)에 올릴 짧은 글을 키워드마다 1개씩, 총 ${fs.length}개 써 주세요.\n\n누가 쓰는 글인가: 네이버 쇼핑 판매자를 돕는 일을 하는 사람이, 자기가 본 키워드 데이터를 판매자들에게 툭 던지듯 공유하는 글.${personaText(a)}\n\n규칙\n- 페르소나는 말투와 관점만 정한다. 없는 경험담·성과를 지어내지 않는다 ("내 스토어 매출이 올랐다" 같은 문장 금지)\n- 아래 "데이터"에 있는 숫자만 쓴다. 없는 숫자·순위·매출·효과를 지어내지 않는다. 숫자는 그대로 옮긴다\n- 광고·영업 문구 금지 ("문의 주세요", "저희가 해 드립니다" 등). 업체명·브랜드명·매체명·작업 방식 언급 금지\n- 판매자가 "어, 내 얘기네" 할 만한 관찰 한 가지를 중심으로. 첫 줄에서 바로 본론\n- 반말·존댓말은 한 글 안에서 섞지 않는다. 해시태그·이모지·"안녕하세요" 없이\n- 한 글 150~350자, 줄바꿈으로 2~4문단. 글마다 시작 방식과 구조를 다르게\n\n데이터\n${fs.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\n출력은 설명 없이 JSON 배열 하나만: [{"keyword":"키워드","text":"글"}, ...]`;
   const { data: ins, error } = await sb.from('ai_tasks').insert({ kind: 'order', agent: 'chief', title: TH_AI_TITLE, instruction, source: 'workhub', requested_by: '쓰레드 자동 발행', requested_by_id: a.owner_id, status: 'queued' }).select('id').single();
   if (error || !ins) return { ok: false, msg: 'AI 작업 등록 실패: ' + (error?.message ?? '') };
   await sb.from('ai_settings').upsert([{ key: `threads_ai_task:${a.id}`, value: String(ins.id), updated_at: new Date().toISOString() }, { key: `threads_ai_last:${a.id}`, value: new Date().toISOString(), updated_at: new Date().toISOString() }], { onConflict: 'key' });
@@ -96,7 +103,7 @@ export async function queueUp(sb: Sb, a: ThAccount, items: { id: number; text?: 
 }
 /** AI 워커에 검수 요청 — 글과 원 데이터를 같이 넘긴다 */
 async function requestReview(sb: Sb, a: ThAccount, posts: { id: number; text: string; facts: string }[]): Promise<void> {
-  const instruction = `쓰레드(Threads)에 자동으로 올라갈 글 ${posts.length}개를 발행 전에 검수해 주세요. 쓴 사람과 다른 눈으로, 깐깐하게 봅니다. 애매하면 통과시키지 않습니다.\n\n통과 기준 (하나라도 어기면 불합격)\n1. 글에 나온 숫자가 그 글의 "데이터"와 전부 일치한다. 데이터에 없는 숫자·순위·매출·효과가 없다\n2. 광고·영업 문구가 없다 (문의 유도, "저희가 해 드립니다" 등). 업체명·브랜드명·매체명·작업 방식 언급이 없다\n3. 효과를 장담하거나 과장하지 않는다. 특정 판매자·상품을 깎아내리지 않는다\n4. 한국어가 자연스럽고 AI 티(틀에 박힌 도입, 뻔한 마무리, 해시태그·이모지)가 없다. 한 글 안에서 반말·존댓말이 섞이지 않는다\n5. 480자 이하\n\n표현만 살짝 고치면 되는 글은 고친 글을 text 에 넣고 합격 처리해도 됩니다 (숫자는 바꾸지 않습니다). 사실이 틀린 글은 고치지 말고 불합격.\n\n${posts.map(p => `[글 ${p.id}]\n데이터: ${p.facts || '(없음 — 숫자가 하나라도 있으면 불합격)'}\n${p.text}`).join('\n\n')}\n\n출력은 설명 없이 JSON 배열 하나만: [{"id":글번호,"pass":true 또는 false,"reason":"불합격 사유 한 줄","text":"고친 글(고쳤을 때만)"}, ...]`;
+  const instruction = `쓰레드(Threads)에 자동으로 올라갈 글 ${posts.length}개를 발행 전에 검수해 주세요. 쓴 사람과 다른 눈으로, 깐깐하게 봅니다. 애매하면 통과시키지 않습니다.\n\n통과 기준 (하나라도 어기면 불합격)\n1. 글에 나온 숫자가 그 글의 "데이터"와 전부 일치한다. 데이터에 없는 숫자·순위·매출·효과가 없다\n2. 광고·영업 문구가 없다 (문의 유도, "저희가 해 드립니다" 등). 업체명·브랜드명·매체명·작업 방식 언급이 없다\n3. 효과를 장담하거나 과장하지 않는다. 특정 판매자·상품을 깎아내리지 않는다\n4. 한국어가 자연스럽고 AI 티(틀에 박힌 도입, 뻔한 마무리, 해시태그·이모지)가 없다. 한 글 안에서 반말·존댓말이 섞이지 않는다\n5. 480자 이하\n6. 없는 경험담·성과를 지어내지 않았다. 아래 페르소나가 있으면 그 말투와 어긋나지 않는다${personaText(a)}\n\n표현만 살짝 고치면 되는 글은 고친 글을 text 에 넣고 합격 처리해도 됩니다 (숫자는 바꾸지 않습니다). 사실이 틀린 글은 고치지 말고 불합격.\n\n${posts.map(p => `[글 ${p.id}]\n데이터: ${p.facts || '(없음 — 숫자가 하나라도 있으면 불합격)'}\n${p.text}`).join('\n\n')}\n\n출력은 설명 없이 JSON 배열 하나만: [{"id":글번호,"pass":true 또는 false,"reason":"불합격 사유 한 줄","text":"고친 글(고쳤을 때만)"}, ...]`;
   const { data: ins } = await sb.from('ai_tasks').insert({ kind: 'order', agent: 'chief', title: TH_RV_TITLE, instruction, source: 'workhub', requested_by: '쓰레드 자동 발행', requested_by_id: a.owner_id, status: 'queued' }).select('id').single();
   if (!ins) { await sb.from('threads_posts').update({ error: '검수 요청 실패 — 직접 확인 후 올려 주세요' }).in('id', posts.map(p => p.id)); return; }
   await sb.from('ai_settings').upsert({ key: `threads_rv_task:${a.id}`, value: String(ins.id), updated_at: new Date().toISOString() }, { onConflict: 'key' });
