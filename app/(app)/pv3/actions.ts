@@ -31,7 +31,7 @@ export async function buildKeyword(keyword: string, n: number, force = false): P
   const purl = new Map((mt ?? []).map((x: any) => [x.id, x.product_url as string | null]));
   const targets = picks.map(c => ({ target_id: c.id, store: c.store_name || '귀사', rank: c.rank_now, reviews: c.review_cnt, price: null as number | null, link: c.store_url, productUrl: purl.get(c.id) ?? null }));
   const es = targets.length ? await ensureStores(kw, k, targets, me) : { ok: true, msg: '업체 없음', ids: [] as number[], queued: 0 };
-  const ra = await requestKwAi(kw, k, me, force || ek.fresh);
+  const ra = await requestKwAi(kw, k, me, force || ek.fresh, force);
   revalidatePath('/pv3');
   return { ok: true, msg: `「${kw}」 ${ek.msg} · ${es.msg} · 키워드 글 ${ra.msg}`, stores: es.ids?.length ?? 0 };
 }

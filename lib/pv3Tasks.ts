@@ -91,11 +91,17 @@ export async function ensureKeyword(keyword: string, me: { id: string; name: str
 }
 
 /** 키워드 공통 글 워커 요청 (없거나, 글 구조 버전이 바뀌었거나, force 일 때) */
-export async function requestKwAi(kw: string, k: KwData, me: { id: string; name: string }, force = false): Promise<R<{ taskId?: number }>> {
+const KW_AI_REUSE_DAYS = 7;   // 키워드 글 재사용 기간 — 숫자(순위·지수)는 매번 새로 계산하지만, AI 가 쓴 글은 이 기간 동안 다시 쓰지 않는다 (AI 소모 절약)
+/** hard = 사람이 「다시 쓰기」를 누른 경우. force 만 켜진 경우(숫자가 새로 계산됨)는 글이 7일 안에 쓰인 것이면 그대로 둔다 */
+export async function requestKwAi(kw: string, k: KwData, me: { id: string; name: string }, force = false, hard = false): Promise<R<{ taskId?: number }>> {
   const db = sb();
   const { data: ex } = await db.from('pv3_keywords').select('ai,ai_status,ai_task_id').eq('keyword', kw).maybeSingle();
   const cur = (ex?.ai as KwAi | null)?._v === PV3_AI_VER;
   if (ex && !force && (ex.ai_status === 'queued' || (ex.ai_status === 'done' && cur) || (ex.ai_status === 'fallback' && cur && ex.ai_task_id))) return { ok: true, msg: '이미 요청됨', taskId: ex.ai_task_id ?? undefined };
+  if (ex && force && !hard && cur && ex.ai_status === 'done' && ex.ai_task_id) {   // 숫자만 새로 계산된 경우: 최근에 쓴 글이면 재사용
+    const { data: t } = await db.from('ai_tasks').select('finished_at,created_at').eq('id', ex.ai_task_id).maybeSingle(); const at = t?.finished_at ?? t?.created_at;
+    if (at && Date.now() - new Date(at).getTime() < KW_AI_REUSE_DAYS * 86400e3) return { ok: true, msg: `글 재사용 (${KW_AI_REUSE_DAYS}일 이내)`, taskId: ex.ai_task_id };
+  }
   const kn = await pickKnowledge(kw, k.kwLeak);
   const { data, error } = await db.from('ai_tasks').insert({ kind: 'order', agent: 'chief', title: `${PV3_TITLE} ${kw}`.slice(0, 80), instruction: kwInstruction(k, kn, me.name), source: 'workhub', requested_by: me.name, requested_by_id: me.id, status: 'queued' }).select('id').single();
   if (error) return { ok: false, msg: error.message };
