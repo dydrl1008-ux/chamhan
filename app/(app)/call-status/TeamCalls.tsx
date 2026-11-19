@@ -1,10 +1,10 @@
-// 월간 보고 — 팀원 콜 리스트 현황 (오늘의 콜 리스트 + 키워드 콜 리스트를 한 표로). 팀장이 보고 쓰면서 바로 대조할 수 있게
+// 콜 리스트 현황 — 팀원별 오늘의 콜 리스트 + 키워드 콜 리스트를 한 표로 (팀장=자기 팀, 총괄·어드민=전 팀)
 import Link from 'next/link';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { todayKST, addDays, weekStartOf, fmtMD } from '@/lib/date/kst';
 type Sm = { assigned_to: string | null; status: string; cnt: number };
-export default async function TeamCalls({ teamId }: { teamId: number }) {
+export default async function TeamCalls({ teamId, teamName }: { teamId: number; teamName: string }) {
   const sb = supabaseServer(); const today = todayKST(); const yday = addDays(today, -1); const wk = weekStartOf(today);
   const { data: ppl } = await sb.from('v_sales_people').select('id,name,team_id').eq('team_id', teamId).order('name');
   const people = (ppl ?? []) as { id: string; name: string }[]; if (!people.length) return null; const ids = people.map(p => p.id);
@@ -23,7 +23,7 @@ export default async function TeamCalls({ teamId }: { teamId: number }) {
   const S = (f: (r: typeof rows[number]) => number) => rows.reduce((a, r) => a + f(r), 0); const n = { textAlign: 'right' as const }; const v = (x: number) => x || '-';
   const sep = { borderLeft: '2px solid var(--line, #E4E7EC)' };
   return <div className="card" style={{ display: 'grid', gap: 10 }}>
-    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}><b>팀원 콜 리스트 현황</b><span className="help">오늘 {fmtMD(today)} · 어제 {fmtMD(yday)} · 이번 주 {fmtMD(wk)}(월)부터 · 결과를 남긴 건 기준 — 지시한 수량과 바로 대조해 보세요</span></div>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}><b>{teamName}</b><span className="cell-sub">{people.length}명</span></div>
     <div style={{ overflowX: 'auto' }}><table>
       <thead>
         <tr><th rowSpan={2}>이름</th><th colSpan={6} style={{ textAlign: 'center' }}>오늘의 콜 리스트 (오늘)</th><th colSpan={2} style={{ textAlign: 'center', ...sep }}>어제</th><th colSpan={4} style={{ textAlign: 'center', ...sep }}>키워드 콜 리스트</th><th rowSpan={2} /></tr>
@@ -39,6 +39,5 @@ export default async function TeamCalls({ teamId }: { teamId: number }) {
           <td style={{ ...n, ...sep }}>{S(r => r.ydone)}</td><td style={n}>{S(r => r.yhot)}</td><td style={{ ...n, ...sep }}>{S(r => r.kt)}</td><td style={n}>{S(r => r.ky)}</td><td style={n}>{S(r => r.kw)}</td><td style={n}>{S(r => r.khot)}</td><td /></tr>
       </tbody>
     </table></div>
-    <span className="help">「처리」 = 배분받은 것 중 결과(관심·계약·거절·부재)를 남긴 건수. 워크허브 밖에서 건 전화는 잡히지 않습니다. 키워드 콜 상세는 <Link href="/kw-calls">키워드 콜 리스트</Link> 맨 위 표에서 이름을 누르면 보입니다</span>
   </div>;
 }
