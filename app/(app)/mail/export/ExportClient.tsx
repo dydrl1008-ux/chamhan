@@ -5,7 +5,7 @@ import type { KwData, KwAi } from '@/lib/proposalV3';
 import { BRAND } from '@/lib/proposalDoc';
 import { notify } from '@/components/Toast';
 import { kwImport } from '../../kw-calls/actions';
-import { manualPlan, manualExport, manualCommonV3, recordManualSent, getRecontactDays, setRecontactDays, getExportForm, saveExportForm, importManualTargets, type ManualRow, type Tpl } from '../actions';
+import { manualPlan, manualExport, manualCommonV3, recordManualSent, manualUnrecord, getRecontactDays, setRecontactDays, getExportForm, saveExportForm, importManualTargets, type ManualRow, type Tpl } from '../actions';
 
 const A: Tpl = { subject: "{업체명} '{키워드}' 지수 확인 후 연락드립니다 — 카톡 주시면 테스트부터 봐드립니다", body: `안녕하세요, {업체명} 대표님. {담당자}입니다.
 
@@ -49,9 +49,9 @@ const C: Tpl = { subject: "'{키워드}' {업체명} 순위, 리뷰 문제가 �
 
 export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; phone: string }) {
   const [total, setTotal] = useState(1000); const [per, setPer] = useState(50); const [owner, setOwner] = useState(o0); const [phone, setPhone] = useState(p0);
-  const [basic, setBasic] = useState(''); const [rec, setRec] = useState(''); const [kakao, setKakao] = useState('https://open.kakao.com/o/saz4cuKi'); const [onlyA, setOnlyA] = useState(true); const [chunk, setChunk] = useState('25');
+  const [basic, setBasic] = useState(''); const [rec, setRec] = useState(''); const [kakao, setKakao] = useState('https://open.kakao.com/o/saz4cuKi'); const [onlyA, setOnlyA] = useState(true); const [chunk, setChunk] = useState('10');
   const [tpl, setTpl] = useState(A); const [tplB, setTplB] = useState(B); const [tplC, setTplC] = useState(C);
-  const [busy, setBusy] = useState(false); const [log, setLog] = useState<string[]>([]); const [plan, setPlan] = useState<{ keyword: string; n: number }[] | null>(null);
+  const [busy, setBusy] = useState(false); const [log, setLog] = useState<string[]>([]); const [planState, setPlan] = useState<{ keyword: string; n: number }[] | null>(null); const plan = planState;
   // ── 맞춤 제안서 공용판 이미지 (키워드마다 9장 · 화면 밖에서 그려 캡처 → zip) ──
   const [imgMode, setImgMode] = useState(true); const [imgKws, setImgKws] = useState<string[]>([]); const [imgBusy, setImgBusy] = useState('');
   const [cur, setCur] = useState<{ k: KwData; ka: KwAi } | null>(null); const stage = useRef<HTMLDivElement>(null); const ready = useRef<(() => void) | null>(null);
@@ -69,15 +69,18 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
       const els = Array.from(stage.current?.querySelectorAll<HTMLElement>('.pv3g') ?? []);
       if (fontCss === undefined && els[0]) { try { fontCss = await h.getFontEmbedCSS(els[0]); } catch { fontCss = ''; } }   // 글꼴은 한 번만 내려받아 모든 장에 재사용
       for (let n = 0; n < els.length; n++) {
-        const u = await h.toJpeg(els[n], { pixelRatio: 1.5, quality: 0.88, backgroundColor: '#ffffff', ...(fontCss ? { fontEmbedCSS: fontCss } : {}) });
-        files[`${safe(kw)}/${safe(kw)}_제안서_${String(n + 1).padStart(2, '0')}.jpg`] = Uint8Array.from(atob(u.split(',')[1]), c => c.charCodeAt(0));
+        // dataURL(base64 문자열)로 받으면 장마다 수 MB 문자열이 쌓여 탭 메모리가 터진다 — 캔버스에서 바로 바이트로 받고 캔버스는 즉시 비운다
+        const cv = await h.toCanvas(els[n], { pixelRatio: 1.5, backgroundColor: '#ffffff', ...(fontCss ? { fontEmbedCSS: fontCss } : {}) });
+        const blob = await new Promise<Blob | null>(res => cv.toBlob(b => res(b), 'image/jpeg', 0.88)); cv.width = 0; cv.height = 0;
+        if (blob) files[`${safe(kw)}/${safe(kw)}_제안서_${String(n + 1).padStart(2, '0')}.jpg`] = new Uint8Array(await blob.arrayBuffer());
       }
+      setCur(null); await new Promise(res => setTimeout(res, 60));   // 화면 밖 무대를 비우고 한 박자 쉬어 메모리 회수 기회를 준다
     }
     setCur(null); return { files, fails };
   };
   const saveZip = async (files: Record<string, Uint8Array>, name: string) => {
     const { zipSync } = await import('fflate'); const zip = zipSync(files, { level: 0 });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([zip as BlobPart], { type: 'application/zip' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([zip as BlobPart], { type: 'application/zip' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); const href = a.href; setTimeout(() => URL.revokeObjectURL(href), 20000);
   };
   const ymd = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
   const getImages = async () => {
@@ -179,18 +182,31 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
     } catch (e: any) { notify('대상 확인 중 오류 — 다시 눌러 주세요: ' + String(e?.message ?? e).slice(0, 80), 'bad'); }
     finally { setBusy(false); setPlanMsg(''); }
   };
-  const run = async () => {
+  // ── 중단돼도 이어서 뽑기 — 묶음마다 진행 상황을 브라우저에 적어 둔다. 탭이 죽어도(메모리 부족 등) 남은 키워드부터 이어 가고,
+  //    저장 못 한 묶음의 '보냄' 기록은 지우고 다시 뽑는다. 이미지 묶음은 2개마다 화면을 새로 열어 메모리를 비운다
+  type Resume = { at: number; rest: { keyword: string; n: number }[]; inflight: string[]; since: string; no: number; done: number; parts: number; d: string; ch: number; auto?: boolean;
+    form: { owner: string; phone: string; basic: string; rec: string; kakao: string; onlyA: boolean; imgMode: boolean; tpl: Tpl; tplB: Tpl; tplC: Tpl } };
+  const RESUME_KEY = 'wh.export.resume'; const RELOAD_EVERY = 2; const [resume, setResume] = useState<Resume | null>(null);
+  const putResume = (r: Resume | null) => { try { if (r) localStorage.setItem(RESUME_KEY, JSON.stringify(r)); else localStorage.removeItem(RESUME_KEY); } catch {} };
+  const runRef = useRef<(r?: Resume) => void>(() => {});
+  useEffect(() => { try { const j = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null') as Resume | null; if (j?.rest?.length && Date.now() - j.at < 24 * 3600e3) { setResume(j); if (j.auto) setTimeout(() => runRef.current(j), 1500); } else if (j) localStorage.removeItem(RESUME_KEY); } catch {} }, []);
+  const run = async (rs?: Resume) => {
+    const plan = rs ? rs.rest : planState; const F = rs ? rs.form : { owner, phone, basic, rec, kakao, onlyA, imgMode, tpl, tplB, tplC };
+    const { owner: fOwner, phone: fPhone, basic: fBasic, rec: fRec, kakao: fKakao, onlyA: fOnlyA, imgMode: fImg, tpl: fTpl, tplB: fTplB, tplC: fTplC } = F;
     if (!plan?.length) return notify('먼저 「대상 확인」', 'bad');
-    const CH = Math.max(1, Math.min(200, Math.round(Number(chunk) || 25))); const parts = Math.ceil(plan.length / CH);
-    if (!confirm(`${plan.reduce((a, p) => a + p.n, 0)}건을 뽑습니다 — 키워드 ${CH}개마다 묶음 하나씩(총 ${parts}개) 바로 저장됩니다.\n뽑은 대상은 발송 내역에 '수동 엑셀'로 기록되어, 재발송 금지 기간 동안 다시 뽑히지 않고 자동 발송에서도 빠집니다. 진행할까요?`)) return;
-    setBusy(true); let no = 1; const lg: string[] = []; const d = ymd(); const pad = (n: number) => String(n).padStart(String(parts).length < 2 ? 2 : String(parts).length, '0');
+    const CH = rs ? rs.ch : Math.max(1, Math.min(200, Math.round(Number(chunk) || 10))); const parts = Math.ceil(plan.length / CH); const baseDone = rs ? rs.done : 0; const allParts = rs ? rs.parts : parts;
+    if (!rs && !confirm(`${plan.reduce((a, p) => a + p.n, 0)}건을 뽑습니다 — 키워드 ${CH}개마다 묶음 하나씩(총 ${parts}개) 바로 저장됩니다.\n뽑은 대상은 발송 내역에 '수동 엑셀'로 기록되어, 재발송 금지 기간 동안 다시 뽑히지 않고 자동 발송에서도 빠집니다. 진행할까요?`)) return;
+    setBusy(true); setResume(null); let no = rs ? rs.no : 1; const lg: string[] = []; const d = rs ? rs.d : ymd(); const pad = (n: number) => String(n).padStart(String(allParts).length < 2 ? 2 : String(allParts).length, '0');
+    const state = (rest: { keyword: string; n: number }[], inflight: string[], done: number, auto = false): Resume => ({ at: Date.now(), rest, inflight, since: new Date().toISOString(), no, done, parts: allParts, d, ch: CH, auto, form: F });
+    if (rs) { lg.push(`↻ 이어서 뽑기 — 남은 키워드 ${plan.length}개 (묶음 ${baseDone + 1}/${allParts}부터)`); setLog([...lg]);
+      if (rs.inflight.length) { try { const u = await manualUnrecord(rs.inflight, rs.since); lg.push(u.ok ? `— 저장 못 한 묶음의 발송 기록 ${u.n ?? 0}건을 지우고 다시 뽑습니다` : `✕ 기록 정리 실패: ${u.msg}`); } catch { lg.push('✕ 기록 정리 실패 — 그 묶음 일부는 재발송 금지 기간 뒤에 뽑힙니다'); } setLog([...lg]); } }
     const failed: { keyword: string; n: number }[] = []; const seenEmail = new Set<string>(); let dup = 0, total = 0, saved = 0; const imgFails: string[] = [];   // 한 번에 뽑는 전체에서 같은 이메일은 한 번만 (여러 키워드에 걸친 업체)
     const XLSX = await import('xlsx');
     const book = (rows: ManualRow[], part: { keyword: string; n: number }[]) => {
-      const ws = XLSX.utils.json_to_sheet(rows.map(r => onlyA
+      const ws = XLSX.utils.json_to_sheet(rows.map(r => fOnlyA
         ? { 번호: r.no, 스토어명: r.store, 메일주소: r.email, 키워드: r.keyword, 현재순위: r.rank, 제목: r.subject, 본문: r.body, 제안서링크: r.link, 수신거부링크: r.unsub, 발송계정: '', 발송일: '', 비고: '' }
         : { 번호: r.no, 스토어명: r.store, 메일주소: r.email, 키워드: r.keyword, 현재순위: r.rank, '제목 A': r.subject, '본문 A': r.body, '제목 B': r.subjectB, '본문 B': r.bodyB, '제목 C': r.subjectC, '본문 C': r.bodyC, 제안서링크: r.link, 수신거부링크: r.unsub, 발송계정: '', 발송일: '', 비고: '' }));
-      ws['!cols'] = (onlyA ? [4, 22, 30, 14, 8, 50, 70, 46, 46, 18, 12, 20] : [4, 22, 30, 14, 8, 50, 70, 50, 70, 50, 70, 46, 46, 18, 12, 20]).map(w => ({ wch: w }));
+      ws['!cols'] = (fOnlyA ? [4, 22, 30, 14, 8, 50, 70, 46, 46, 18, 12, 20] : [4, 22, 30, 14, 8, 50, 70, 50, 70, 50, 70, 46, 46, 18, 12, 20]).map(w => ({ wch: w }));
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '발송');
       const cnt = new Map<string, number>(); for (const r of rows) cnt.set(r.keyword, (cnt.get(r.keyword) ?? 0) + 1);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(part.filter(p => cnt.has(p.keyword)).map(p => ({ 키워드: p.keyword, 건수: cnt.get(p.keyword) }))), '키워드별');
@@ -198,37 +214,43 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
     };
     try {
       for (let c = 0; c < parts; c++) {
-        const part = plan.slice(c * CH, (c + 1) * CH); const rows: ManualRow[] = [];
+        const part = plan.slice(c * CH, (c + 1) * CH); const rows: ManualRow[] = []; const bn = baseDone + c + 1;
+        putResume(state(plan.slice(c * CH), part.map(p => p.keyword), baseDone + c));   // 이 묶음이 저장되기 전에 죽으면: 이 묶음 키워드의 기록을 지우고 여기서부터 다시
         for (const p of part) {
           let r: Awaited<ReturnType<typeof manualExport>>;
-          try { r = await manualExport({ keyword: p.keyword, n: p.n, owner, phone, offer: { basic, rec }, tpl, tplB, tplC, startNo: no, kakao }); }
+          try { r = await manualExport({ keyword: p.keyword, n: p.n, owner: fOwner, phone: fPhone, offer: { basic: fBasic, rec: fRec }, tpl: fTpl, tplB: fTplB, tplC: fTplC, startNo: no, kakao: fKakao }); }
           catch (e: any) { r = { ok: false, msg: `${p.keyword}: 서버 호출 실패 — ${String(e?.message ?? e).slice(0, 60)}` }; }
           lg.push(`${r.ok ? '✓' : '✕'} ${r.msg}`); setLog([...lg]);
           if (r.ok && r.rows) { for (const row of r.rows) { const e = row.email.trim().toLowerCase(); if (seenEmail.has(e)) { dup++; continue; } seenEmail.add(e); row.no = no++; rows.push(row); } } else if (!r.ok) { failed.push(p); saveFailed([...failed]); }   // 못 뽑은 키워드는 그때그때 기억 (중간에 창이 닫혀도 남게)
         }
-        if (!rows.length) { lg.push(`— 묶음 ${pad(c + 1)}/${pad(parts)}: 뽑힌 행 없음 (건너뜀)`); setLog([...lg]); continue; }
-        if (imgMode) rows.forEach(r => { const strip = (t: string) => (r.link ? t.split(r.link).join('') : t).replace(/\n{3,}/g, '\n\n').trim(); r.body = strip(r.body); r.bodyB = strip(r.bodyB); r.bodyC = strip(r.bodyC); r.link = ''; });   // 본문에 이미지를 넣어 보내는 방식 — 제안서 링크는 뺀다
-        const wb = book(rows, part); const base = parts === 1 ? `메일발송_수동_${d}_${rows.length}건` : `메일발송_수동_${d}_묶음${pad(c + 1)}of${pad(parts)}_${rows.length}건`;
-        if (!imgMode) XLSX.writeFile(wb, `${base}.xlsx`);
+        if (!rows.length) { lg.push(`— 묶음 ${pad(bn)}/${pad(allParts)}: 뽑힌 행 없음 (건너뜀)`); setLog([...lg]); putResume(state(plan.slice((c + 1) * CH), [], baseDone + c + 1)); continue; }
+        if (fImg) rows.forEach(r => { const strip = (t: string) => (r.link ? t.split(r.link).join('') : t).replace(/\n{3,}/g, '\n\n').trim(); r.body = strip(r.body); r.bodyB = strip(r.bodyB); r.bodyC = strip(r.bodyC); r.link = ''; });   // 본문에 이미지를 넣어 보내는 방식 — 제안서 링크는 뺀다
+        const wb = book(rows, part); const base = allParts === 1 ? `메일발송_수동_${d}_${rows.length}건` : `메일발송_수동_${d}_묶음${pad(bn)}of${pad(allParts)}_${rows.length}건`;
+        if (!fImg) XLSX.writeFile(wb, `${base}.xlsx`);
         else {
           const kws = [...new Set(rows.map(r => r.keyword))]; setImgBusy('준비 중…');
           let files: Record<string, Uint8Array> = {};
-          try { const m = await makeImages(kws); files = m.files; imgFails.push(...m.fails); } catch (e: any) { imgFails.push(`묶음 ${pad(c + 1)} 이미지 실패 — ${String(e?.message ?? e).slice(0, 60)}`); }
+          try { const m = await makeImages(kws); files = m.files; imgFails.push(...m.fails); } catch (e: any) { imgFails.push(`묶음 ${pad(bn)} 이미지 실패 — ${String(e?.message ?? e).slice(0, 60)}`); }
           files[`${base}.xlsx`] = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer);
           await saveZip(files, `${base}.zip`); setImgBusy(''); setCur(null);
         }
-        total += rows.length; saved++; lg.push(`■ 묶음 ${pad(c + 1)}/${pad(parts)} 저장됨 — ${rows.length}건 (누적 ${total.toLocaleString()}건) · 지금 바로 쓸 수 있습니다`); setLog([...lg]);
+        total += rows.length; saved++; lg.push(`■ 묶음 ${pad(bn)}/${pad(allParts)} 저장됨 — ${rows.length}건 (이번 화면 누적 ${total.toLocaleString()}건) · 지금 바로 쓸 수 있습니다`); setLog([...lg]);
+        const restAfter = plan.slice((c + 1) * CH); putResume(restAfter.length ? state(restAfter, [], baseDone + c + 1) : null);
         if (parts > 1) await new Promise(r => setTimeout(r, 800));
+        if (fImg && restAfter.length && (c + 1) % RELOAD_EVERY === 0) {   // 이미지 묶음은 메모리를 많이 쓴다 — 2묶음마다 화면을 새로 열고 자동으로 이어 간다
+          putResume(state(restAfter, [], baseDone + c + 1, true)); lg.push('↻ 메모리를 비우려고 화면을 새로 엽니다 — 자동으로 이어서 뽑습니다 (창을 닫지 마세요)'); setLog([...lg]);
+          await new Promise(r => setTimeout(r, 4000)); location.reload(); await new Promise(() => {}); }
       }
       if (dup) lg.push(`— 같은 이메일 ${dup}건은 한 번만 남겼습니다`);
       if (imgFails.length) lg.push(...imgFails.map(f => `✕ 이미지: ${f}`));
       if (failed.length) lg.push(`— 못 뽑은 키워드 ${failed.length}개는 「못 뽑은 키워드만 다시」로 이어서 뽑을 수 있습니다 (조회 한도는 자정에 풀림)`);
-      setLog([...lg]); saveFailed(failed);
+      setLog([...lg]); saveFailed(failed); putResume(null);
       if (!total) notify('뽑힌 행이 없습니다', 'bad');
       else { notify(`${total.toLocaleString()}건 · 묶음 ${saved}개 저장됨${imgFails.length ? ` · 이미지 실패 ${imgFails.length}개` : ''}${saved > 1 ? ' — 브라우저가 "여러 파일 다운로드"를 물으면 허용' : ''}`, imgFails.length ? 'bad' : 'ok'); setPlan(null); }
     } catch (e: any) { lg.push(`✕ 중단됨 — ${String(e?.message ?? e).slice(0, 80)} (이미 저장된 묶음 ${saved}개는 그대로 쓸 수 있고, 남은 건 「대상 확인」부터 다시 누르면 이어서 뽑힙니다)`); setLog([...lg]); notify('뽑는 중 오류 — 저장된 묶음까지는 사용 가능', 'bad'); }
     finally { setBusy(false); setImgBusy(''); setCur(null); }
   };
+  runRef.current = run;
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
@@ -251,11 +273,16 @@ export default function ExportClient({ owner: o0, phone: p0 }: { owner: string; 
         <button type="button" className="btn" disabled={formBusy} onClick={saveForm}>{formBusy ? '저장 중…' : '문구 저장'}</button>
         <span className="help">{savedAt ? `마지막 저장 ${new Date(new Date(savedAt).getTime() + 9 * 3600e3).toISOString().slice(5, 16).replace('T', ' ')} — 제목·본문·오픈채팅·담당자·연락처·가격이 같이 저장됩니다` : '저장하지 않으면 새로고침할 때 기본 문구로 돌아갑니다'}</span>
       </div>
+      {resume && !busy && <div className="card" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', borderColor: '#F79009' }}>
+        <b>중단된 뽑기가 있습니다</b><span>남은 키워드 {resume.rest.length}개 · 묶음 {resume.done + 1}/{resume.parts}부터{resume.inflight.length ? ` · 저장 못 한 묶음(키워드 ${resume.inflight.length}개)의 기록은 지우고 다시 뽑습니다` : ''}</span>
+        <button type="button" className="btn" onClick={() => run(resume)}>이어서 뽑기</button>
+        <button type="button" className="btn ghost" onClick={() => { putResume(null); setResume(null); }}>버리기</button>
+        <span className="help">담당자·오픈채팅·문구는 중단되기 전 값 그대로 이어집니다</span></div>}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn ghost" disabled={busy} onClick={() => doPlan()}>{busy ? (planMsg || '확인 중…') : '1. 대상 확인'}</button>
         <button className="btn ghost" disabled={busy} onClick={() => doPlan(true)} title="총 건수·키워드당 최대와 상관없이, 지금 보낼 수 있는 대상을 전부 뽑습니다">전체 뽑기</button>
         {failedKws.length > 0 && <button className="btn ghost" disabled={busy} onClick={retryFailed} title="지난번에 조회 한도 등으로 못 뽑은 키워드만 다시 뽑습니다 (이미 뽑은 키워드는 제외)">못 뽑은 키워드만 다시 ({failedKws.length}개)</button>}
-        <button className="btn" disabled={busy || !plan} onClick={run}>{busy ? (imgBusy ? `이미지 만드는 중 ${imgBusy}` : '만드는 중…') : imgMode ? '2. 엑셀 + 제안서 이미지 받기' : '2. 엑셀 받기'}</button>
+        <button className="btn" disabled={busy || !plan} onClick={() => run()}>{busy ? (imgBusy ? `이미지 만드는 중 ${imgBusy}` : '만드는 중…') : imgMode ? '2. 엑셀 + 제안서 이미지 받기' : '2. 엑셀 받기'}</button>
         <button className="btn ghost" disabled={busy || !!imgBusy || !imgKws.length} onClick={getImages} title="키워드마다 맞춤 제안서 공용판 9장을 만들어 zip 하나로 받습니다 (키워드별 폴더)">{imgBusy && !busy ? `이미지 만드는 중 ${imgBusy}` : `이미지만 다시 받기${imgKws.length ? ` (키워드 ${imgKws.length}개)` : ''}`}</button>
         {plan && <span className="help">키워드 {plan.length}개 · {plan.reduce((a, p) => a + p.n, 0)}건</span>}
       </div>

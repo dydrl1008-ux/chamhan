@@ -204,6 +204,14 @@ export async function manualPlan(total: number, perKeyword: number, from = 0): P
 
 const uniqEmail = (cs: Candidate[]) => { const seen = new Set<string>(); return cs.filter(c => { const e = c.email.trim().toLowerCase(); if (seen.has(e)) return false; seen.add(e); return true; }); };
 const MANUAL_MARK = '수동 엑셀';   // mail_queue.error 에 넣는 표시 — 수동 발송 엑셀로 뽑은 건
+/** 뽑다가 중단돼 파일로 저장하지 못한 묶음의 '수동 엑셀' 기록을 지운다 — 그 키워드들을 바로 다시 뽑을 수 있게. 본인이 since 이후에 남긴 기록만 */
+export async function manualUnrecord(keywords: string[], since: string): Promise<R<{ n: number }>> {
+  const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
+  const kws = Array.from(new Set((keywords ?? []).map(k => String(k).trim()).filter(Boolean))).slice(0, 200); const t = new Date(since);
+  if (!kws.length || isNaN(t.getTime()) || Date.now() - t.getTime() > 24 * 3600e3) return { ok: true, msg: '', n: 0 };   // 하루 넘은 건은 건드리지 않는다 (이미 보냈을 수 있음)
+  const { data, error } = await supabaseAdmin().from('mail_queue').delete().eq('sender_id', me.id).eq('error', MANUAL_MARK).in('keyword', kws).gte('queued_at', t.toISOString()).select('id');
+  return error ? { ok: false, msg: error.message } : { ok: true, msg: '', n: (data ?? []).length };
+}
 /** 2단계: 키워드 1개 — 제안서(캐시 지수) 1개 만들고 대상 n건을 엑셀 행으로 반환. 뽑은 대상은 '수동 엑셀' 표시로 발송 내역에 남긴다 (2026-11-14 변경: 다시 뽑히지 않게) */
 export async function manualExport(i: { keyword: string; n: number; owner: string; phone: string; offer: { basic: string; rec: string }; tpl: Tpl; tplB: Tpl; tplC: Tpl; startNo: number; kakao?: string }): Promise<R<{ rows: ManualRow[] }>> {
   const me = await getProfile(); if (!me || !isHeadOnly(me)) return { ok: false, msg: '총괄만' };
