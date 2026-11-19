@@ -5,6 +5,7 @@ import { todayKST } from '@/lib/date/kst';
 import { bizMonthOf, nextBizMonth } from '@/lib/date/period';
 import { loadPlan, teamSummary } from '@/lib/monthly';
 import MonthlyClient from './MonthlyClient';
+import TeamCalls from './TeamCalls';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 export default async function MonthlyPage({ searchParams }: { searchParams: { team?: string; m?: string; tab?: string } }) {
@@ -20,5 +21,8 @@ export default async function MonthlyPage({ searchParams }: { searchParams: { te
   const data = teamId ? await loadPlan(teamId, bm) : null;
   const { data: leaders } = await sb.from('profiles').select('id,name').in('id', (teams ?? []).map(t => t.leader_id).filter(Boolean) as string[]);
   const canEdit = me.role === 'admin' || me.role === 'head' || (me.role === 'manager' && me.team_id === teamId);
-  return <MonthlyClient key={`${teamId}:${bm}:${searchParams.tab ?? ''}`} me={me} teams={(teams ?? []).map(t => ({ ...t, leader: leaders?.find(l => l.id === t.leader_id)?.name ?? '' }))} teamId={teamId} bm={bm} curBm={curBm} nextBm={nextBizMonth(curBm)} data={data} summaries={summaries} canEdit={canEdit} tab={searchParams.tab ?? ''} />;
+  return <div style={{ display: 'grid', gap: 16 }}>
+    {teamId ? <TeamCalls teamId={teamId} /> : null}
+    <MonthlyClient key={`${teamId}:${bm}:${searchParams.tab ?? ''}`} me={me} teams={(teams ?? []).map(t => ({ ...t, leader: leaders?.find(l => l.id === t.leader_id)?.name ?? '' }))} teamId={teamId} bm={bm} curBm={curBm} nextBm={nextBizMonth(curBm)} data={data} summaries={summaries} canEdit={canEdit} tab={searchParams.tab ?? ''} />
+  </div>;
 }
