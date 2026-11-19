@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function CallStatusPage() {
   const me = await getProfile(); if (!me || !me.is_active) redirect('/login');
   if (!['admin', 'head', 'manager'].includes(me.role)) redirect('/');
-  const sb = supabaseServer(); const { data: ts } = await sb.from('teams').select('id,name').order('id');
+  const sb = supabaseServer(); const { data: ts } = await sb.from('teams').select('id,name').eq('is_active', true).neq('name', '관리팀').order('sort_order');
   const teams = ((ts ?? []) as { id: number; name: string }[]).filter(t => me.role !== 'manager' || t.id === me.team_id);
   const today = todayKST();
   return <div style={{ display: 'grid', gap: 20 }}>
