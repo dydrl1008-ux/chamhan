@@ -78,11 +78,14 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   const interested = (follow ?? []) as Lead[]; const wonL = (wonRows ?? []) as Lead[];
   const all = [...t, ...interested, ...wonL].filter((x, i, a) => a.findIndex(y => y.id === x.id) === i);
   const ids = all.map(x => x.id);
-  const { data: hist } = ids.length ? await sb.from('lead_contacts').select('lead_id,user_id,round,status,note,created_at').in('lead_id', ids).order('created_at', { ascending: false }).limit(2000) : { data: [] as any[] };
+  // 사람당 1,000곳 넘게 배분되면 한 번에 다 조회하다 화면이 안 열림 → 이력은 300개씩 나눠서, 지수는 앞쪽(점수 높은 순) 200곳 + 관심·계약만
+  const chunks: number[][] = []; for (let i = 0; i < ids.length; i += 300) chunks.push(ids.slice(i, i + 300));
+  const hist = (await Promise.all(chunks.map(c => sb.from('lead_contacts').select('lead_id,user_id,round,status,note,created_at').in('lead_id', c).order('created_at', { ascending: false }).limit(1000)))).flatMap(r => r.data ?? []).sort((a: any, b: any) => a.created_at < b.created_at ? 1 : -1);
   const uids = [...new Set((hist ?? []).map((h: any) => h.user_id).filter(Boolean))];
   const { data: names } = uids.length ? await supabaseAdmin().from('profiles').select('id,name').in('id', uids) : { data: [] as any[] };   // 다른 팀 사람 이름도 보이게 (RLS 우회, 이름만)
   const nm = Object.fromEntries((names ?? []).map((x: any) => [x.id, x.name]));
-  const idx = await leadIndexes(all.map(x => ({ id: x.id, keyword: x.keyword, product_url: x.product_url, store_name: x.store_name, category: x.category })));
+  const IDX_MAX = 200; const idxRows = [...todayTab.slice(0, IDX_MAX), ...interested, ...wonL].filter((x, i, a) => a.findIndex(y => y.id === x.id) === i);
+  const idx = await leadIndexes(idxRows.map(x => ({ id: x.id, keyword: x.keyword, product_url: x.product_url, store_name: x.store_name, category: x.category })));
   const history: Record<number, Hist[]> = {}; (hist ?? []).forEach((h: any) => { (history[h.lead_id] ??= []).push({ round: h.round, status: h.status, note: h.note, at: h.created_at, who: nm[h.user_id] ?? '' }); });
   return (
     <div style={{ display: 'grid', gap: 20 }}>

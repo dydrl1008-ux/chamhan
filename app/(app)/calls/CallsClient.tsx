@@ -22,6 +22,7 @@ export type Patch = Partial<Pick<Lead, 'status' | 'note' | 'next_contact_on' | '
 type SaveState = { st: 'saving' | 'ok' | 'fail'; msg?: string; retry?: () => void };
 
 export default function CallsClient({ rows, props, origin, history = {}, indexes = {}, onPatch }: { rows: Lead[]; props: Prop[]; origin: string; history?: Record<number, Hist[]>; indexes?: Record<number, LeadIndex>; onPatch?: (id: number, patch: Patch) => void }) {
+  const [shown, setShown] = useState(100);   // 1,000곳 넘게 배분되면 한꺼번에 그리다 브라우저가 멈춤 → 100곳씩
   const r = useRouter(); const [busy, start] = useTransition();
   // 결과 기록: 화면 먼저 바꾸고(낙관적) 저장은 뒤에서. 줄 단위 상태 · 실패 시 자동 재시도 3회 · 그래도 실패면 "재시도" 버튼
   const [sv, setSv] = useState<Record<number, SaveState>>({});
@@ -64,7 +65,7 @@ export default function CallsClient({ rows, props, origin, history = {}, indexes
   return (
     <div className="tbl-wrap"><table>
       <thead><tr><th style={{ width: 36 }}>#</th><th>업체</th><th>연락처</th><th>왜 이 업체?</th><th>상품 지수</th><th>차수 · 지난 콜</th><th>결과 기록</th></tr></thead>
-      <tbody>{rows.map((l0, idx) => { const l = L(l0);
+      <tbody>{rows.slice(0, shown).map((l0, idx) => { const l = L(l0);
         const ps = byLead[l.id] ?? []; const seen = ps.reduce((a, p) => a + p.views, 0);
         const due = !!l.next_contact_on && l.next_contact_on <= todayS;
         return <tr key={l.id} id={'lead-' + l.id} style={{ verticalAlign: 'top', background: due ? 'var(--accent-soft)' : seen ? 'var(--wait-soft)' : undefined }}>
@@ -116,7 +117,7 @@ export default function CallsClient({ rows, props, origin, history = {}, indexes
             </div>
           </td>
         </tr>;
-      })}</tbody>
+      })}{rows.length > shown && <tr><td colSpan={20} style={{ textAlign: 'center', padding: 14 }}><button type="button" className="btn" onClick={() => setShown(n => n + 100)}>100곳 더 보기 ({shown} / {rows.length})</button> <button type="button" className="btn ghost" onClick={() => setShown(rows.length)}>전부 보기</button></td></tr>}</tbody>
     </table></div>
   );
 }
