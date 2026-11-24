@@ -12,7 +12,10 @@ export default async function TeamCalls({ teamId, teamName, from, to }: { teamId
   const people = (ppl ?? []) as { id: string; name: string }[]; if (!people.length) return null; const ids = people.map(p => p.id);
   const days: string[] = []; for (let d = from; d <= to && days.length < 14; d = addDays(d, 1)) days.push(d);
   const [sums, kw] = await Promise.all([
-    Promise.all(days.map(d => (d === today ? sb.rpc('leads_today_summary', { p_date: d }) : sb.rpc('leads_day_summary', { p_date: d })).then(r => (r.data ?? []) as Sm[]))),
+    Promise.all(days.map(async d => {   // 지난 날짜: 배분 이력 기준 함수가 없거나 실패하면 「오늘의 콜 리스트」 화면과 같은 방식으로 다시 읽는다 (두 화면 숫자가 같아야 한다)
+      let r = d === today ? await sb.rpc('leads_today_summary', { p_date: d }) : await sb.rpc('leads_day_summary', { p_date: d });
+      if (r.error && d !== today) r = await sb.rpc('leads_today_summary', { p_date: d });
+      return (r.data ?? []) as Sm[]; })),
     supabaseAdmin().from('kw_contacts').select('claimed_by,result,result_at').in('claimed_by', ids).neq('result', '').gte('result_at', `${from}T00:00:00+09:00`).lt('result_at', `${addDays(to, 1)}T00:00:00+09:00`).limit(10000),
   ]);
   const K = (kw.data ?? []) as { claimed_by: string; result: string; result_at: string }[];
