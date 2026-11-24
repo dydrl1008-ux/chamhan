@@ -77,7 +77,8 @@ async function reserveForRequesters(sb: ReturnType<typeof supabaseAdmin>, keywor
   if (!csv.size) return;
   const since = new Date(Date.now() - 2 * 3600e3).toISOString();
   const { data: reqs } = await sb.from('kw_requests').select('id,keyword,requested_by,status,done_at').or(`status.eq.open,and(status.eq.done,done_at.gt.${since})`).order('id', { ascending: true }).limit(2000);
-  const owner = new Map<string, string>(); for (const r of reqs ?? []) { const n = nk(r.keyword); if (csv.has(n) && !owner.has(n)) owner.set(n, r.requested_by); }
+  const { data: bosses } = await sb.from('profiles').select('id').in('role', ['head', 'admin']); const boss = new Set((bosses ?? []).map(b => b.id));   // 총괄·어드민이 넣은 요청은 전체 공용 — 잡아 두지 않음
+  const owner = new Map<string, string>(); for (const r of reqs ?? []) { const n = nk(r.keyword); if (csv.has(n) && !owner.has(n) && !boss.has(r.requested_by)) owner.set(n, r.requested_by); }
   const now = new Date().toISOString(); const until = new Date(Date.now() + RESERVE_DAYS * 86400e3).toISOString();
   for (const [n, user] of owner) for (const kw of csv.get(n) ?? [])
     await sb.from('kw_contacts').update({ reserved_by: user, reserved_until: until, reserved_kw: kw }).contains('keywords', [kw]).is('claimed_by', null).or(`reserved_by.is.null,reserved_until.lt.${now}`);
