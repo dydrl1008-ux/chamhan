@@ -149,3 +149,13 @@ export async function kwCloseRequest(ids: number[], status: 'done' | 'rejected')
   if (by.size) await sb.from('notifications').insert([...by].map(([user_id, ks]) => ({ user_id, kind: 'info', title: status === 'done' ? `요청한 키워드 ${ks.length}개 처리 완료` : `요청한 키워드 ${ks.length}개는 업체가 나오지 않았습니다`, body: ks.join(', ').slice(0, 300), link: '/kw-calls' })));
   return { ok: true, msg: `${rows?.length ?? 0}개 ${status === 'done' ? '완료' : '반려'} 처리` };
 }
+
+/** 잘못 넣은 요청 지우기 — 대기 중인 것만. 직원은 자기 요청만, 총괄·어드민은 전부. 알림 없이 조용히 지움 */
+export async function kwDeleteRequest(ids: number[]): Promise<R> {
+  const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const list = (ids ?? []).map(Number).filter(Number.isFinite).slice(0, 500); if (!list.length) return { ok: false, msg: '대상 없음' };
+  const boss = me.role === 'head' || me.role === 'admin';
+  let q = supabaseAdmin().from('kw_requests').delete().in('id', list).eq('status', 'open'); if (!boss) q = q.eq('requested_by', me.id);
+  const { data, error } = await q.select('id'); if (error) return { ok: false, msg: needSql2(error.message) };
+  return data?.length ? { ok: true, msg: `요청 ${data.length}개 삭제` } : { ok: false, msg: '지울 수 있는 요청이 없습니다 (이미 처리된 요청은 못 지움)' };
+}
