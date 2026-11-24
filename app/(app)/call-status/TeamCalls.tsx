@@ -3,19 +3,15 @@ import Link from 'next/link';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { todayKST, addDays, fmtMD } from '@/lib/date/kst';
-type Sm = { assigned_to: string | null; status: string; cnt: number };
+export type Sm = { assigned_to: string | null; status: string; cnt: number };
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const dow = (d: string) => new Date(d + 'T00:00:00Z').getUTCDay();
-export default async function TeamCalls({ teamId, teamName, from, to }: { teamId: number; teamName: string; from: string; to: string }) {
+export default async function TeamCalls({ teamId, teamName, from, to, sums, missing }: { teamId: number; teamName: string; from: string; to: string; sums: Sm[][]; missing: string[] }) {
   const sb = supabaseServer(); const today = todayKST();
   const { data: ppl } = await sb.from('v_sales_people').select('id,name,team_id').eq('team_id', teamId).order('name');
   const people = (ppl ?? []) as { id: string; name: string }[]; if (!people.length) return null; const ids = people.map(p => p.id);
   const days: string[] = []; for (let d = from; d <= to && days.length < 14; d = addDays(d, 1)) days.push(d);
-  const [sums, kw] = await Promise.all([
-    Promise.all(days.map(async d => {   // 지난 날짜: 배분 이력 기준 함수가 없거나 실패하면 「오늘의 콜 리스트」 화면과 같은 방식으로 다시 읽는다 (두 화면 숫자가 같아야 한다)
-      let r = d === today ? await sb.rpc('leads_today_summary', { p_date: d }) : await sb.rpc('leads_day_summary', { p_date: d });
-      if (r.error && d !== today) r = await sb.rpc('leads_today_summary', { p_date: d });
-      return (r.data ?? []) as Sm[]; })),
+  const [kw] = await Promise.all([   // 날짜별 콜 리스트 합계(sums)는 페이지에서 한 번만 읽어 팀마다 나눠 쓴다 (팀 수만큼 같은 조회를 반복하지 않게)
     supabaseAdmin().from('kw_contacts').select('claimed_by,result,result_at').in('claimed_by', ids).neq('result', '').gte('result_at', `${from}T00:00:00+09:00`).lt('result_at', `${addDays(to, 1)}T00:00:00+09:00`).limit(10000),
   ]);
   const K = (kw.data ?? []) as { claimed_by: string; result: string; result_at: string }[];
@@ -27,7 +23,7 @@ export default async function TeamCalls({ teamId, teamName, from, to }: { teamId
   });
   const S = (f: (r: typeof rows[number]) => number) => rows.reduce((a, r) => a + f(r), 0); const n = { textAlign: 'right' as const }; const v = (x: number) => x || '-'; const sep = { borderLeft: '2px solid var(--line, #E4E7EC)' };
   return <div className="card" style={{ display: 'grid', gap: 10 }}>
-    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}><b>{teamName}</b><span className="cell-sub">{people.length}명 · {single ? fmtMD(from) : `${fmtMD(from)} ~ ${fmtMD(to)} (근무일 ${workdays}일)`}</span></div>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}><b>{teamName}</b><span className="cell-sub">{people.length}명 · {single ? fmtMD(from) : `${fmtMD(from)} ~ ${fmtMD(to)} (근무일 ${workdays}일)`}</span>{missing.length > 0 && <span style={{ color: '#B54708', fontSize: 12.5 }}>{missing.map(fmtMD).join(', ')}은 콜 리스트 숫자를 읽지 못했습니다 (DB 가 바쁨) — 잠시 뒤 다시</span>}</div>
     <div style={{ overflowX: 'auto' }}><table>
       <thead><tr><th>이름</th>
         {!single && days.map(d => <th key={d} style={{ ...n, color: dow(d) === 0 || dow(d) === 6 ? 'var(--muted)' : undefined }}>{fmtMD(d)}<br /><span style={{ fontWeight: 400 }}>{DOW[dow(d)]}</span></th>)}
