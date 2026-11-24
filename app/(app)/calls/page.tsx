@@ -90,7 +90,7 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
     <div style={{ display: 'grid', gap: 20 }}>
       <PageHeader title={(target === me.id ? '' : `${who} · `) + (isToday ? '오늘의 콜 리스트' : `콜 리스트 · ${dayLabel}`)} actions={(lead || mgr) && people.length ? <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>{dateNav}{lead && <Link href={qs(day)} className="btn ghost">전체 현황</Link>}{people.map(p => <Link key={p.id} href={qs(day, p.id)} className={`btn ${p.id === target ? '' : 'ghost'}`}>{p.name}</Link>)}</span> : undefined} desc={isToday ? `오늘 ${t.length}곳 중 ${left}곳 남음 · 관심 ${interested.length} · 계약 ${wonL.length} · 키워드 콜 ${kwDone ?? 0}건` : t.length ? `${t.length}곳 · 배분 이력 기준 · 키워드 콜 ${kwDone ?? 0}건` : `${dayLabel} 배분된 리스트가 없습니다`}
         help={<>평일 09:00에 점수 높은 업체부터 자동 배분됩니다. 결과를 안 남긴 건은 다음 날 다른 사람에게 다시 배분될 수 있습니다. 「+ 제안서 추적 링크」로 만든 링크를 고객에게 보내면, 고객이 열 때 알림이 오고 이 줄이 노랗게 표시됩니다.</>} />
-      {kwRows.length > 0 && <KwMine rows0={kwRows} canEdit={target === me.id} who={target === me.id ? '내가' : `${who} 님이`} today={today} />}
+      {kwRows.length > 0 && <KwMine rows0={kwRows} canEdit={target === me.id || lead} owner={target} who={target === me.id ? '내가' : `${who} 님이`} today={today} />}
       <CallTabs initial={searchParams.t} props={(props ?? []) as Prop[]} origin={(process.env.NEXT_PUBLIC_PROPOSAL_URL || '').replace(/\/$/, '') || origin} history={history} indexes={idx}
         tabs={isToday ? [
           { key: 'today', label: '오늘', rows: todayTab, empty: '오늘 배분된 업체가 없습니다.', sub: `남음 ${left}곳 · 점수 높은 순 · 관심·계약으로 바꾼 건은 해당 탭으로` },

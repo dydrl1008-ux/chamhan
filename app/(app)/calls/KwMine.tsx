@@ -14,7 +14,7 @@ const TABS: { key: string; label: string; f: (r: KwRow) => boolean }[] = [
   { key: '계약', label: '계약', f: r => r.result === '계약' },
   { key: 'no', label: '부재·거절', f: r => r.result === '부재' || r.result === '거절' },
 ];
-export default function KwMine({ rows0, canEdit, who, today }: { rows0: KwRow[]; canEdit: boolean; who: string; today: string }) {
+export default function KwMine({ rows0, canEdit, who, today, owner }: { rows0: KwRow[]; canEdit: boolean; who: string; today: string; owner: string }) {
   const [rows, setRows] = useState(rows0); const [tab, setTab] = useState('open'); const [kw, setKw] = useState(''); const [memo, setMemo] = useState<Record<number, string>>({}); const [shown, setShown] = useState(100);
   const [touched, setTouched] = useState<Set<number>>(new Set());   // 방금 결과 남긴 줄은 그 탭에 남겨 둠 (새로고침하면 해당 탭으로)
   const kwOf = (r: KwRow) => r.reserved_kw || r.keywords[0] || '';
@@ -26,7 +26,7 @@ export default function KwMine({ rows0, canEdit, who, today }: { rows0: KwRow[];
   const todayN = rows.filter(r => r.result && r.result_at && kst(r.result_at).slice(0, 10) === today).length;
   const copy = async (t: string) => { try { await navigator.clipboard.writeText(t); notify('복사됨', 'ok'); } catch { notify('복사 실패', 'bad'); } };
   const save = async (r: KwRow, result: string) => {
-    const m = memo[r.id] ?? r.memo; const x = await kwSetResult(r.id, result, m); notify(x.msg, x.ok ? 'ok' : 'bad'); if (!x.ok) return;
+    const m = memo[r.id] ?? r.memo; const x = await kwSetResult(r.id, result, m, owner); notify(x.msg, x.ok ? 'ok' : 'bad'); if (!x.ok) return;
     setTouched(s => new Set(s).add(r.id));
     setRows(rs => rs.map(y => y.id === r.id ? { ...y, result, memo: m, result_at: result || m ? new Date().toISOString() : null } : y));
   };

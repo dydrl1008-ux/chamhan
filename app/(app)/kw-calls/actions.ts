@@ -36,7 +36,7 @@ export async function kwContacts(keyword: string): Promise<R<{ rows: Contact[] }
   return { ok: true, msg: '', rows: vis.sort((a, b) => rank(a) - rank(b)) };
 }
 /** 연락 결과·메모 저장 — 처음 남긴 사람이 담당. 다른 사람이 담당인 건은 총괄·어드민만 고칠 수 있음. 결과를 비우면 담당도 풀림 */
-export async function kwSetResult(id: number, result: string, memo: string): Promise<R> {
+export async function kwSetResult(id: number, result: string, memo: string, forUser?: string): Promise<R> {   // forUser: 총괄이 직원 화면에서 대신 남길 때 그 직원을 담당으로
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
   if (result && !KW_RESULTS.includes(result)) return { ok: false, msg: '결과 값이 올바르지 않습니다' };
   const sb = supabaseAdmin(); let { data: cur, error } = await sb.from('kw_contacts').select('claimed_by,reserved_by,reserved_until').eq('id', id).maybeSingle() as { data: any; error: { message: string } | null };
@@ -49,7 +49,7 @@ export async function kwSetResult(id: number, result: string, memo: string): Pro
     return { ok: false, msg: `${p?.name ?? '다른 직원'} 요청 건입니다 — ${new Date(new Date(cur.reserved_until).getTime() + 9 * 3600e3).toISOString().slice(5, 10).replace('-', '/')} 까지 요청자 우선` };
   }
   const m = String(memo ?? '').slice(0, 500); const clear = !result && !m;
-  const { error: e2 } = await sb.from('kw_contacts').update({ result, memo: m, claimed_by: clear ? null : (cur.claimed_by && !boss ? cur.claimed_by : cur.claimed_by ?? me.id), result_at: clear ? null : new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id);
+  const { error: e2 } = await sb.from('kw_contacts').update({ result, memo: m, claimed_by: clear ? null : (cur.claimed_by ?? (boss && forUser && /^[0-9a-f-]{36}$/i.test(forUser) ? forUser : me.id)), result_at: clear ? null : new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id);
   return e2 ? { ok: false, msg: e2.message } : { ok: true, msg: clear ? '담당 해제' : '저장됨' };
 }
 /** 추출기 CSV → 키워드 콜 리스트 (총괄만 올림). 화면이 1,000행씩 나눠 부른다 */
