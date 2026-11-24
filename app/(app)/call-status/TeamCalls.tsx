@@ -20,7 +20,7 @@ export default async function TeamCalls({ teamId, teamName, from, to, sums, miss
   const rows = people.map(p => {
     const per = sums.map(s => { const c: Record<string, number> = {}; for (const r of s) if (r.assigned_to === p.id) c[r.status] = (c[r.status] ?? 0) + r.cnt; const tot = Object.values(c).reduce((a, b) => a + b, 0); return { tot, left: c.assigned ?? 0, done: tot - (c.assigned ?? 0), hot: c.interested ?? 0, won: c.won ?? 0, no: (c.rejected ?? 0) + (c.called ?? 0) }; });
     const sum = (f: (x: typeof per[number]) => number) => per.reduce((a, x) => a + f(x), 0); const mine = K.filter(k => k.claimed_by === p.id); const ti = days.indexOf(today);
-    return { ...p, per, done: sum(x => x.done), hot: sum(x => x.hot), won: sum(x => x.won), no: sum(x => x.no), tot: sum(x => x.tot), left: ti >= 0 ? per[ti].left : 0, kw: mine.length, khot: mine.filter(k => k.result === '관심' || k.result === '계약').length };
+    return { ...p, per, done: sum(x => x.done), hot: sum(x => x.hot), won: sum(x => x.won), no: sum(x => x.no), tot: sum(x => x.tot), left: ti >= 0 ? per[ti].left : 0, kw: mine.length, khot: mine.filter(k => k.result === '관심').length, kwon: mine.filter(k => k.result === '계약').length, kno: mine.filter(k => k.result === '부재' || k.result === '거절').length };
   });
   const S = (f: (r: typeof rows[number]) => number) => rows.reduce((a, r) => a + f(r), 0); const n = { textAlign: 'right' as const }; const v = (x: number) => x || '-'; const sep = { borderLeft: '2px solid var(--line, #E4E7EC)' };
   return <div className="card" style={{ display: 'grid', gap: 10 }}>
@@ -30,20 +30,20 @@ export default async function TeamCalls({ teamId, teamName, from, to, sums, miss
         {!single && days.map(d => <th key={d} style={{ ...n, color: dow(d) === 0 || dow(d) === 6 ? 'var(--muted)' : undefined }}>{fmtMD(d)}<br /><span style={{ fontWeight: 400 }}>{DOW[dow(d)]}</span></th>)}
         {single && <th style={n}>배분</th>}{hasToday && <th style={n}>오늘 남음</th>}
         <th style={{ ...n, ...sep }}>처리{single ? '' : ' 합계'}</th>{!single && <th style={n}>일평균</th>}<th style={n}>관심</th><th style={n}>계약</th><th style={n}>거절·부재</th>
-        <th style={{ ...n, ...sep }}>키워드 콜</th><th style={n}>관심·계약</th><th style={{ ...n, ...sep }}>전체 합계</th><th /></tr></thead>
+        <th style={{ ...n, ...sep }}>키워드 콜</th><th style={n}>관심</th><th style={n}>계약</th><th style={n}>거절·부재</th><th style={{ ...n, ...sep }}>전체 합계</th><th /></tr></thead>
       <tbody>
         {rows.map(r => <tr key={r.id}><td><b>{r.name}</b></td>
           {!single && r.per.map((x, i) => <td key={days[i]} style={{ ...n, color: !x.done && x.tot ? '#B42318' : undefined }}>{v(x.done)}</td>)}
           {single && <td style={n}>{v(r.tot)}</td>}{hasToday && <td style={n}>{v(r.left)}</td>}
           <td style={{ ...n, ...sep, fontWeight: 700, color: !r.done && r.tot ? '#B42318' : undefined }}>{r.tot ? r.done : '-'}</td>{!single && <td style={n}>{r.done ? Math.round(r.done / workdays) : '-'}</td>}
           <td style={{ ...n, color: r.hot ? '#067647' : undefined }}>{v(r.hot)}</td><td style={{ ...n, color: r.won ? '#067647' : undefined }}>{v(r.won)}</td><td style={n}>{v(r.no)}</td>
-          <td style={{ ...n, ...sep, fontWeight: 700 }}>{v(r.kw)}</td><td style={{ ...n, color: r.khot ? '#067647' : undefined }}>{v(r.khot)}</td>
+          <td style={{ ...n, ...sep, fontWeight: 700 }}>{v(r.kw)}</td><td style={{ ...n, color: r.khot ? '#067647' : undefined }}>{v(r.khot)}</td><td style={{ ...n, color: r.kwon ? '#175CD3' : undefined, fontWeight: r.kwon ? 700 : undefined }}>{v(r.kwon)}</td><td style={n}>{v(r.kno)}</td>
           <td style={{ ...n, ...sep, fontWeight: 700 }}>{v(r.done + r.kw)}</td>
           <td><Link href={`/calls?u=${r.id}${single && from < today ? `&d=${from}` : ''}`} className="help">리스트 →</Link></td></tr>)}
         <tr style={{ fontWeight: 700 }}><td>합계</td>
           {!single && days.map((d, i) => <td key={d} style={n}>{S(r => r.per[i].done)}</td>)}{single && <td style={n}>{S(r => r.tot)}</td>}{hasToday && <td style={n}>{S(r => r.left)}</td>}
           <td style={{ ...n, ...sep }}>{S(r => r.done)}</td>{!single && <td style={n}>{Math.round(S(r => r.done) / workdays)}</td>}<td style={n}>{S(r => r.hot)}</td><td style={n}>{S(r => r.won)}</td><td style={n}>{S(r => r.no)}</td>
-          <td style={{ ...n, ...sep }}>{S(r => r.kw)}</td><td style={n}>{S(r => r.khot)}</td><td style={{ ...n, ...sep }}>{S(r => r.done + r.kw)}</td><td /></tr>
+          <td style={{ ...n, ...sep }}>{S(r => r.kw)}</td><td style={n}>{S(r => r.khot)}</td><td style={n}>{S(r => r.kwon)}</td><td style={n}>{S(r => r.kno)}</td><td style={{ ...n, ...sep }}>{S(r => r.done + r.kw)}</td><td /></tr>
       </tbody>
     </table></div>
   </div>;
