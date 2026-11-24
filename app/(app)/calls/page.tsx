@@ -9,6 +9,7 @@ import CallsClient, { type Lead, type Prop, type Hist } from './CallsClient';
 import { leadIndexes } from '@/lib/leadIndex';
 import MyCustomers, { type MyCustomer } from './MyCustomers';
 import CallTabs from './CallTabs';
+import KwMine, { type KwRow } from './KwMine';
 export const dynamic = 'force-dynamic';
 
 /** 오늘의 콜 리스트 — 영업사원 본인 배정분(오늘) · 관심 · 계약 탭. 총괄·대표·팀장은 사람 골라서 보기 (팀장은 팀원만) */
@@ -66,11 +67,9 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   const { data: myC } = await sb.from('my_customers').select('id,name,phone,memo,created_at').eq('user_id', target).order('created_at', { ascending: false });
   const [{ count: kwDone }, { data: rsv }] = await Promise.all([
     adm.from('kw_contacts').select('id', { count: 'exact', head: true }).eq('claimed_by', target).neq('result', '').gte('result_at', d0).lt('result_at', d1),
-    isToday ? adm.from('kw_contacts').select('reserved_kw,claimed_by,reserved_until').eq('reserved_by', target).gt('reserved_until', new Date().toISOString()).limit(3000) : Promise.resolve({ data: [] as any[] }),   // 0090 실행 전엔 오류 → 빈 값
+    isToday ? adm.from('kw_contacts').select('id,store_name,store_url,company,rep,email,phone,address,keywords,reserved_kw,reserved_by,reserved_until,claimed_by,result,memo,result_at').or(`claimed_by.eq.${target},and(reserved_by.eq.${target},claimed_by.is.null,reserved_until.gt.${new Date().toISOString()})`).order('id', { ascending: true }).limit(3000) : Promise.resolve({ data: [] as any[] }),   // 내 담당 + 내 요청 건(우선 기간 중). 0090 실행 전엔 오류 → 빈 값
   ]);
-  const rk: Record<string, { n: number; open: number; until: string }> = {};
-  (rsv ?? []).forEach((r: any) => { const k = r.reserved_kw || '(키워드 없음)'; const x = (rk[k] ??= { n: 0, open: 0, until: r.reserved_until }); x.n++; if (!r.claimed_by) x.open++; if (r.reserved_until < x.until) x.until = r.reserved_until; });
-  const rkList = Object.entries(rk).sort((a, b) => b[1].open - a[1].open); const rkOpen = rkList.reduce((a, [, v]) => a + v.open, 0);
+  const kwRows: KwRow[] = (rsv ?? []).map((r: any) => ({ id: r.id, store_name: r.store_name, store_url: r.store_url, company: r.company, rep: r.rep, email: r.email, phone: r.phone, address: r.address ?? '', keywords: r.keywords ?? [], reserved_kw: r.reserved_by === target ? r.reserved_kw ?? '' : '', claimed: !!r.claimed_by, result: r.result ?? '', memo: r.memo ?? '', result_at: r.result_at, until: r.reserved_by === target ? r.reserved_until : null }));
   const t0 = (todayRows ?? []) as Lead[]; const t = [...t0.filter(x => x.next_contact_on && x.next_contact_on <= today), ...t0.filter(x => !(x.next_contact_on && x.next_contact_on <= today))];   // 약속 팔로업 먼저
   const left = t.filter(x => x.status === 'assigned').length;
   // 탭: 오늘(관심·계약으로 넘어간 건 제외) / 관심 전부 / 계약 전부. 지난 날짜는 그날 리스트만
@@ -91,13 +90,7 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
     <div style={{ display: 'grid', gap: 20 }}>
       <PageHeader title={(target === me.id ? '' : `${who} · `) + (isToday ? '오늘의 콜 리스트' : `콜 리스트 · ${dayLabel}`)} actions={(lead || mgr) && people.length ? <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>{dateNav}{lead && <Link href={qs(day)} className="btn ghost">전체 현황</Link>}{people.map(p => <Link key={p.id} href={qs(day, p.id)} className={`btn ${p.id === target ? '' : 'ghost'}`}>{p.name}</Link>)}</span> : undefined} desc={isToday ? `오늘 ${t.length}곳 중 ${left}곳 남음 · 관심 ${interested.length} · 계약 ${wonL.length} · 키워드 콜 ${kwDone ?? 0}건` : t.length ? `${t.length}곳 · 배분 이력 기준 · 키워드 콜 ${kwDone ?? 0}건` : `${dayLabel} 배분된 리스트가 없습니다`}
         help={<>평일 09:00에 점수 높은 업체부터 자동 배분됩니다. 결과를 안 남긴 건은 다음 날 다른 사람에게 다시 배분될 수 있습니다. 「+ 제안서 추적 링크」로 만든 링크를 고객에게 보내면, 고객이 열 때 알림이 오고 이 줄이 노랗게 표시됩니다.</>} />
-      {rkList.length > 0 && <div className="card" style={{ display: 'grid', gap: 8, borderLeft: '4px solid #7A5AF8', background: 'rgba(122,90,248,.05)' }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-          <b><span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#7A5AF8', borderRadius: 999, padding: '2px 8px', marginRight: 8 }}>키워드 요청 건</span>{target === me.id ? '내가' : `${who} 님이`} 요청해 올라온 업체 — 남음 {rkOpen}곳</b>
-          <span className="cell-sub">자동 배분 리스트와 별개 · 요청자 우선 기간 동안 다른 직원은 결과를 남길 수 없습니다 · 오늘 키워드 콜 {kwDone ?? 0}건</span>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{rkList.map(([k, v]) => <Link key={k} href={`/kw-calls?k=${encodeURIComponent(k)}`} className="btn ghost" style={{ borderColor: '#7A5AF8' }}><b>{k}</b>&nbsp;· 남음 {v.open} / {v.n}&nbsp;<span className="cell-sub">~{fmtMD(new Date(new Date(v.until).getTime() + 9 * 3600e3).toISOString().slice(0, 10))}</span></Link>)}</div>
-      </div>}
+      {kwRows.length > 0 && <KwMine rows0={kwRows} canEdit={target === me.id} who={target === me.id ? '내가' : `${who} 님이`} today={today} />}
       <CallTabs initial={searchParams.t} props={(props ?? []) as Prop[]} origin={(process.env.NEXT_PUBLIC_PROPOSAL_URL || '').replace(/\/$/, '') || origin} history={history} indexes={idx}
         tabs={isToday ? [
           { key: 'today', label: '오늘', rows: todayTab, empty: '오늘 배분된 업체가 없습니다.', sub: `남음 ${left}곳 · 점수 높은 순 · 관심·계약으로 바꾼 건은 해당 탭으로` },
