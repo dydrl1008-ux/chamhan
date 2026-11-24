@@ -1,10 +1,10 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { notify } from '@/components/Toast';
 import { kwContacts, kwSetResult, kwRequest, kwRequests, kwCloseRequest, type KwCount, type Contact, type KwReq } from './actions';
 const RESULTS = ['부재', '관심', '재연락', '거절', '계약'];
 const COLOR: Record<string, string> = { 관심: '#067647', 계약: '#175CD3', 재연락: '#B54708', 거절: '#B42318', 부재: '#667085' };
-export default function KwCallsClient({ me, keywords, err, reqs0, reqErr }: { me: { id: string; boss: boolean }; keywords: KwCount[]; err: string; reqs0: { mine: KwReq[]; open: KwReq[] }; reqErr: string }) {
+export default function KwCallsClient({ me, keywords, err, reqs0, reqErr, initialKw }: { me: { id: string; boss: boolean }; keywords: KwCount[]; err: string; reqs0: { mine: KwReq[]; open: KwReq[] }; reqErr: string; initialKw?: string }) {
   const [reqs, setReqs] = useState(reqs0); const [rq, setRq] = useState(''); const [rbusy, setRbusy] = useState(false); const [sel, setSel] = useState<Set<number>>(new Set());
   const md = (t: string) => new Date(new Date(t).getTime() + 9 * 3600e3).toISOString().slice(5, 16).replace('T', ' ');
   const reloadReq = async () => { const r = await kwRequests(); if (r.ok) { setReqs({ mine: r.mine, open: r.open }); setSel(new Set()); } };
@@ -13,7 +13,10 @@ export default function KwCallsClient({ me, keywords, err, reqs0, reqErr }: { me
   const openKws = Array.from(new Set(reqs.open.map(r => r.keyword)));
   const [q, setQ] = useState(''); const [kw, setKw] = useState(''); const [rows, setRows] = useState<Contact[]>([]); const [busy, setBusy] = useState(false);
   const [only010, setOnly010] = useState(true); const [onlyOpen, setOnlyOpen] = useState(false); const [memo, setMemo] = useState<Record<number, string>>({});
-  const kws = useMemo(() => { const k = q.trim().replace(/\s/g, ''); return (k ? keywords.filter(x => x.keyword.replace(/\s/g, '').includes(k)) : keywords).slice(0, 300); }, [keywords, q]);
+  const nk = (x: string) => x.replace(/\s+/g, '').toLowerCase();
+  const myKw = useMemo(() => new Set(reqs.mine.filter(r => r.status === 'done').map(r => nk(r.keyword))), [reqs.mine]);
+  const kws = useMemo(() => { const k = q.trim().replace(/\s/g, ''); const l = k ? keywords.filter(x => x.keyword.replace(/\s/g, '').includes(k)) : keywords; return [...l.filter(x => myKw.has(nk(x.keyword))), ...l.filter(x => !myKw.has(nk(x.keyword)))].slice(0, 300); }, [keywords, q, myKw]);   // 내가 요청한 키워드 먼저
+  useEffect(() => { if (initialKw) load(initialKw); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   const load = async (k: string) => { setKw(k); setBusy(true); const r = await kwContacts(k); setBusy(false); if (!r.ok) return notify(r.msg, 'bad'); setRows(r.rows); setMemo({}); };
   const is010 = (p: string) => /^01[016789]/.test(p.replace(/\D/g, ''));
   const view = rows.filter(r => (!only010 || is010(r.phone)) && (!onlyOpen || !r.result));
@@ -51,7 +54,7 @@ export default function KwCallsClient({ me, keywords, err, reqs0, reqErr }: { me
       {err && <div style={{ color: '#B42318', fontSize: 13 }}>{err}</div>}
       <div style={{ display: 'grid', gap: 2, maxHeight: 640, overflow: 'auto' }}>
         {kws.map(k => <button key={k.keyword} type="button" onClick={() => load(k.keyword)} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 9px', border: 0, borderRadius: 8, cursor: 'pointer', textAlign: 'left', background: k.keyword === kw ? 'var(--bg)' : 'transparent', fontWeight: k.keyword === kw ? 800 : 500, fontSize: 13.5 }}>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.keyword}</span><span className="cell-sub" style={{ whiteSpace: 'nowrap' }}>미연락 {k.open} / {k.n}</span></button>)}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{myKw.has(nk(k.keyword)) && <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#7A5AF8', borderRadius: 999, padding: '1px 7px', marginRight: 6 }}>내 요청</span>}{k.keyword}</span><span className="cell-sub" style={{ whiteSpace: 'nowrap' }}>미연락 {k.open} / {k.n}</span></button>)}
         {!kws.length && !err && <div className="cell-sub" style={{ padding: 8 }}>{keywords.length ? '검색 결과 없음' : '아직 업체가 없습니다 — 총괄이 「수동 발송 엑셀」에서 추출기 CSV 를 올리면 쌓입니다'}</div>}
       </div>
     </div>
@@ -64,16 +67,16 @@ export default function KwCallsClient({ me, keywords, err, reqs0, reqErr }: { me
           <label style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 13 }}><input type="checkbox" checked={onlyOpen} onChange={e => setOnlyOpen(e.target.checked)} style={{ width: 'auto' }} /> 미연락만</label>
         </div>
         <div style={{ overflow: 'auto' }}><table><thead><tr><th>업체</th><th>대표자</th><th>전화</th><th>이메일</th><th style={{ minWidth: 250 }}>결과 · 메모</th><th>담당</th></tr></thead>
-          <tbody>{view.map(r => { const mine = !r.claimed_by || r.claimed_by === me.id || me.boss; return <tr key={r.id} style={{ opacity: r.result === '거절' ? .55 : 1 }}>
-            <td><div style={{ fontWeight: 700 }}>{r.store_url ? <a href={r.store_url} target="_blank" rel="noreferrer">{r.store_name}</a> : r.store_name}</div><div className="cell-sub">{[r.company, r.address.split(' ').slice(0, 2).join(' ')].filter(Boolean).join(' · ')}</div></td>
+          <tbody>{view.map(r => { const rsvMine = r.reserved_by === me.id, rsvOther = !!r.reserved_by && !rsvMine; const mine = me.boss || r.claimed_by === me.id || (!r.claimed_by && !rsvOther); return <tr key={r.id} style={{ opacity: r.result === '거절' ? .55 : 1, background: rsvMine ? 'rgba(122,90,248,.07)' : undefined }}>
+            <td><div style={{ fontWeight: 700 }}>{rsvMine && <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#7A5AF8', borderRadius: 999, padding: '1px 7px', marginRight: 6 }}>내 요청</span>}{rsvOther && <span title="요청한 직원에게 7일간 우선권이 있습니다" style={{ fontSize: 11, fontWeight: 700, color: '#667085', border: '1px solid #D0D5DD', borderRadius: 999, padding: '1px 7px', marginRight: 6 }}>{r.reserved_name || '다른 직원'} 요청</span>}{r.store_url ? <a href={r.store_url} target="_blank" rel="noreferrer">{r.store_name}</a> : r.store_name}</div><div className="cell-sub">{[r.company, r.address.split(' ').slice(0, 2).join(' ')].filter(Boolean).join(' · ')}</div></td>
             <td style={{ whiteSpace: 'nowrap' }}>{r.rep || '-'}</td>
             <td style={{ whiteSpace: 'nowrap' }}>{r.phone ? <button type="button" onClick={() => copy(r.phone)} title="누르면 복사" style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, fontWeight: 700, fontSize: 13.5 }}>{r.phone}</button> : '-'}</td>
             <td className="cell-sub">{r.email ? <button type="button" onClick={() => copy(r.email)} title="누르면 복사" style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, fontSize: 12.5, color: 'inherit' }}>{r.email}</button> : '-'}</td>
             <td>{mine ? <div style={{ display: 'grid', gap: 5 }}>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{RESULTS.map(x => <button key={x} type="button" onClick={() => save(r, r.result === x ? '' : x)} style={{ padding: '3px 9px', fontSize: 12, borderRadius: 999, cursor: 'pointer', border: `1px solid ${r.result === x ? COLOR[x] : 'var(--line, #D0D5DD)'}`, background: r.result === x ? COLOR[x] : 'transparent', color: r.result === x ? '#fff' : 'inherit', fontWeight: 700 }}>{x}</button>)}</div>
               <input value={memo[r.id] ?? r.memo} onChange={e => setMemo(m => ({ ...m, [r.id]: e.target.value }))} onBlur={() => { if ((memo[r.id] ?? r.memo) !== r.memo) save(r, r.result); }} placeholder="메모 (칸을 벗어나면 저장)" style={{ fontSize: 12.5 }} />
-            </div> : <div><b style={{ color: COLOR[r.result] ?? 'inherit' }}>{r.result || '-'}</b><div className="cell-sub">{r.memo}</div></div>}</td>
-            <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{r.claimed_name || '-'}</td></tr>; })}
+            </div> : <div><b style={{ color: COLOR[r.result] ?? 'inherit' }}>{r.result || (rsvOther ? '요청자 우선' : '-')}</b><div className="cell-sub">{r.memo || (rsvOther && r.reserved_until ? `${md(r.reserved_until).slice(0, 5)} 이후 누구나 가능` : '')}</div></div>}</td>
+            <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{r.claimed_name || (r.reserved_by ? `${rsvMine ? '나' : r.reserved_name} (요청)` : '-')}</td></tr>; })}
             {!view.length && !busy && <tr><td colSpan={6} style={{ color: 'var(--muted)', textAlign: 'center', padding: 24 }}>조건에 맞는 업체가 없습니다 — 위 체크를 풀어 보세요</td></tr>}</tbody></table></div>
       </>}
     </div>

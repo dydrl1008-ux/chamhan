@@ -3,7 +3,7 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
 export type KwCount = { keyword: string; n: number; open: number };
-export type Contact = { id: number; store_name: string; store_url: string; company: string; rep: string; email: string; phone: string; address: string; biz_no: string; keywords: string[]; claimed_by: string | null; claimed_name: string; result: string; memo: string; result_at: string | null };
+export type Contact = { id: number; store_name: string; store_url: string; company: string; rep: string; email: string; phone: string; address: string; biz_no: string; keywords: string[]; claimed_by: string | null; claimed_name: string; reserved_by: string | null; reserved_name: string; reserved_until: string | null; result: string; memo: string; result_at: string | null };
 const KW_RESULTS = ['부재', '관심', '재연락', '거절', '계약'];   // 'use server' 파일은 async 함수만 export 가능
 const needSql = (m: string) => /kw_contact/.test(m) ? '0086 SQL(kw_contacts 표)을 먼저 실행해 주세요' : m;
 const active = async () => { const me = await getProfile(); return me && me.is_active ? me : null; };
@@ -15,21 +15,31 @@ export async function kwKeywords(): Promise<R<{ list: KwCount[] }>> {
 }
 export async function kwContacts(keyword: string): Promise<R<{ rows: Contact[] }>> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
-  const sb = supabaseAdmin();
-  const { data, error } = await sb.from('kw_contacts').select('id,store_name,store_url,company,rep,email,phone,address,biz_no,keywords,claimed_by,result,memo,result_at').contains('keywords', [keyword]).order('result', { ascending: true }).order('id', { ascending: true }).limit(1000);
+  const sb = supabaseAdmin(); const base = 'id,store_name,store_url,company,rep,email,phone,address,biz_no,keywords,claimed_by,result,memo,result_at';
+  const q = (cols: string) => sb.from('kw_contacts').select(cols).contains('keywords', [keyword]).order('result', { ascending: true }).order('id', { ascending: true }).limit(1000);
+  let { data, error } = await q(base + ',reserved_by,reserved_until') as { data: any[] | null; error: { message: string } | null };
+  if (error && /reserved_/.test(error.message)) ({ data, error } = await q(base) as any);   // 0090 실행 전
   if (error) return { ok: false, msg: needSql(error.message) };
-  const ids = Array.from(new Set((data ?? []).map(r => r.claimed_by).filter(Boolean))) as string[];
+  const now = Date.now(); const live = (r: any) => r.reserved_by && !r.claimed_by && r.reserved_until && new Date(r.reserved_until).getTime() > now;
+  const ids = Array.from(new Set((data ?? []).flatMap(r => [r.claimed_by, live(r) ? r.reserved_by : null]).filter(Boolean))) as string[];
   const names = new Map<string, string>(); if (ids.length) { const { data: ps } = await sb.from('profiles').select('id,name').in('id', ids); for (const p of ps ?? []) names.set(p.id, p.name); }
-  return { ok: true, msg: '', rows: (data ?? []).map(r => ({ ...r, claimed_name: r.claimed_by ? names.get(r.claimed_by) ?? '' : '' })) as Contact[] };
+  const rows = (data ?? []).map(r => { const rv = live(r); return { ...r, claimed_name: r.claimed_by ? names.get(r.claimed_by) ?? '' : '', reserved_by: rv ? r.reserved_by : null, reserved_until: rv ? r.reserved_until : null, reserved_name: rv ? names.get(r.reserved_by) ?? '' : '' }; }) as Contact[];
+  const rank = (r: Contact) => r.reserved_by === me.id ? 0 : 1;   // 내 요청 건을 맨 위로
+  return { ok: true, msg: '', rows: rows.sort((a, b) => rank(a) - rank(b)) };
 }
 /** 연락 결과·메모 저장 — 처음 남긴 사람이 담당. 다른 사람이 담당인 건은 총괄·어드민만 고칠 수 있음. 결과를 비우면 담당도 풀림 */
 export async function kwSetResult(id: number, result: string, memo: string): Promise<R> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
   if (result && !KW_RESULTS.includes(result)) return { ok: false, msg: '결과 값이 올바르지 않습니다' };
-  const sb = supabaseAdmin(); const { data: cur, error } = await sb.from('kw_contacts').select('claimed_by').eq('id', id).maybeSingle();
+  const sb = supabaseAdmin(); let { data: cur, error } = await sb.from('kw_contacts').select('claimed_by,reserved_by,reserved_until').eq('id', id).maybeSingle() as { data: any; error: { message: string } | null };
+  if (error && /reserved_/.test(error.message)) ({ data: cur, error } = await sb.from('kw_contacts').select('claimed_by').eq('id', id).maybeSingle() as any);   // 0090 실행 전
   if (error) return { ok: false, msg: needSql(error.message) }; if (!cur) return { ok: false, msg: '없는 업체' };
   const boss = me.role === 'head' || me.role === 'admin';
   if (cur.claimed_by && cur.claimed_by !== me.id && !boss) return { ok: false, msg: '다른 직원이 담당 중인 업체입니다' };
+  if (!cur.claimed_by && cur.reserved_by && cur.reserved_by !== me.id && !boss && cur.reserved_until && new Date(cur.reserved_until).getTime() > Date.now()) {
+    const { data: p } = await sb.from('profiles').select('name').eq('id', cur.reserved_by).maybeSingle();
+    return { ok: false, msg: `${p?.name ?? '다른 직원'} 요청 건입니다 — ${new Date(new Date(cur.reserved_until).getTime() + 9 * 3600e3).toISOString().slice(5, 10).replace('-', '/')} 까지 요청자 우선` };
+  }
   const m = String(memo ?? '').slice(0, 500); const clear = !result && !m;
   const { error: e2 } = await sb.from('kw_contacts').update({ result, memo: m, claimed_by: clear ? null : (cur.claimed_by && !boss ? cur.claimed_by : cur.claimed_by ?? me.id), result_at: clear ? null : new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id);
   return e2 ? { ok: false, msg: e2.message } : { ok: true, msg: clear ? '담당 해제' : '저장됨' };
@@ -41,6 +51,7 @@ export async function kwImport(rows: Record<string, string>[]): Promise<R<{ adde
   const clean = (rows ?? []).slice(0, 1000).map(r => ({ store_name: s(r.store_name, 100), store_url: s(r.store_url, 300), keyword: s(r.keyword, 60), company: s(r.company, 100), rep: s(r.rep, 40), email: s(r.email, 120).toLowerCase(), phone: s(r.phone, 30).replace(/[^\d-]/g, ''), address: s(r.address, 200), biz_no: s(r.biz_no, 20) }));
   const sb = supabaseAdmin();
   const { data, error } = await sb.rpc('kw_contacts_import', { p_rows: clean }); if (error) return { ok: false, msg: needSql(error.message) };
+  try { await reserveForRequesters(sb, clean.map(r => r.keyword)); } catch { /* 0090 미실행 등 — 올리기에 영향 없음 */ }
   try { await closeRequests(sb, clean.map(r => r.keyword)); } catch { /* 요청 자동 완료 실패는 올리기에 영향 없음 (0087 미실행 등) */ }
   const d = (data ?? {}) as { added?: number; updated?: number; skipped?: number };
   return { ok: true, msg: '', added: d.added ?? 0, updated: d.updated ?? 0, skipped: d.skipped ?? 0 };
@@ -50,6 +61,19 @@ export async function kwImport(rows: Record<string, string>[]): Promise<R<{ adde
 export type KwReq = { id: number; keyword: string; status: string; created_at: string; done_at: string | null; by: string };
 const nk = (x: string) => x.replace(/\s+/g, '').toLowerCase();
 const needSql2 = (m: string) => /kw_requests/.test(m) ? '0087 SQL(kw_requests 표)을 먼저 실행해 주세요' : needSql(m);
+const RESERVE_DAYS = 7;
+/** 요청한 키워드로 올라온 업체를 요청자 몫으로 잡아 둔다 (RESERVE_DAYS 일, 아직 담당 없는 건만 · 먼저 요청한 사람 우선).
+ *  CSV 가 1,000행씩 나뉘어 올라오므로 방금(2시간 안) 완료된 요청도 같이 본다 */
+async function reserveForRequesters(sb: ReturnType<typeof supabaseAdmin>, keywords: string[]) {
+  const csv = new Map<string, Set<string>>(); for (const k of keywords) { const n = nk(k); if (n) csv.set(n, (csv.get(n) ?? new Set()).add(k)); }
+  if (!csv.size) return;
+  const since = new Date(Date.now() - 2 * 3600e3).toISOString();
+  const { data: reqs } = await sb.from('kw_requests').select('id,keyword,requested_by,status,done_at').or(`status.eq.open,and(status.eq.done,done_at.gt.${since})`).order('id', { ascending: true }).limit(2000);
+  const owner = new Map<string, string>(); for (const r of reqs ?? []) { const n = nk(r.keyword); if (csv.has(n) && !owner.has(n)) owner.set(n, r.requested_by); }
+  const now = new Date().toISOString(); const until = new Date(Date.now() + RESERVE_DAYS * 86400e3).toISOString();
+  for (const [n, user] of owner) for (const kw of csv.get(n) ?? [])
+    await sb.from('kw_contacts').update({ reserved_by: user, reserved_until: until, reserved_kw: kw }).contains('keywords', [kw]).is('claimed_by', null).or(`reserved_by.is.null,reserved_until.lt.${now}`);
+}
 /** CSV 로 들어온 키워드의 대기 요청을 완료 처리하고 요청자에게 알림 */
 async function closeRequests(sb: ReturnType<typeof supabaseAdmin>, keywords: string[]) {
   const set = new Set(keywords.map(nk).filter(Boolean)); if (!set.size) return;
@@ -57,7 +81,7 @@ async function closeRequests(sb: ReturnType<typeof supabaseAdmin>, keywords: str
   const hit = (open ?? []).filter(r => set.has(nk(r.keyword))); if (!hit.length) return;
   await sb.from('kw_requests').update({ status: 'done', done_at: new Date().toISOString() }).in('id', hit.map(r => r.id));
   const by = new Map<string, string[]>(); for (const r of hit) by.set(r.requested_by, [...(by.get(r.requested_by) ?? []), r.keyword]);
-  await sb.from('notifications').insert([...by].map(([user_id, ks]) => ({ user_id, kind: 'info', title: `요청한 키워드 ${ks.length}개가 콜 리스트에 올라왔습니다`, body: ks.join(', ').slice(0, 300), link: '/kw-calls' })));
+  await sb.from('notifications').insert([...by].map(([user_id, ks]) => ({ user_id, kind: 'info', title: `요청한 키워드 ${ks.length}개가 콜 리스트에 올라왔습니다 — ${RESERVE_DAYS}일간 내 우선`, body: ks.join(', ').slice(0, 300), link: '/kw-calls' })));
 }
 /** 직원: 키워드 요청 (콤마·줄바꿈으로 여러 개, 한 번에 20개까지). 이미 리스트에 있거나 내가 이미 요청해 둔 건 건너뜀 */
 export async function kwRequest(text: string): Promise<R<{ added: string[]; exists: string[]; dup: string[] }>> {

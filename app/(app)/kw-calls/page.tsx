@@ -6,12 +6,12 @@ import KwCallsClient from './KwCallsClient';
 import { kwKeywords, kwRequests } from './actions';
 import TeamStats from './TeamStats';
 export const dynamic = 'force-dynamic';
-export default async function KwCallsPage() {
+export default async function KwCallsPage({ searchParams }: { searchParams: { k?: string } }) {
   const me = await getProfile(); if (!me || !me.is_active) redirect('/login');
   const [k, rq] = await Promise.all([kwKeywords(), kwRequests()]);
   return <div style={{ display: 'grid', gap: 20 }}>
-    <PageHeader title="키워드 콜 리스트" desc="키워드를 고르면 그 키워드 업체의 대표자·전화·이메일이 나옵니다. 연락한 결과를 남기면 담당으로 표시됩니다" />
+    <PageHeader title="키워드 콜 리스트" desc="키워드를 고르면 그 키워드 업체의 대표자·전화·이메일이 나옵니다. 연락한 결과를 남기면 담당으로 표시됩니다 · 내가 요청해 올라온 키워드는 7일간 내 우선(보라색 「내 요청」)" />
     <TeamStats me={me} />
-    <KwCallsClient me={{ id: me.id, boss: me.role === 'head' || me.role === 'admin' }} keywords={k.ok ? k.list : []} err={k.ok ? '' : k.msg} reqs0={rq.ok ? { mine: rq.mine, open: rq.open } : { mine: [], open: [] }} reqErr={rq.ok ? '' : rq.msg} />
+    <KwCallsClient me={{ id: me.id, boss: me.role === 'head' || me.role === 'admin' }} keywords={k.ok ? k.list : []} err={k.ok ? '' : k.msg} reqs0={rq.ok ? { mine: rq.mine, open: rq.open } : { mine: [], open: [] }} reqErr={rq.ok ? '' : rq.msg} initialKw={String(searchParams.k ?? '').slice(0, 60) || undefined} />
   </div>;
 }
