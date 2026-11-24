@@ -11,7 +11,13 @@ const active = async () => { const me = await getProfile(); return me && me.is_a
 export async function kwKeywords(): Promise<R<{ list: KwCount[] }>> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
   const { data, error } = await supabaseAdmin().rpc('kw_contact_keywords'); if (error) return { ok: false, msg: needSql(error.message) };
-  return { ok: true, msg: '', list: (data ?? []) as KwCount[] };
+  let list = (data ?? []) as KwCount[];
+  if (!(me.role === 'head' || me.role === 'admin')) {   // 다른 직원의 요청 건(우선 기간 중)은 직원 화면에서 아예 뺀다 — 수에서도 빼고, 남는 업체가 없으면 키워드도 숨김
+    const { data: rs } = await supabaseAdmin().from('kw_contacts').select('keywords').not('reserved_by', 'is', null).neq('reserved_by', me.id).is('claimed_by', null).gt('reserved_until', new Date().toISOString()).limit(5000);
+    const hid = new Map<string, number>(); for (const r of rs ?? []) for (const k of (r.keywords ?? []) as string[]) hid.set(k, (hid.get(k) ?? 0) + 1);
+    if (hid.size) list = list.map(k => { const h = hid.get(k.keyword) ?? 0; return h ? { ...k, n: k.n - h, open: Math.max(0, k.open - h) } : k; }).filter(k => k.n > 0);
+  }
+  return { ok: true, msg: '', list };
 }
 export async function kwContacts(keyword: string): Promise<R<{ rows: Contact[] }>> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
@@ -24,8 +30,10 @@ export async function kwContacts(keyword: string): Promise<R<{ rows: Contact[] }
   const ids = Array.from(new Set((data ?? []).flatMap(r => [r.claimed_by, live(r) ? r.reserved_by : null]).filter(Boolean))) as string[];
   const names = new Map<string, string>(); if (ids.length) { const { data: ps } = await sb.from('profiles').select('id,name').in('id', ids); for (const p of ps ?? []) names.set(p.id, p.name); }
   const rows = (data ?? []).map(r => { const rv = live(r); return { ...r, claimed_name: r.claimed_by ? names.get(r.claimed_by) ?? '' : '', reserved_by: rv ? r.reserved_by : null, reserved_until: rv ? r.reserved_until : null, reserved_name: rv ? names.get(r.reserved_by) ?? '' : '' }; }) as Contact[];
+  const boss = me.role === 'head' || me.role === 'admin';
+  const vis = boss ? rows : rows.filter(r => !r.reserved_by || r.reserved_by === me.id);   // 다른 직원 요청 건은 요청자·총괄만 봄
   const rank = (r: Contact) => r.reserved_by === me.id ? 0 : 1;   // 내 요청 건을 맨 위로
-  return { ok: true, msg: '', rows: rows.sort((a, b) => rank(a) - rank(b)) };
+  return { ok: true, msg: '', rows: vis.sort((a, b) => rank(a) - rank(b)) };
 }
 /** 연락 결과·메모 저장 — 처음 남긴 사람이 담당. 다른 사람이 담당인 건은 총괄·어드민만 고칠 수 있음. 결과를 비우면 담당도 풀림 */
 export async function kwSetResult(id: number, result: string, memo: string): Promise<R> {
