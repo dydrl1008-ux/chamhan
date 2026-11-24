@@ -57,6 +57,7 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
   const upload = async (html: string, text: string) => {
     const parsed = parseAny(html, text);
     if (!parsed.length) {   // 왜 못 찾았는지 화면에 보여 준다 — 머리글 줄에 '키워드·슬롯수·현재순위'가 한 줄(탭 구분)로 있어야 한다
+      if (/Failed to fetch|집계할 순위 데이터가 없습니다/.test(text + html)) { setPasteInfo('셀팜 화면 자체에 데이터가 없습니다 — 셀팜 「순위 통계」가 데이터를 불러오지 못한 상태(Failed to fetch / 총 0건)에서 복사됐습니다. 셀팜에서 새로고침하거나 다시 로그인해 표에 숫자가 뜬 뒤 복사해 주세요'); return notify('셀팜 화면에 데이터가 없습니다 — 셀팜에서 새로고침 후 다시 복사해 주세요', 'bad'); }
       const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean); const near = lines.filter(l => /키워드|슬롯|순위/.test(l)).slice(0, 3).map(l => l.replace(/\t/g, ' | ').slice(0, 110));
       setPasteInfo(`붙여 넣은 내용 ${lines.length}줄 · 표(<table>) ${/<table/i.test(html) ? '있음' : '없음'} · 탭으로 나뉜 줄 ${lines.filter(l => l.includes('\t')).length}줄${near.length ? ' · 머리글 후보: ' + near.join(' ‖ ') : ' · 「키워드/슬롯/순위」가 들어간 줄이 없습니다'}`);
       return notify('표를 찾지 못했습니다 — 셀팜 「슬롯 운영」 화면에서 Ctrl+A → Ctrl+C 한 뒤 여기에 붙여넣어 주세요', 'bad'); }
