@@ -14,14 +14,17 @@ const delta = (t: string) => { const n = int(t); if (n == null) return /-|—|0/
 
 /** 셀팜 「슬롯 운영」 화면의 MID·키워드 표를 찾아 행으로 — HTML(파일·복사한 서식)과 일반 텍스트(탭 구분) 모두 */
 export function parseTable(cells: string[][]): BriefRow[] {
-  const hi = cells.findIndex(r => r.includes('키워드') && r.some(c => c.replace(/\s/g, '') === '슬롯수') && r.some(c => c.replace(/\s/g, '') === '현재순위'));
+  // 머리글은 정렬 화살표·공백·괄호가 붙어도 알아보게 한글·영문·숫자만 남겨 비교한다 (셀팜 화면이 조금 바뀌어도 읽히게)
+  const nh = (c: string) => String(c ?? '').replace(/[^가-힣A-Za-z0-9]/g, '');
+  const col = (h: string[], ...names: string[]) => { for (const n of names) { const i = h.indexOf(n); if (i >= 0) return i; } for (const n of names) { const i = h.findIndex(c => c.startsWith(n)); if (i >= 0) return i; } return -1; };
+  const hi = cells.findIndex(r => { const h = r.map(nh); return col(h, '키워드') >= 0 && col(h, '슬롯수', '슬롯') >= 0 && col(h, '현재순위', '현재', '순위') >= 0; });
   if (hi < 0) return [];
-  const h = cells[hi].map(c => c.replace(/\s/g, '')); const ix = (n: string) => h.indexOf(n);
-  const ik = ix('키워드'), iv = ix('검색량'), is = ix('슬롯수'), ir = ix('현재순위'), ib = ix('라이브최고'), id = ix('등록대비'), ip = ix('전일대비');
+  const h = cells[hi].map(nh);
+  const ik = col(h, '키워드'), iv = col(h, '검색량', '월검색량', '월간검색량'), is = col(h, '슬롯수', '슬롯'), ir = col(h, '현재순위', '현재', '순위'), ib = col(h, '라이브최고', '최고순위', '최고'), id = col(h, '등록대비'), ip = col(h, '전일대비');
   const out: BriefRow[] = [];
   for (const r of cells.slice(hi + 1)) {
     if (r.length < h.length - 2) { if (out.length) break; continue; }
-    const k = (r[ik] ?? '').trim(); if (!k || k === '키워드') continue;
+    const k = (r[ik] ?? '').trim(); if (!k || nh(k) === '키워드') continue;
     out.push({ k, v: iv >= 0 ? int(r[iv]) : null, s: is >= 0 ? int(r[is]) : null, r: ir >= 0 ? int(r[ir]) : null, b: ib >= 0 ? int(r[ib]) : null, d: id >= 0 ? delta(r[id] ?? '') : null, p: ip >= 0 ? delta(r[ip] ?? '') : null });
   }
   return out;
@@ -37,7 +40,7 @@ function parseAny(html: string, text: string): BriefRow[] {
 
 export default function BriefClient({ list, buckets, at, n, err, initKws, summary, canEdit = true, refs = [] }: { canEdit?: boolean; refs?: BriefRef[]; list: BriefKw[]; buckets: Buckets; at: string | null; n: number; err: string; initKws?: string; summary: BriefSummary | null }) {
   const router = useRouter(); const sheet = useRef<HTMLDivElement>(null);
-  const [busy, setBusy] = useState(''); const [kwText, setKwText] = useState(initKws ?? ''); const [q, setQ] = useState('');
+  const [busy, setBusy] = useState(''); const [kwText, setKwText] = useState(initKws ?? ''); const [q, setQ] = useState(''); const [pasteInfo, setPasteInfo] = useState('');
   const [slots, setSlots] = useState(buckets.slots.join(', ')); const [ranks, setRanks] = useState(buckets.ranks.join(', ')); const [good, setGood] = useState(String(buckets.good ?? 40));
   const [title, setTitle] = useState(''); const [who, setWho] = useState(''); const [brand, setBrand] = useState('참한기획');
   const [show, setShow] = useState({ dist: true, keep: true, band: true, risers: true, vol: true });
@@ -53,7 +56,11 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
 
   const upload = async (html: string, text: string) => {
     const parsed = parseAny(html, text);
-    if (!parsed.length) return notify('표를 찾지 못했습니다 — 셀팜 「슬롯 운영」 화면에서 Ctrl+A → Ctrl+C 한 뒤 여기에 붙여넣어 주세요', 'bad');
+    if (!parsed.length) {   // 왜 못 찾았는지 화면에 보여 준다 — 머리글 줄에 '키워드·슬롯수·현재순위'가 한 줄(탭 구분)로 있어야 한다
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean); const near = lines.filter(l => /키워드|슬롯|순위/.test(l)).slice(0, 3).map(l => l.replace(/\t/g, ' | ').slice(0, 110));
+      setPasteInfo(`붙여 넣은 내용 ${lines.length}줄 · 표(<table>) ${/<table/i.test(html) ? '있음' : '없음'} · 탭으로 나뉜 줄 ${lines.filter(l => l.includes('\t')).length}줄${near.length ? ' · 머리글 후보: ' + near.join(' ‖ ') : ' · 「키워드/슬롯/순위」가 들어간 줄이 없습니다'}`);
+      return notify('표를 찾지 못했습니다 — 셀팜 「슬롯 운영」 화면에서 Ctrl+A → Ctrl+C 한 뒤 여기에 붙여넣어 주세요', 'bad'); }
+    setPasteInfo('');
     setBusy('up'); const r = await saveBrief(parsed); setBusy(''); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) router.refresh();
   };
   const onPaste = (e: React.ClipboardEvent) => { e.preventDefault(); upload(e.clipboardData.getData('text/html'), e.clipboardData.getData('text/plain')); };
@@ -100,6 +107,7 @@ export default function BriefClient({ list, buckets, at, n, err, initKws, summar
         <b>① 진행 현황 넣기</b>
         <div className="cell-sub">셀팜 「슬롯 운영」 화면에서 <b>Ctrl+A → Ctrl+C</b> 한 뒤 아래 칸을 누르고 <b>Ctrl+V</b>. (또는 Ctrl+S 로 저장한 .html 파일 올리기)</div>
         <textarea rows={2} readOnly value="" placeholder={busy === 'up' ? '읽는 중…' : '여기를 누르고 Ctrl+V'} onPaste={onPaste} style={{ resize: 'none' }} />
+        {pasteInfo && <div style={{ fontSize: 12.5, color: '#B54708', wordBreak: 'break-all' }}>{pasteInfo}</div>}
         <input type="file" accept=".html,.htm,.txt" onChange={e => { onFile(e.target.files?.[0]); e.target.value = ''; }} />
         <div className="cell-sub">{at ? `마지막 반영: ${new Date(at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '아직 넣은 데이터가 없습니다'}</div>
       </div>}
