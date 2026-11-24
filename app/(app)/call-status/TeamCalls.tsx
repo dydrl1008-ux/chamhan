@@ -14,7 +14,8 @@ export default async function TeamCalls({ teamId, teamName, from, to, sums, miss
   const [kw] = await Promise.all([   // 날짜별 콜 리스트 합계(sums)는 페이지에서 한 번만 읽어 팀마다 나눠 쓴다 (팀 수만큼 같은 조회를 반복하지 않게)
     supabaseAdmin().from('kw_contacts').select('claimed_by,result,result_at').in('claimed_by', ids).neq('result', '').gte('result_at', `${from}T00:00:00+09:00`).lt('result_at', `${addDays(to, 1)}T00:00:00+09:00`).limit(10000),
   ]);
-  const K = (kw.data ?? []) as { claimed_by: string; result: string; result_at: string }[];
+  const { data: lg } = await supabaseAdmin().from('kw_contact_logs').select('user_id,result,created_at').in('user_id', ids).neq('result', '').gte('created_at', `${from}T00:00:00+09:00`).lt('created_at', `${addDays(to, 1)}T00:00:00+09:00`).limit(10000);   // 이어받기 전 담당자 기록 (0091, 실행 전엔 빈 값)
+  const K = [...(kw.data ?? []), ...(lg ?? []).map((l: any) => ({ claimed_by: l.user_id, result: l.result, result_at: l.created_at }))] as { claimed_by: string; result: string; result_at: string }[];
   const workdays = Math.max(1, days.filter(d => d <= today && dow(d) >= 1 && dow(d) <= 5).length); const single = days.length === 1; const hasToday = days.includes(today);
   const rows = people.map(p => {
     const per = sums.map(s => { const c: Record<string, number> = {}; for (const r of s) if (r.assigned_to === p.id) c[r.status] = (c[r.status] ?? 0) + r.cnt; const tot = Object.values(c).reduce((a, b) => a + b, 0); return { tot, left: c.assigned ?? 0, done: tot - (c.assigned ?? 0), hot: c.interested ?? 0, won: c.won ?? 0, no: (c.rejected ?? 0) + (c.called ?? 0) }; });

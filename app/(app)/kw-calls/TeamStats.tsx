@@ -12,7 +12,9 @@ export default async function TeamStats({ me }: { me: Profile }) {
   const people = (ppl ?? []) as { id: string; name: string; team_id: number | null }[]; if (!people.length) return null;
   const { data, error } = await sb.from('kw_contacts').select('id,claimed_by,result,result_at,store_name,keywords,memo').in('claimed_by', people.map(p => p.id)).neq('result', '').gte('result_at', `${from}T00:00:00+09:00`).order('result_at', { ascending: false }).limit(5000);
   if (error) return null;
-  const rows = (data ?? []) as Row[]; const dayOf = (t: string) => new Date(new Date(t).getTime() + 9 * 3600e3).toISOString().slice(0, 10);
+  // 다른 직원이 이어받은 업체의 전 담당자 기록(0091) 도 그 사람 콜로 센다
+  const { data: lg } = await sb.from('kw_contact_logs').select('contact_id,user_id,result,memo,created_at').in('user_id', people.map(p => p.id)).neq('result', '').gte('created_at', `${from}T00:00:00+09:00`).limit(5000);
+  const rows = [...(data ?? []) as Row[], ...(lg ?? []).map((l: any) => ({ id: -l.contact_id, claimed_by: l.user_id, result: l.result, result_at: l.created_at, store_name: '(이어받은 업체)', keywords: [], memo: l.memo }) as unknown as Row)].sort((a, b) => a.result_at < b.result_at ? 1 : -1); const dayOf = (t: string) => new Date(new Date(t).getTime() + 9 * 3600e3).toISOString().slice(0, 10);
   const stat = people.map(p => { const mine = rows.filter(r => r.claimed_by === p.id); const by = (rs: Row[]) => Object.fromEntries(RES.map(k => [k, rs.filter(r => r.result === k).length])) as Record<string, number>;
     const t = mine.filter(r => dayOf(r.result_at) === today), y = mine.filter(r => dayOf(r.result_at) === yday), w = mine.filter(r => dayOf(r.result_at) >= wk);
     return { ...p, today: t.length, yday: y.length, week: w.length, wby: by(w), last: mine[0]?.result_at ?? null, recent: mine.slice(0, 40) }; }).sort((a, b) => b.week - a.week || b.today - a.today || a.name.localeCompare(b.name));

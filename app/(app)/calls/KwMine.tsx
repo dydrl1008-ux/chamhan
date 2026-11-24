@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { notify } from '@/components/Toast';
 import { kwSetResult } from '../kw-calls/actions';
-export type KwRow = { id: number; store_name: string; store_url: string; company: string; rep: string; email: string; phone: string; address: string; keywords: string[]; reserved_kw: string; claimed: boolean; result: string; memo: string; result_at: string | null; until: string | null };
+export type KwRow = { id: number; store_name: string; store_url: string; company: string; rep: string; email: string; phone: string; address: string; keywords: string[]; reserved_kw: string; claimed: boolean; result: string; memo: string; result_at: string | null; until: string | null; prev: { who: string; result: string; memo: string; at: string }[] };
 const RESULTS = ['부재', '관심', '재연락', '거절', '계약'];
 const COLOR: Record<string, string> = { 관심: '#067647', 계약: '#175CD3', 재연락: '#B54708', 거절: '#B42318', 부재: '#667085' };
 const V = '#7A5AF8';
@@ -54,7 +54,8 @@ export default function KwMine({ rows0, canEdit, who, today, owner }: { rows0: K
         <td>{canEdit ? <div style={{ display: 'grid', gap: 5 }}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{RESULTS.map(x => <button key={x} type="button" onClick={() => save(r, r.result === x ? '' : x)} style={{ padding: '3px 9px', fontSize: 12, borderRadius: 999, cursor: 'pointer', border: `1px solid ${r.result === x ? COLOR[x] : 'var(--line, #D0D5DD)'}`, background: r.result === x ? COLOR[x] : 'transparent', color: r.result === x ? '#fff' : 'inherit', fontWeight: 700 }}>{x}</button>)}</div>
           <input value={memo[r.id] ?? r.memo} onChange={e => setMemo(m => ({ ...m, [r.id]: e.target.value }))} onBlur={() => { if ((memo[r.id] ?? r.memo) !== r.memo) save(r, r.result); }} placeholder="메모 (칸을 벗어나면 저장)" style={{ fontSize: 12.5 }} />
-        </div> : <div><b style={{ color: COLOR[r.result] ?? 'inherit' }}>{r.result || '-'}</b><div className="cell-sub">{r.memo}</div></div>}</td></tr>)}
+        </div> : <div><b style={{ color: COLOR[r.result] ?? 'inherit' }}>{r.result || '-'}</b><div className="cell-sub">{r.memo}</div></div>}
+          {r.prev.map((p, j) => <div key={j} className="cell-sub" style={{ fontSize: 12, marginTop: 3 }}>이전 · <b style={{ color: COLOR[p.result] ?? 'inherit' }}>{p.result || '-'}</b> · {p.who || '-'} · {kst(p.at).slice(5, 10).replace('-', '/')}{p.memo ? ` · “${p.memo}”` : ''}</div>)}</td></tr>)}
         {view.length > shown && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 14 }}><button type="button" className="btn" onClick={() => setShown(n => n + 100)}>100곳 더 보기 ({shown} / {view.length})</button></td></tr>}</tbody></table></div>
       : <div style={{ padding: 24, color: 'var(--muted)', textAlign: 'center' }}>{cur.label} 업체가 없습니다{tab === 'open' ? ' — 전체 공용 키워드의 미연락 업체는 위 「전체 업체 보기 →」(키워드 콜 리스트)에 있습니다' : ''}</div>}
   </div>;

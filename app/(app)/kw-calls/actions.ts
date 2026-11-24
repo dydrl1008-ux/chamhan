@@ -3,7 +3,10 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
 export type KwCount = { keyword: string; n: number; open: number };
-export type Contact = { id: number; store_name: string; store_url: string; company: string; rep: string; email: string; phone: string; address: string; biz_no: string; keywords: string[]; claimed_by: string | null; claimed_name: string; reserved_by: string | null; reserved_name: string; reserved_until: string | null; result: string; memo: string; result_at: string | null };
+export type Contact = { id: number; store_name: string; store_url: string; company: string; rep: string; email: string; phone: string; address: string; biz_no: string; keywords: string[]; claimed_by: string | null; claimed_name: string; reserved_by: string | null; reserved_name: string; reserved_until: string | null; result: string; memo: string; result_at: string | null; prev: KwPrev[] };
+export type KwPrev = { who: string; result: string; memo: string; at: string };
+const HOLD_DAYS = 7;   // 관심은 이 기간 동안 담당 유지, 지나도 계약이 아니면 다른 직원이 이어받을 수 있음. 부재·거절·재연락은 바로 가능, 계약은 계속 유지
+const canTake = (result: string, at: string | null) => ['부재', '거절', '재연락'].includes(result) || (result === '관심' && (!at || Date.now() - new Date(at).getTime() > HOLD_DAYS * 86400e3));
 const KW_RESULTS = ['부재', '관심', '재연락', '거절', '계약'];   // 'use server' 파일은 async 함수만 export 가능
 const needSql = (m: string) => /kw_contact/.test(m) ? '0086 SQL(kw_contacts 표)을 먼저 실행해 주세요' : m;
 const active = async () => { const me = await getProfile(); return me && me.is_active ? me : null; };
@@ -26,10 +29,12 @@ export async function kwContacts(keyword: string): Promise<R<{ rows: Contact[] }
   let { data, error } = await q(base + ',reserved_by,reserved_until') as { data: any[] | null; error: { message: string } | null };
   if (error && /reserved_/.test(error.message)) ({ data, error } = await q(base) as any);   // 0090 실행 전
   if (error) return { ok: false, msg: needSql(error.message) };
+  const cids = (data ?? []).filter(r => r.claimed_by).map(r => r.id as number); const logs: any[] = [];
+  for (let i = 0; i < cids.length; i += 300) { const { data: l } = await sb.from('kw_contact_logs').select('contact_id,user_id,result,memo,created_at').in('contact_id', cids.slice(i, i + 300)).order('created_at', { ascending: false }).limit(1000); logs.push(...(l ?? [])); }   // 0091 실행 전엔 빈 값
   const now = Date.now(); const live = (r: any) => r.reserved_by && !r.claimed_by && r.reserved_until && new Date(r.reserved_until).getTime() > now;
-  const ids = Array.from(new Set((data ?? []).flatMap(r => [r.claimed_by, live(r) ? r.reserved_by : null]).filter(Boolean))) as string[];
+  const ids = Array.from(new Set([...(data ?? []).flatMap(r => [r.claimed_by, live(r) ? r.reserved_by : null]), ...logs.map(l => l.user_id)].filter(Boolean))) as string[];
   const names = new Map<string, string>(); if (ids.length) { const { data: ps } = await sb.from('profiles').select('id,name').in('id', ids); for (const p of ps ?? []) names.set(p.id, p.name); }
-  const rows = (data ?? []).map(r => { const rv = live(r); return { ...r, claimed_name: r.claimed_by ? names.get(r.claimed_by) ?? '' : '', reserved_by: rv ? r.reserved_by : null, reserved_until: rv ? r.reserved_until : null, reserved_name: rv ? names.get(r.reserved_by) ?? '' : '' }; }) as Contact[];
+  const rows = (data ?? []).map(r => { const rv = live(r); return { ...r, prev: logs.filter(l => l.contact_id === r.id).slice(0, 5).map(l => ({ who: names.get(l.user_id) ?? '', result: l.result, memo: l.memo, at: l.created_at })), claimed_name: r.claimed_by ? names.get(r.claimed_by) ?? '' : '', reserved_by: rv ? r.reserved_by : null, reserved_until: rv ? r.reserved_until : null, reserved_name: rv ? names.get(r.reserved_by) ?? '' : '' }; }) as Contact[];
   const boss = me.role === 'head' || me.role === 'admin';
   const vis = boss ? rows : rows.filter(r => !r.reserved_by || r.reserved_by === me.id);   // 다른 직원 요청 건은 요청자·총괄만 봄
   const rank = (r: Contact) => r.reserved_by === me.id ? 0 : 1;   // 내 요청 건을 맨 위로
@@ -39,18 +44,26 @@ export async function kwContacts(keyword: string): Promise<R<{ rows: Contact[] }
 export async function kwSetResult(id: number, result: string, memo: string, forUser?: string): Promise<R> {   // forUser: 총괄이 직원 화면에서 대신 남길 때 그 직원을 담당으로
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
   if (result && !KW_RESULTS.includes(result)) return { ok: false, msg: '결과 값이 올바르지 않습니다' };
-  const sb = supabaseAdmin(); let { data: cur, error } = await sb.from('kw_contacts').select('claimed_by,reserved_by,reserved_until').eq('id', id).maybeSingle() as { data: any; error: { message: string } | null };
-  if (error && /reserved_/.test(error.message)) ({ data: cur, error } = await sb.from('kw_contacts').select('claimed_by').eq('id', id).maybeSingle() as any);   // 0090 실행 전
+  const sb = supabaseAdmin(); let { data: cur, error } = await sb.from('kw_contacts').select('claimed_by,result,memo,result_at,reserved_by,reserved_until').eq('id', id).maybeSingle() as { data: any; error: { message: string } | null };
+  if (error && /reserved_/.test(error.message)) ({ data: cur, error } = await sb.from('kw_contacts').select('claimed_by,result,memo,result_at').eq('id', id).maybeSingle() as any);   // 0090 실행 전
   if (error) return { ok: false, msg: needSql(error.message) }; if (!cur) return { ok: false, msg: '없는 업체' };
   const boss = me.role === 'head' || me.role === 'admin';
-  if (cur.claimed_by && cur.claimed_by !== me.id && !boss) return { ok: false, msg: '다른 직원이 담당 중인 업체입니다' };
+  let take = false;   // 다른 직원이 부재·거절로 남긴 업체 → 이어받기 (전 담당자 기록은 kw_contact_logs 로)
+  if (cur.claimed_by && cur.claimed_by !== me.id && !boss) {
+    if (cur.result && !canTake(cur.result, cur.result_at)) return { ok: false, msg: cur.result === '계약' ? '다른 직원이 계약한 업체입니다' : `다른 직원이 관심으로 관리 중입니다 — 기록 후 ${HOLD_DAYS}일이 지나면 이어받을 수 있습니다` };
+    if (!cur.result) return { ok: false, msg: '다른 직원이 담당 중인 업체입니다' };
+    if (!result) return { ok: false, msg: '결과를 골라 주세요' };
+    const { error: e1 } = await sb.from('kw_contact_logs').insert({ contact_id: id, user_id: cur.claimed_by, result: cur.result, memo: cur.memo ?? '', created_at: cur.result_at ?? new Date().toISOString() });
+    if (e1) return { ok: false, msg: /kw_contact_logs/.test(e1.message) ? '0091 SQL(kw_contact_logs 표)을 먼저 실행해 주세요' : e1.message };
+    take = true;
+  }
   if (!cur.claimed_by && cur.reserved_by && cur.reserved_by !== me.id && !boss && cur.reserved_until && new Date(cur.reserved_until).getTime() > Date.now()) {
     const { data: p } = await sb.from('profiles').select('name').eq('id', cur.reserved_by).maybeSingle();
     return { ok: false, msg: `${p?.name ?? '다른 직원'} 요청 건입니다 — ${new Date(new Date(cur.reserved_until).getTime() + 9 * 3600e3).toISOString().slice(5, 10).replace('-', '/')} 까지 요청자 우선` };
   }
   const m = String(memo ?? '').slice(0, 500); const clear = !result && !m;
-  const { error: e2 } = await sb.from('kw_contacts').update({ result, memo: m, claimed_by: clear ? null : (cur.claimed_by ?? (boss && forUser && /^[0-9a-f-]{36}$/i.test(forUser) ? forUser : me.id)), result_at: clear ? null : new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id);
-  return e2 ? { ok: false, msg: e2.message } : { ok: true, msg: clear ? '담당 해제' : '저장됨' };
+  const { error: e2 } = await sb.from('kw_contacts').update({ result, memo: m, claimed_by: clear ? null : take ? me.id : (cur.claimed_by ?? (boss && forUser && /^[0-9a-f-]{36}$/i.test(forUser) ? forUser : me.id)), result_at: clear ? null : new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id);
+  return e2 ? { ok: false, msg: e2.message } : { ok: true, msg: clear ? '담당 해제' : take ? '이어받아 저장됨 — 전 담당자 기록은 아래에 남습니다' : '저장됨' };
 }
 /** 추출기 CSV → 키워드 콜 리스트 (총괄만 올림). 화면이 1,000행씩 나눠 부른다 */
 export async function kwImport(rows: Record<string, string>[]): Promise<R<{ added: number; updated: number; skipped: number }>> {
