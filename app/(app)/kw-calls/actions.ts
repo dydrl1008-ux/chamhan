@@ -5,8 +5,8 @@ type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
 export type KwCount = { keyword: string; n: number; open: number };
 export type Contact = { id: number; store_name: string; store_url: string; company: string; rep: string; email: string; phone: string; address: string; biz_no: string; keywords: string[]; claimed_by: string | null; claimed_name: string; reserved_by: string | null; reserved_name: string; reserved_until: string | null; result: string; memo: string; result_at: string | null; prev: KwPrev[] };
 export type KwPrev = { who: string; result: string; memo: string; at: string };
-const HOLD_DAYS = 7;   // 관심은 이 기간 동안 담당 유지, 지나도 계약이 아니면 다른 직원이 이어받을 수 있음. 부재·거절·재연락은 바로 가능, 계약은 계속 유지
-const canTake = (result: string, at: string | null) => ['부재', '거절', '재연락'].includes(result) || (result === '관심' && (!at || Date.now() - new Date(at).getTime() > HOLD_DAYS * 86400e3));
+const HOLD_DAYS = 7;   // 관심·재연락은 이 기간 동안 담당 유지, 지나도 계약이 아니면 다른 직원이 이어받을 수 있음. 부재·거절은 바로 가능, 계약은 계속 유지
+const canTake = (result: string, at: string | null) => ['부재', '거절'].includes(result) || (['관심', '재연락'].includes(result) && (!at || Date.now() - new Date(at).getTime() > HOLD_DAYS * 86400e3));
 const KW_RESULTS = ['부재', '관심', '재연락', '거절', '계약'];   // 'use server' 파일은 async 함수만 export 가능
 const needSql = (m: string) => /kw_contact/.test(m) ? '0086 SQL(kw_contacts 표)을 먼저 실행해 주세요' : m;
 const active = async () => { const me = await getProfile(); return me && me.is_active ? me : null; };
@@ -50,7 +50,7 @@ export async function kwSetResult(id: number, result: string, memo: string, forU
   const boss = me.role === 'head' || me.role === 'admin';
   let take = false;   // 다른 직원이 부재·거절로 남긴 업체 → 이어받기 (전 담당자 기록은 kw_contact_logs 로)
   if (cur.claimed_by && cur.claimed_by !== me.id && !boss) {
-    if (cur.result && !canTake(cur.result, cur.result_at)) return { ok: false, msg: cur.result === '계약' ? '다른 직원이 계약한 업체입니다' : `다른 직원이 관심으로 관리 중입니다 — 기록 후 ${HOLD_DAYS}일이 지나면 이어받을 수 있습니다` };
+    if (cur.result && !canTake(cur.result, cur.result_at)) return { ok: false, msg: cur.result === '계약' ? '다른 직원이 계약한 업체입니다' : `다른 직원이 「${cur.result}」으로 관리 중입니다 — 기록 후 ${HOLD_DAYS}일이 지나면 이어받을 수 있습니다` };
     if (!cur.result) return { ok: false, msg: '다른 직원이 담당 중인 업체입니다' };
     if (!result) return { ok: false, msg: '결과를 골라 주세요' };
     const { error: e1 } = await sb.from('kw_contact_logs').insert({ contact_id: id, user_id: cur.claimed_by, result: cur.result, memo: cur.memo ?? '', created_at: cur.result_at ?? new Date().toISOString() });
