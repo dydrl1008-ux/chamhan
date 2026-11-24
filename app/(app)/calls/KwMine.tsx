@@ -33,8 +33,9 @@ export default function KwMine({ rows0, canEdit, who, today }: { rows0: KwRow[];
   return <div className="card" style={{ padding: 0, borderLeft: `4px solid ${V}` }}>
     <div style={{ display: 'grid', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--line)', background: 'rgba(122,90,248,.05)' }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <b><span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: V, borderRadius: 999, padding: '2px 8px', marginRight: 8 }}>키워드 요청 건</span>{who} 요청해 올라온 업체 · 키워드 콜</b>
-        <span className="cell-sub">자동 배분 리스트와 별개 · 요청 건은 7일간 요청자에게만 보입니다 · 오늘 키워드 콜 {todayN}건</span>
+        <b><span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: V, borderRadius: 999, padding: '2px 8px', marginRight: 8 }}>키워드 요청 건</span>{who} 요청한 업체 + 직접 연락한 키워드 콜</b>
+        <span className="cell-sub">자동 배분 리스트와 별개 · 여기엔 요청 건과 이미 결과를 남긴 업체만 나옵니다 · 오늘 키워드 콜 {todayN}건</span>
+        <a href={kw ? `/kw-calls?k=${encodeURIComponent(kw)}` : '/kw-calls'} className="help" style={{ marginLeft: 'auto', fontWeight: 700 }}>{kw ? `「${kw}」 전체 업체 보기 →` : '키워드 콜 리스트 전체 보기 →'}</a>
       </div>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
         {TABS.map(t => <button key={t.key} type="button" onClick={() => { setTab(t.key); setShown(100); setTouched(new Set()); }} className={`btn ${t.key === tab ? '' : 'ghost'}`} style={{ padding: '6px 14px', ...(t.key === tab ? { background: V, borderColor: V } : {}) }}>{t.label} <b style={{ marginLeft: 4 }}>{base.filter(t.f).length}</b></button>)}
@@ -55,6 +56,6 @@ export default function KwMine({ rows0, canEdit, who, today }: { rows0: KwRow[];
           <input value={memo[r.id] ?? r.memo} onChange={e => setMemo(m => ({ ...m, [r.id]: e.target.value }))} onBlur={() => { if ((memo[r.id] ?? r.memo) !== r.memo) save(r, r.result); }} placeholder="메모 (칸을 벗어나면 저장)" style={{ fontSize: 12.5 }} />
         </div> : <div><b style={{ color: COLOR[r.result] ?? 'inherit' }}>{r.result || '-'}</b><div className="cell-sub">{r.memo}</div></div>}</td></tr>)}
         {view.length > shown && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 14 }}><button type="button" className="btn" onClick={() => setShown(n => n + 100)}>100곳 더 보기 ({shown} / {view.length})</button></td></tr>}</tbody></table></div>
-      : <div style={{ padding: 24, color: 'var(--muted)', textAlign: 'center' }}>{cur.label} 업체가 없습니다</div>}
+      : <div style={{ padding: 24, color: 'var(--muted)', textAlign: 'center' }}>{cur.label} 업체가 없습니다{tab === 'open' ? ' — 전체 공용 키워드의 미연락 업체는 위 「전체 업체 보기 →」(키워드 콜 리스트)에 있습니다' : ''}</div>}
   </div>;
 }
