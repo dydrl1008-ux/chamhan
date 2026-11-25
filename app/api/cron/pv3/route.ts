@@ -4,6 +4,7 @@ import { ingestAi, queueMissingRenders } from '@/lib/pv3Tasks';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { autoDiscover } from '@/lib/kwDiscover';
 import { threadsTick } from '@/lib/threads';
+import { rankWatchTick } from '@/lib/ykreward';
 import { myDbTick } from '@/lib/myDb';
 
 const KEEP_DAYS = 30;
@@ -34,6 +35,7 @@ export async function GET(req: Request) {
     catch (e: any) { kw = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 키워드 발굴(자동) — 15분에 한 번, 실패해도 발송에 영향 없음
     let th = 'skip'; try { if (Date.now() - t0 < 25_000) th = await threadsTick(); } catch (e: any) { th = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 쓰레드 자동 발행 — 실패해도 발송에 영향 없음
     let md = 'skip'; try { md = await myDbTick(); } catch (e: any) { md = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 내 DB 알림 — 하루 한 번
-    return NextResponse.json({ ok: true, ...r, renders, gc, kw, th, md });
+    let rw = 'skip'; try { rw = await rankWatchTick(); } catch (e: any) { rw = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 순위 체크 자동 조회 — 평일 10시·14시, 키워드당 한 번
+    return NextResponse.json({ ok: true, ...r, renders, gc, kw, th, md, rw });
   } catch (e: any) { return NextResponse.json({ ok: false, msg: e.message }, { status: 500 }); }
 }
