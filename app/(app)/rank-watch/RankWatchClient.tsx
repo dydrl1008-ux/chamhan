@@ -47,8 +47,9 @@ export default function RankWatchClient({ me, people, sel, rows, hist, stars, em
   // ── 화면 (요약 카드 → 검색·필터 알약 → 업체 카드 → 상품 줄) ──
   const ranked = rows.filter(w => w.cur_rank != null); const avg = ranked.length ? Math.round(ranked.reduce((a, w) => a + (w.cur_rank ?? 0), 0) / ranked.length * 10) / 10 : null;
   const ds = rows.map(delta).filter((d): d is number => d != null); const avgD = ds.length ? Math.round(ds.reduce((a, b) => a + b, 0) / ds.length * 10) / 10 : null;
+  const cDown = rows.filter(w => w.click != null && w.prev_click != null && w.click < w.prev_click).length, cUp = rows.filter(w => w.click != null && w.prev_click != null && w.click > w.prev_click).length;
   const lastAt = rows.map(w => w.cur_at).filter(Boolean).sort().at(-1) as string | undefined;
-  const sortFn: Record<string, (a: WatchRow, b: WatchRow) => number> = { rank: (a, b) => (a.cur_rank ?? 999) - (b.cur_rank ?? 999), drop: (a, b) => (delta(a) ?? 0) - (delta(b) ?? 0), rise: (a, b) => (delta(b) ?? 0) - (delta(a) ?? 0), recent: (a, b) => String(b.cur_at ?? '').localeCompare(String(a.cur_at ?? '')) };
+  const sortFn: Record<string, (a: WatchRow, b: WatchRow) => number> = { rank: (a, b) => (a.cur_rank ?? 999) - (b.cur_rank ?? 999), drop: (a, b) => (delta(a) ?? 0) - (delta(b) ?? 0), rise: (a, b) => (delta(b) ?? 0) - (delta(a) ?? 0), recent: (a, b) => String(b.cur_at ?? '').localeCompare(String(a.cur_at ?? '')), cdrop: (a, b) => ((a.click ?? 0) - (a.prev_click ?? a.click ?? 0)) - ((b.click ?? 0) - (b.prev_click ?? b.click ?? 0)) };
   const pill = (on: boolean, tone?: string) => ({ border: `1px solid ${on ? (tone ?? '#2563EB') : '#E4E7EC'}`, background: on ? (tone ?? '#2563EB') : '#fff', color: on ? '#fff' : '#344054', borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' as const });
   const mini = { border: '1px solid #E4E7EC', background: '#fff', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#344054', whiteSpace: 'nowrap' as const };
   const Stat = ({ l, v, sub, color }: { l: string; v: React.ReactNode; sub: string; color?: string }) => <div style={{ border: '1px solid #E9EDF3', borderRadius: 14, padding: '14px 16px', background: '#fff', display: 'grid', gap: 6 }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}><span style={{ fontSize: 13, color: '#475467', fontWeight: 600 }}>{l}</span><b style={{ fontSize: 22, color: color ?? '#101828', letterSpacing: '-0.02em' }}>{v}</b></div><span style={{ fontSize: 12, color: '#98A2B3' }}>{sub}</span></div>;
@@ -80,7 +81,7 @@ export default function RankWatchClient({ me, people, sel, rows, hist, stars, em
           <Stat l="모니터링 상품 수" v={rows.length} sub={`업체 ${new Set(rows.map(w => w.group)).size}곳 · 키워드 ${new Set(rows.map(w => w.keyword)).size}개`} />
           <Stat l="평균 순위" v={avg != null ? <>{avg}<span style={{ fontSize: 13 }}>위</span></> : '-'} sub="100위 안에 있는 항목 기준" color="#12B76A" />
           <Stat l="순위 평균 변동" v={avgD != null ? (avgD > 0 ? `▲ ${avgD}` : avgD < 0 ? `▼ ${-avgD}` : '0') : '-'} sub="직전 조회 대비" color={avgD != null && avgD > 0 ? '#079455' : avgD != null && avgD < 0 ? '#D92D20' : undefined} />
-          <Stat l="변동 하락 상품" v={nDown} sub={`상승 ${nUp} · 100위 밖 ${nNone}`} color={nDown ? '#D92D20' : undefined} />
+          <Stat l="변동 하락 상품" v={nDown} sub={`상승 ${nUp} · 100위 밖 ${nNone} · 클릭 지수 ▲${cUp} ▼${cDown}`} color={nDown ? '#D92D20' : undefined} />
         </div>
         <div style={{ display: 'grid', gap: 10 }}>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="업체명, 상품명, 키워드로 검색" style={{ background: '#F2F4F7', border: '1px solid #EAECF0', borderRadius: 12, minHeight: 46 }} />
@@ -92,7 +93,7 @@ export default function RankWatchClient({ me, people, sel, rows, hist, stars, em
             <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               {canRe && nDown > 0 && <button type="button" style={{ ...mini, color: '#D92D20', borderColor: '#FDA29B' }} disabled={busy} onClick={() => re({ ids: rows.filter(isDown).map(w => w.id) })}>{busy ? '조회 중…' : `하락 ${nDown}건 재체크`}</button>}
               <button type="button" style={mini} onClick={() => setAll(true)}>모두 펼침</button><button type="button" style={mini} onClick={() => setAll(false)}>모두 접기</button>
-              <select value={sort} onChange={e => setSort(e.target.value)} style={{ width: 'auto', minHeight: 32, fontSize: 12.5, borderRadius: 8, padding: '0 8px' }}><option value="">기본 순서</option><option value="rank">순위 높은 순</option><option value="drop">하락 큰 순</option><option value="rise">상승 큰 순</option><option value="recent">최근 조회 순</option></select>
+              <select value={sort} onChange={e => setSort(e.target.value)} style={{ width: 'auto', minHeight: 32, fontSize: 12.5, borderRadius: 8, padding: '0 8px' }}><option value="">기본 순서</option><option value="rank">순위 높은 순</option><option value="drop">하락 큰 순</option><option value="rise">상승 큰 순</option><option value="recent">최근 조회 순</option><option value="cdrop">클릭 지수 하락 큰 순</option></select>
             </span>
           </div>
         </div>
@@ -119,6 +120,7 @@ export default function RankWatchClient({ me, people, sel, rows, hist, stars, em
                   <div style={{ fontSize: 12, color: '#98A2B3', marginTop: 2 }}>{[w.store, w.cur_at ? `${fmtKST(w.cur_at)} 조회` : ''].filter(Boolean).join(' · ')}</div>
                 </div>
                 <div style={{ flex: 'none' }}><Spark pts={hist[w.id] ?? []} /></div>
+                <div style={{ flex: 'none', minWidth: 78, textAlign: 'right' }} title="클릭 지수 — 직전 조회 대비 상승·하락">{w.click != null ? <><div style={{ fontSize: 11, color: '#98A2B3', fontWeight: 600 }}>클릭 지수</div><div style={{ fontSize: 16, fontWeight: 800, color: '#101828' }}>{w.click}</div>{(() => { const dc = w.prev_click != null ? Math.round((w.click - w.prev_click) * 100) / 100 : null; return <div style={{ fontSize: 12, fontWeight: 700, color: dc != null && dc > 0 ? '#079455' : dc != null && dc < 0 ? '#D92D20' : '#98A2B3' }}>{dc != null && dc !== 0 ? (dc > 0 ? `▲ ${dc}` : `▼ ${-dc}`) : '–'}</div>; })()}</> : <span style={{ fontSize: 11.5, color: '#D0D5DD' }}>클릭 지수 –</span>}</div>
                 <div style={{ flex: 'none', minWidth: 92 }}>{rankBox(w)}</div>
                 <div style={{ flex: 'none', display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
                   {canRe && <button type="button" style={mini} disabled={busy} onClick={() => re({ ids: [w.id] })}>재체크</button>}

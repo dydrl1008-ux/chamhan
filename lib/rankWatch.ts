@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { search } from '@/lib/nsc';
 import { ykr, ykrReady } from '@/lib/ykreward';
 
-export type WatchRow = { id: string; user_id: string; owner: string; group: string; keyword: string; title: string | null; store: string | null; url: string | null; memo: string | null; cur_rank: number | null; cur_at: string | null; prev_rank: number | null; diff: number | null; trend: string | null; active: boolean; q_status: string | null; mid: string | null; mid_type: string | null; cmp_mid: string | null; image_url: string | null };
+export type WatchRow = { id: string; user_id: string; owner: string; group: string; keyword: string; title: string | null; store: string | null; url: string | null; memo: string | null; cur_rank: number | null; cur_at: string | null; prev_rank: number | null; diff: number | null; trend: string | null; active: boolean; q_status: string | null; mid: string | null; mid_type: string | null; cmp_mid: string | null; image_url: string | null; click?: number | null; prev_click?: number | null };
 export type HistPt = { t: string; r: number | null };
 export const GROUP_NONE = '(미분류)';
 const DROP_ALERT = 10;   // 직전 조회보다 이만큼 이상 떨어지면 급하락 알림
@@ -47,11 +47,13 @@ export async function watchRows(users?: string[]): Promise<WatchRow[]> {
   for (let off = 0; ; off += 1000) { let q = wh.from('rank_watch_items').select('id,user_id,url,mid,mid_type,keyword,group_name,group_order,sort_order,memo,title,store,image_url').eq('active', true).order('group_order', { ascending: true, nullsFirst: false }).order('sort_order').order('id').range(off, off + 999); if (users) q = q.in('user_id', users);
     const { data, error } = await q; if (error) throw new Error(needSql(error.message)); items.push(...(data ?? [])); if ((data ?? []).length < 1000) break; }
   const rk = new Map<string, any>(); const ids = items.map(x => String(x.id));
-  for (let i = 0; i < ids.length; i += 300) { const { data } = await wh.from('rank_watch_ranks').select('watch_id,cur_rank,cur_at,prev_rank,title,store').in('watch_id', ids.slice(i, i + 300)); for (const r of data ?? []) rk.set(r.watch_id, r); }
+  for (let i = 0; i < ids.length; i += 300) { let { data, error } = await wh.from('rank_watch_ranks').select('watch_id,cur_rank,cur_at,prev_rank,title,store,cur_click,prev_click').in('watch_id', ids.slice(i, i + 300)) as { data: any[] | null; error: any };
+    if (error) ({ data } = await wh.from('rank_watch_ranks').select('watch_id,cur_rank,cur_at,prev_rank,title,store').in('watch_id', ids.slice(i, i + 300)) as any);   // 0098 실행 전
+    for (const r of data ?? []) rk.set(r.watch_id, r); }
   const uids = [...new Set(items.map(x => x.user_id))]; const nm = new Map<string, string>(); if (uids.length) { const { data } = await wh.from('profiles').select('id,name').in('id', uids); for (const p of data ?? []) nm.set(p.id, p.name); }
   return items.map(x => { const o = rk.get(String(x.id)); const cur = o && o.cur_rank > 0 ? o.cur_rank : null, prev = o && o.prev_rank > 0 ? o.prev_rank : null;
     const trend = !o?.cur_at ? '미수집' : o.prev_rank == null ? 'NEW' : !cur && !prev ? '변동 없음' : !cur ? '이탈' : !prev ? '진입' : cur === prev ? '변동 없음' : cur < prev ? '상승' : '하락';
-    return { id: x.id, user_id: x.user_id, owner: nm.get(x.user_id) ?? '', group: x.group_name?.trim() || GROUP_NONE, keyword: x.keyword, title: o?.title || x.title, store: o?.store || x.store, url: x.url, memo: x.memo, cur_rank: cur, cur_at: o?.cur_at ?? null, prev_rank: prev, diff: cur && prev ? prev - cur : null, trend, active: true, q_status: null, mid: x.mid, mid_type: x.mid_type, cmp_mid: x.mid_type === '원부' ? x.mid : null, image_url: x.image_url }; });
+    return { id: x.id, user_id: x.user_id, owner: nm.get(x.user_id) ?? '', group: x.group_name?.trim() || GROUP_NONE, keyword: x.keyword, title: o?.title || x.title, store: o?.store || x.store, url: x.url, memo: x.memo, cur_rank: cur, cur_at: o?.cur_at ?? null, prev_rank: prev, diff: cur && prev ? prev - cur : null, trend, active: true, q_status: null, mid: x.mid, mid_type: x.mid_type, cmp_mid: x.mid_type === '원부' ? x.mid : null, image_url: x.image_url, click: o?.cur_click ?? null, prev_click: o?.prev_click ?? null }; });
 }
 
 /** 순위 이력 (최근 N일) — 워크허브 조회 기록, 그 이전 구간은 예전 ykreward 기록으로 채움 */
@@ -76,14 +78,17 @@ export async function checkWatch(rows: WatchRow[], budgetMs = 40000): Promise<{ 
     let prods: any[]; try { prods = ((await search(kw, list[0].user_id, true)).products ?? []) as any[]; } catch (e: any) { err = `「${kw}」 조회 실패: ${String(e?.message ?? e).slice(0, 80)}`; break; }
     const at = new Date().toISOString(); const ids = list.map(w => String(w.id));
     const { data: old } = await wh.from('rank_watch_ranks').select('watch_id,cur_rank').in('watch_id', ids); const was = new Map<string, number | null>((old ?? []).map((o: any) => [o.watch_id, o.cur_rank]));
+    const { data: oc } = await wh.from('rank_watch_ranks').select('watch_id,cur_click').in('watch_id', ids); const wasC = new Map<string, number | null>((oc ?? []).map((o: any) => [o.watch_id, o.cur_click]));   // 0098 실행 전엔 빈 값
     const ups: any[] = [], hs: any[] = [], imgs: { id: string; image_url: string }[] = [];
     for (const w of list) {
       const hit = prods.filter(p => w.mid_type === '원부' ? String(p.nvmid ?? '') === String(w.mid) : String(p.link ?? '').includes(`/products/${w.mid}`)).sort((a, b) => a.rank - b.rank)[0]; const rk = hit ? Number(hit.rank) || 0 : 0;
-      ups.push({ watch_id: String(w.id), cur_rank: rk, cur_at: at, prev_rank: was.has(String(w.id)) ? was.get(String(w.id)) : null, title: hit ? String(hit.productTitle ?? '').slice(0, 200) : (w.title ?? ''), store: hit ? String(hit.mallName ?? '').slice(0, 80) : (w.store ?? '') });
-      hs.push({ watch_id: String(w.id), rank: rk, checked_at: at }); if (hit?.imageUrl && !w.image_url) imgs.push({ id: String(w.id), image_url: String(hit.imageUrl) });
+      ups.push({ watch_id: String(w.id), cur_rank: rk, cur_at: at, prev_rank: was.has(String(w.id)) ? was.get(String(w.id)) : null, title: hit ? String(hit.productTitle ?? '').slice(0, 200) : (w.title ?? ''), store: hit ? String(hit.mallName ?? '').slice(0, 80) : (w.store ?? ''), cur_click: hit && Number.isFinite(Number(hit.hitStarScore)) ? Number(hit.hitStarScore) : null, prev_click: wasC.get(String(w.id)) ?? null });
+      hs.push({ watch_id: String(w.id), rank: rk, checked_at: at, click: hit && Number.isFinite(Number(hit.hitStarScore)) ? Number(hit.hitStarScore) : null }); if (hit?.imageUrl && !w.image_url) imgs.push({ id: String(w.id), image_url: String(hit.imageUrl) });
     }
-    const { error } = await wh.from('rank_watch_ranks').upsert(ups, { onConflict: 'watch_id' }); if (error) { err = needSql(error.message); break; }
-    await wh.from('rank_watch_hist').insert(hs); for (const im of imgs) await wh.from('rank_watch_items').update({ image_url: im.image_url }).eq('id', im.id);
+    let { error } = await wh.from('rank_watch_ranks').upsert(ups, { onConflict: 'watch_id' });
+    if (error && /click/.test(error.message)) { ({ error } = await wh.from('rank_watch_ranks').upsert(ups.map(({ cur_click, prev_click, ...r }) => r), { onConflict: 'watch_id' })); await wh.from('rank_watch_hist').insert(hs.map(({ click, ...r }) => r)); }   // 0098 실행 전 — 클릭 지수 없이 저장
+    else if (!error) await wh.from('rank_watch_hist').insert(hs);
+    if (error) { err = needSql(error.message); break; } for (const im of imgs) await wh.from('rank_watch_items').update({ image_url: im.image_url }).eq('id', im.id);
     n += list.length; kws++;
   }
   const left = by.size - kws;
