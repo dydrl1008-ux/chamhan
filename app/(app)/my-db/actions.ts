@@ -3,9 +3,9 @@
 import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
-export type DbRow = { id: number; owner_id: string; source: string; contact_date: string | null; name: string; phone: string; biz_no: string; kind: string; gender: string; channel: string; item: string; url: string; url2: string; grade: string; status: string; paid_at: string | null; next_on: string | null; note1: string; note2: string; note3: string; deleted_at: string | null; deleted_by: string | null; created_at: string; updated_at: string; owner_name?: string; deleted_name?: string };
-export type DbIn = { contact_date?: string | null; name: string; phone?: string; biz_no?: string; kind?: string; gender?: string; channel?: string; item?: string; url?: string; url2?: string; grade?: string; status?: string; next_on?: string | null; note1?: string; note2?: string; note3?: string };
-const COLS = 'id,owner_id,source,contact_date,name,phone,biz_no,kind,gender,channel,item,url,url2,grade,status,paid_at,next_on,note1,note2,note3,deleted_at,deleted_by,created_at,updated_at';
+export type DbRow = { id: number; owner_id: string; source: string; contact_date: string | null; name: string; phone: string; biz_no: string; kind: string; gender: string; channel: string; item: string; url: string; url2: string; grade: string; status: string; paid_at: string | null; next_on: string | null; alarm_time: string; note1: string; note2: string; note3: string; deleted_at: string | null; deleted_by: string | null; created_at: string; updated_at: string; owner_name?: string; deleted_name?: string };
+export type DbIn = { contact_date?: string | null; name: string; phone?: string; biz_no?: string; kind?: string; gender?: string; channel?: string; item?: string; url?: string; url2?: string; grade?: string; status?: string; next_on?: string | null; alarm_time?: string; note1?: string; note2?: string; note3?: string };
+const COLS = 'id,owner_id,source,contact_date,name,phone,biz_no,kind,gender,channel,item,url,url2,grade,status,paid_at,next_on,alarm_time,note1,note2,note3,deleted_at,deleted_by,created_at,updated_at';
 const GRADES = ['', 'S', 'A', 'B', 'C', 'D', 'E', 'F']; const STATUSES = ['진행', '결제', '보류', '종료'];
 const TRASH_DAYS = 30;   // 직원은 지운 지 30일까지만 되살릴 수 있음. 총괄 화면에는 계속 남는다
 const needSql = (m: string) => /my_db/.test(m) ? '0092 SQL(my_db 표)을 먼저 실행해 주세요' : m;
@@ -22,7 +22,7 @@ async function canSee(me: { id: string; role: string; team_id: number | null }, 
   return !!data && data.team_id != null && data.team_id === me.team_id;
 }
 const clean = (r: DbIn) => ({ contact_date: day(r.contact_date), name: s(r.name, 100), phone: s(r.phone, 40), phone_key: pk(s(r.phone, 40)).slice(0, 15), biz_no: s(r.biz_no, 20), kind: s(r.kind, 40), gender: s(r.gender, 4), channel: s(r.channel, 20), item: s(r.item, 80), url: s(r.url, 400), url2: s(r.url2, 400),
-  grade: GRADES.includes(s(r.grade, 2).toUpperCase()) ? s(r.grade, 2).toUpperCase() : '', status: STATUSES.includes(s(r.status, 4)) ? s(r.status, 4) : '진행', next_on: day(r.next_on), note1: s(r.note1, 1000), note2: s(r.note2, 1000), note3: s(r.note3, 1000) });
+  grade: GRADES.includes(s(r.grade, 2).toUpperCase()) ? s(r.grade, 2).toUpperCase() : '', status: STATUSES.includes(s(r.status, 4)) ? s(r.status, 4) : '진행', next_on: day(r.next_on), alarm_time: /^\d{2}:\d{2}$/.test(s(r.alarm_time, 5)) ? s(r.alarm_time, 5) : '', note1: s(r.note1, 1000), note2: s(r.note2, 1000), note3: s(r.note3, 1000) });
 
 export async function dbList(userId?: string, trash = false): Promise<R<{ rows: DbRow[] }>> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
@@ -75,6 +75,8 @@ export async function dbUpdate(id: number, patch: Partial<DbIn>): Promise<R<{ ro
   if (cur.owner_id !== me.id && !isBoss(me)) return { ok: false, msg: '본인 DB 만 고칠 수 있습니다' };
   const c = clean({ name: cur.name, ...patch } as DbIn); const up: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const k of Object.keys(patch) as (keyof DbIn)[]) { if (k in c) up[k] = (c as any)[k]; if (k === 'phone') up.phone_key = c.phone_key; }
+  if ('next_on' in patch || 'alarm_time' in patch) up.alarm_sent_on = null;   // 날짜·시각을 바꾸면 알림 다시
+  if ('next_on' in patch && !c.next_on) up.alarm_time = '';
   if ('name' in patch && !c.name) return { ok: false, msg: '상호명은 비울 수 없습니다' };
   if ('status' in patch && c.status !== cur.status) { up.paid_at = c.status === '결제' ? new Date().toISOString() : null; await sb.from('my_db_logs').insert({ db_id: id, user_id: me.id, action: '상태', detail: `${cur.status} → ${c.status}` }); }
   const { data, error: e2 } = await sb.from('my_db').update(up).eq('id', id).select(COLS).single();
