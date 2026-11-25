@@ -34,7 +34,7 @@ function parseSheet(XLSX: any, ws: any, today: string): DbIn[] {
   const hi = g.slice(0, 8).findIndex(r => r.some(c => /상호|업체명/.test(String(c)))); if (hi < 0) return [];
   const h = g[hi].map(c => String(c ?? '').replace(/\s+/g, '')); const find = (...re: RegExp[]) => { for (const x of re) { const i = h.findIndex(c => x.test(c)); if (i >= 0) return i; } return -1; };
   const iName = find(/상호|업체명/); const iPhone0 = find(/^번호$|전화|연락처|휴대/);
-  const col = { date: find(/날짜|일자/), kind: find(/분류|구분|가망/), gender: find(/성별/), channel: find(/껀덕지|건덕지|연락수단|채널/), item: find(/키워드|품목/), url: find(/^URL$/i, /^URL1$/i, /URL|주소|링크/i), url2: find(/^URL2$/i), grade: find(/성과조회|등급/), note1: find(/상황설명|진행사항|메모/), note2: find(/^1차콜/, /^2차콜/), note3: find(/^3차콜/, /^2차콜/), biz: find(/사업자/) };
+  const col = { date: find(/날짜|일자/), kind: find(/분류|구분|가망/), gender: find(/성별/), channel: find(/껀덕지|건덕지|연락수단|채널/), item: find(/키워드|품목/), url: find(/^URL$/i, /^URL1$/i, /URL|주소|링크/i), url2: find(/^URL2$/i), grade: find(/성과조회|등급/), note1: find(/상황설명|진행사항|메모/), note2: find(/^1차콜/, /^2차콜/), note3: find(/^3차콜/, /^2차콜/), biz: find(/사업자/), status: find(/^상태$/) };
   if (col.note3 === col.note2) col.note3 = -1; if (col.url2 === col.url) col.url2 = -1;
   const body = g.slice(hi + 1); const isPhone = (v: unknown) => /^0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}$/.test(String(v ?? '').trim());
   let iPhone = iPhone0; if (iPhone < 0) { let best = 0; for (let c = 0; c < h.length; c++) { const n = body.slice(0, 60).filter(r => isPhone(r[c])).length; if (n > best) { best = n; iPhone = c; } } }   // 머리글이 이상해도 내용으로 전화 칸 찾기
@@ -55,7 +55,7 @@ function parseSheet(XLSX: any, ws: any, today: string): DbIn[] {
     const addr = XLSX.utils.encode_cell({ r: hi + 1 + k, c: iName }); const fill = String(ws[addr]?.s?.fgColor?.rgb ?? '').toUpperCase(); const yellow = /^(FF)?FFFF00$/.test(fill) || /^(FF)?FFF[0-9A-F]{3}$/.test(fill) && fill.slice(-2) < '99';
     let grade = cell(r, col.grade).toUpperCase(); let extra = ''; if (/^S+\+?$/.test(grade)) grade = 'S'; else if (!GRADES.includes(grade)) { extra = cell(r, col.grade); grade = ''; }
     out.push({ contact_date: last, name, phone: cell(r, iPhone), biz_no: cell(r, col.biz), kind: cell(r, col.kind), gender: cell(r, col.gender), channel: cell(r, col.channel), item: cell(r, col.item), url: cell(r, col.url), url2: cell(r, col.url2), grade,
-      status: yellow ? '결제' : '진행', note1: [extra, cell(r, col.note1)].filter(Boolean).join(' · '), note2: cell(r, col.note2), note3: cell(r, col.note3) });
+      status: yellow ? '결제' : (STATUSES.includes(cell(r, col.status)) ? cell(r, col.status) : '진행'), note1: [extra, cell(r, col.note1)].filter(Boolean).join(' · '), note2: cell(r, col.note2), note3: cell(r, col.note3) });
   });
   return out;
 }
@@ -91,7 +91,7 @@ export default function MyDbClient({ me, target, who, trash, today, rows0, err, 
   const importNow = async () => { if (!parsed) return; const all = parsed.filter(p => pick.has(p.sheet)).flatMap(p => p.rows); if (!all.length) return notify('시트를 골라 주세요', 'bad'); setBusy(true); let added = 0; const dd: { name: string; who: string }[] = [];
     for (let i = 0; i < all.length; i += 1000) { const x = await dbAdd(all.slice(i, i + 1000), '엑셀', mine ? undefined : target); if (!x.ok) { setBusy(false); return notify(x.msg, 'bad', 6000); } added += x.added; dd.push(...x.dup); }
     setBusy(false); notify(`${added}건 등록` + (dd.length ? ` · ${dd.length}건 건너뜀(중복)` : ''), 'ok', 6000); setDups(dd); setParsed(null); if (added) { router.refresh(); setTimeout(() => location.reload(), dd.length ? 4000 : 300); } };
-  const template = async () => { const XLSX = await import('xlsx'); const ws = XLSX.utils.aoa_to_sheet([['날짜', '상호명', '번호', '성별', '껀덕지', '키워드', 'URL', '성과조회', '상황설명 및 진행사항', '1차 콜', 'URL2'], [today, '예시상회', '010-0000-0000', '남', '카톡', '고등어', 'https://smartstore.naver.com/example', 'B', '1차 통화 후 카톡 남김', '', '']]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '유효콜'); XLSX.writeFile(wb, '내DB_양식.xlsx'); };
+  const template = async () => { const XLSX = await import('xlsx'); const ws = XLSX.utils.aoa_to_sheet([['영업 날짜', '상호명', '번호', '키워드', '등급', '상황설명 및 진행사항', '1차 콜', '2차 콜', '상태', '성별', 'URL'], [today, '예시상회', '010-0000-0000', '고등어', 'B', '1차 통화 후 카톡 남김', '', '', '진행', '남', 'https://smartstore.naver.com/example/products/1234567890']]); ws['!cols'] = [12, 18, 16, 14, 6, 44, 30, 30, 8, 6, 46].map(wch => ({ wch })); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '유효콜'); XLSX.writeFile(wb, '내DB_양식.xlsx'); };   // 화면 칸 순서와 같게. 등급 S·A·B·C·D·E·F, 상태 진행·결제·보류·종료, URL 은 상품 링크
   const inp = { fontSize: 12.5, padding: '4px 6px', width: '100%', minHeight: 30 } as const;
   // 머리글: 누르면 정렬(오름→내림→해제), 아래 칸에서 값 골라 걸러 보기
   const Th = ({ k, l, w, f }: { k?: string; l: string; w?: number; f?: 'gender' | 'channel' | 'item' | 'grade' | 'status' | 'contact_date' }) => <th style={{ minWidth: w, verticalAlign: 'top' }}>
@@ -108,7 +108,7 @@ export default function MyDbClient({ me, target, who, trash, today, rows0, err, 
         <button type="button" className="btn ghost" disabled={busy} onClick={() => fileRef.current?.click()}>엑셀 올리기</button>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => onFile(e.target.files?.[0])} />
         <button type="button" className="help" style={{ background: 'none', border: 0, cursor: 'pointer' }} onClick={template}>양식 내려받기</button>
-        <span className="cell-sub">쓰던 「유효콜」 엑셀 그대로 올려도 됩니다 · 노란 줄은 결제로, 성과조회 칸은 등급으로 들어옵니다{mine ? '' : ` · ${who} 님 DB 로 배정됩니다`}</span>
+        <span className="cell-sub">양식은 화면 칸 순서와 같습니다 · 쓰던 「유효콜」 엑셀도 그대로 올라갑니다(노란 줄 = 결제, 성과조회 = 등급){mine ? '' : ` · ${who} 님 DB 로 배정됩니다`}</span>
       </div>
       {adding && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 6, alignItems: 'center' }}>
         <input type="date" value={nw.contact_date ?? ''} onChange={e => setNw({ ...nw, contact_date: e.target.value })} />
