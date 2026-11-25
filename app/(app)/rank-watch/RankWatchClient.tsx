@@ -1,9 +1,9 @@
 'use client';
-// 순위 체크 — 업체 그룹별 접기, ★ 주요 업체 토글, 하락 빨강 · 상승 초록
+// 순위 체크 — 요약 카드 · 알약 필터 · 업체 카드 안에 상품 줄 (★ 주요 업체, 끌어서 순서 변경, 줄을 누르면 30일 추이)
 import { Fragment, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
-import { PageHeader, Section, Empty, Status } from '@/components/ui';
+import { Empty } from '@/components/ui';
 import { fmtKST } from '@/lib/date/kst';
 import { linkAccount, toggleGroupStar, recheck, addItems, moveGroup, removeItems, reorder, addGroup, removeGroup } from './actions';
 import type { WatchRow, HistPt } from '@/lib/ykreward';
@@ -13,6 +13,7 @@ type Props = { me: { id: string; name: string; role: string }; myLink: string; p
 export default function RankWatchClient({ me, myLink, people, sel, rows, hist, stars, emptyGroups = [], err }: Props) {
   const r = useRouter(); const [login, setLogin] = useState(myLink); const [busy, setBusy] = useState(false); const [filter, setFilter] = useState<'all' | 'down' | 'up' | 'star'>('all'); const [q, setQ] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({}); const [detail, setDetail] = useState<string | null>(null);
+  const [sort, setSort] = useState(''); const [acc, setAcc] = useState(false);
   const isMe = sel === me.id;
   const link = async () => { setBusy(true); const x = await linkAccount(login); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
   const selLogin = people.find(p => p.user_id === sel)?.login ?? myLink; const canRe = isMe || me.role === 'admin' || me.role === 'head';
@@ -44,44 +45,97 @@ export default function RankWatchClient({ me, myLink, people, sel, rows, hist, s
   const cell = (w: WatchRow) => { const d = delta(w); const cur = w.cur_rank; if (cur == null && !w.cur_at) return <span className="cell-sub">수집 전</span>; return <span className="num"><b style={{ fontSize: 16, color: cur == null ? 'var(--bad-ink)' : undefined }}>{cur ?? '미노출'}</b>{d != null && d !== 0 && <span style={{ marginLeft: 6, fontWeight: 700, color: d > 0 ? 'var(--ok-ink)' : 'var(--bad-ink)' }}>{d > 0 ? `▲${d}` : `▼${-d}`}</span>}{cur == null && w.prev_rank != null && <span style={{ marginLeft: 6, color: 'var(--bad-ink)', fontWeight: 700 }}>▼ 전 {w.prev_rank}</span>}{cur != null && w.prev_rank == null && <span style={{ marginLeft: 6, color: 'var(--ok-ink)', fontWeight: 700 }}>▲ 진입</span>}</span>; };
   const setAll = (v: boolean) => setOpen(Object.fromEntries(groups.map(([g]) => [g, v])));
 
+  // ── 화면 (요약 카드 → 검색·필터 알약 → 업체 카드 → 상품 줄) ──
+  const ranked = rows.filter(w => w.cur_rank != null); const avg = ranked.length ? Math.round(ranked.reduce((a, w) => a + (w.cur_rank ?? 0), 0) / ranked.length * 10) / 10 : null;
+  const ds = rows.map(delta).filter((d): d is number => d != null); const avgD = ds.length ? Math.round(ds.reduce((a, b) => a + b, 0) / ds.length * 10) / 10 : null;
+  const lastAt = rows.map(w => w.cur_at).filter(Boolean).sort().at(-1) as string | undefined;
+  const sortFn: Record<string, (a: WatchRow, b: WatchRow) => number> = { rank: (a, b) => (a.cur_rank ?? 999) - (b.cur_rank ?? 999), drop: (a, b) => (delta(a) ?? 0) - (delta(b) ?? 0), rise: (a, b) => (delta(b) ?? 0) - (delta(a) ?? 0), recent: (a, b) => String(b.cur_at ?? '').localeCompare(String(a.cur_at ?? '')) };
+  const pill = (on: boolean, tone?: string) => ({ border: `1px solid ${on ? (tone ?? '#2563EB') : '#E4E7EC'}`, background: on ? (tone ?? '#2563EB') : '#fff', color: on ? '#fff' : '#344054', borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' as const });
+  const mini = { border: '1px solid #E4E7EC', background: '#fff', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#344054', whiteSpace: 'nowrap' as const };
+  const Stat = ({ l, v, sub, color }: { l: string; v: React.ReactNode; sub: string; color?: string }) => <div style={{ border: '1px solid #E9EDF3', borderRadius: 14, padding: '14px 16px', background: '#fff', display: 'grid', gap: 6 }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}><span style={{ fontSize: 13, color: '#475467', fontWeight: 600 }}>{l}</span><b style={{ fontSize: 22, color: color ?? '#101828', letterSpacing: '-0.02em' }}>{v}</b></div><span style={{ fontSize: 12, color: '#98A2B3' }}>{sub}</span></div>;
+  const rankBox = (w: WatchRow) => { const d = delta(w); const cur = w.cur_rank; if (cur == null && !w.cur_at) return <span style={{ fontSize: 12.5, color: '#98A2B3' }}>조회 전</span>;
+    return <div style={{ textAlign: 'right' }}><div style={{ fontSize: cur == null ? 15 : 24, fontWeight: 800, letterSpacing: '-0.02em', color: cur == null ? '#B42318' : cur <= 10 ? '#2563EB' : '#101828', lineHeight: 1.1 }}>{cur == null ? '100위 밖' : <>{cur}<span style={{ fontSize: 13, fontWeight: 700, marginLeft: 1 }}>위</span></>}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, marginTop: 3, color: d != null && d > 0 || (cur != null && w.prev_rank == null && !!w.trend && w.trend !== 'NEW') ? '#079455' : d != null && d < 0 || (cur == null && w.prev_rank != null) ? '#D92D20' : '#98A2B3' }}>{d != null && d !== 0 ? (d > 0 ? `▲ ${d}` : `▼ ${-d}`) : cur == null && w.prev_rank != null ? `▼ 이탈 (전 ${w.prev_rank}위)` : cur != null && w.prev_rank == null && w.trend === '진입' ? '▲ 진입' : '–'}</div></div>; };
+
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
+    <div style={{ display: 'grid', gap: 16 }}>
       <datalist id="rw-groups">{groupNames.map(g => <option key={g} value={g} />)}</datalist>
-      <PageHeader title="순위 체크" desc="ykreward 순위 체크 중 내 계정 담당 건. ★ 주요 업체만 순위 변동 알림(본인에게만). 업체 줄·상품 줄을 끌어서 순서 변경 (전체 보기·검색 없을 때)." badge={rows.length ? <span className="cell-sub">{rows.length}건 · <span style={{ color: 'var(--bad-ink)' }}>하락 {nDown}</span> · <span style={{ color: 'var(--ok-ink)' }}>상승 {nUp}</span> · 미노출 {nNone}</span> : null}
-        actions={me.role !== 'staff' && people.length > 0 ? <select value={sel} onChange={e => r.push(`/rank-watch?u=${e.target.value}`)} style={{ padding: '6px 10px' }}>{people.map(p => <option key={p.user_id} value={p.user_id}>{p.name} ({p.login})</option>)}</select> : undefined} />
-      {err && <div className="err">ykreward 연결 오류: {err}</div>}
-      <Section title="내 ykreward 계정" sub={myLink ? <>연결됨: <b>{myLink}</b> — 순위 체크에서 이 계정 담당으로 등록된 건이 아래에 나옵니다</> : '순위 체크 담당자로 쓰는 본인 ykreward 아이디를 연결하세요'}>
-        <div style={{ display: 'flex', gap: 8, maxWidth: 420 }}><input value={login} onChange={e => setLogin(e.target.value)} placeholder="ykreward 아이디" style={{ flex: 1, padding: '7px 10px' }} autoCapitalize="none" /><button type="button" className="btn" disabled={busy || !login.trim() || login.trim() === myLink} onClick={link}>{myLink ? '변경' : '연결'}</button></div>
-      </Section>
-      {myLink && isMe && <Section title="등록" right={<span style={{ display: 'inline-flex', gap: 6 }}><button type="button" className="btn ghost" onClick={() => setGOpen(v => !v)}>{gOpen ? '닫기' : '+ 업체 추가'}</button><button type="button" className="btn ghost" onClick={() => setAddOpen(v => !v)}>{addOpen ? '닫기' : '+ 상품·키워드 등록'}</button></span>} sub="내 계정 담당으로 등록 — 업체(그룹) 고르거나 새로 입력, 키워드는 쉼표나 줄바꿈으로 여러 개">
-        {gOpen && <form onSubmit={e => { e.preventDefault(); mkGroup(); }} style={{ display: 'flex', gap: 8, marginBottom: 10 }}><input value={gName} onChange={e => setGName(e.target.value)} placeholder="업체명 (예: 올포홈)" style={{ padding: '7px 10px', width: 260 }} autoFocus /><button type="submit" className="btn" disabled={busy || !gName.trim()}>업체 추가</button><span className="cell-sub" style={{ alignSelf: 'center' }}>추가하면 바로 그 업체로 상품 등록 칸이 열림</span></form>}
-        {addOpen && <form onSubmit={e => { e.preventDefault(); add(new FormData(e.currentTarget)); }} style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
-          <label style={{ display: 'grid', gap: 4 }}><span className="cell-sub">업체 (그룹)</span><input name="group" list="rw-groups" placeholder="예: 올포홈" defaultValue={preGroup} key={preGroup} style={{ padding: '7px 10px' }} /></label>
-          <label style={{ display: 'grid', gap: 4 }}><span className="cell-sub">상품 URL</span><input name="url" required placeholder="https://smartstore.naver.com/스토어/products/숫자 (브랜드스토어도 됨)" style={{ padding: '7px 10px' }} /></label>
-          <label style={{ display: 'grid', gap: 4, gridColumn: '1 / -1' }}><span className="cell-sub">키워드 (여러 개)</span><textarea name="keywords" required rows={2} placeholder="어린이집네임택, 네임스티커, 이름표" style={{ padding: '7px 10px' }} /></label>
-          <label style={{ display: 'grid', gap: 4 }}><span className="cell-sub">메모 (선택)</span><input name="memo" placeholder="리워드 11월 · 담당 OO" style={{ padding: '7px 10px' }} /></label>
-          <div style={{ alignSelf: 'end' }}><button type="submit" className="btn" disabled={busy}>등록</button> <span className="cell-sub" style={{ marginLeft: 8 }}>가격비교(카탈로그) 상품은 ykreward 에서</span></div>
-        </form>}
-      </Section>}
-      {!myLink && isMe && <div className="card"><Empty>계정을 연결하면 순위가 여기 뜹니다</Empty></div>}
-      {(myLink || !isMe) && <Section title={isMe ? '내 순위 체크' : `${people.find(p => p.user_id === sel)?.name ?? ''} 순위 체크`} right={<span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="업체 · 키워드 검색" style={{ padding: '5px 10px', width: 180 }} />
-        {(['all', 'down', 'up', 'star'] as const).map(k => <button key={k} type="button" className={`btn ${filter === k ? '' : 'ghost'}`} style={{ padding: '4px 10px' }} onClick={() => setFilter(k)}>{k === 'all' ? '전체' : k === 'down' ? `하락 ${nDown}` : k === 'up' ? `상승 ${nUp}` : `★ 주요`}</button>)}
-        {canRe && nDown > 0 && <button type="button" className="btn" style={{ padding: '4px 10px', background: 'var(--bad)' }} disabled={busy} onClick={() => re({ ids: rows.filter(isDown).map(w => w.id) })}>하락 {nDown}건 재체크</button>}<button type="button" className="btn ghost" style={{ padding: '4px 10px' }} onClick={() => setAll(true)}>모두 펼침</button><button type="button" className="btn ghost" style={{ padding: '4px 10px' }} onClick={() => setAll(false)}>모두 접기</button></span>} flush>
-        {groups.length === 0 && <div style={{ padding: 16 }}><Empty>{rows.length ? '조건에 맞는 항목 없음' : '이 계정 담당으로 등록된 순위 체크 항목이 없습니다 (ykreward 순위 체크에서 담당자 확인)'}</Empty></div>}
-        {groupsOrdered.map(([g, list]) => { const isOpen = open[g] ?? (filter !== 'all' || groups.length <= 3); const gd = list.filter(isDown).length, gu = list.filter(isUp).length; const st = stars.includes(g);
-          return <div key={g} style={{ borderTop: '1px solid var(--line)' }}>
-            <div draggable={canDrag} onDragStart={() => setDrag({ kind: 'g', key: g })} onDragOver={e => { if (drag?.kind === 'g') { e.preventDefault(); setOver('g:' + g); } }} onDragLeave={() => setOver(null)} onDrop={() => dropGroup(g)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', background: 'var(--bg)', opacity: drag?.kind === 'g' && drag.key === g ? .4 : 1, outline: over === 'g:' + g ? '2px solid var(--accent)' : undefined, cursor: canDrag ? 'grab' : undefined }}>
-              {canDrag && <span title="끌어서 업체 순서 변경" style={{ color: 'var(--muted)' }}>⋮⋮</span>}
-              {isMe ? <button type="button" title={st ? '주요 해제' : '주요 업체로 — 변동 알림'} onClick={() => star(g, !st)} style={{ border: 0, background: 'transparent', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: st ? '#F5A524' : 'var(--line)' }}>★</button> : <span style={{ fontSize: 20, color: st ? '#F5A524' : 'var(--line)' }}>★</span>}
-              <button type="button" onClick={() => setOpen({ ...open, [g]: !isOpen })} style={{ border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', flex: 1, display: 'flex', gap: 10, alignItems: 'center', fontSize: 14 }}><b>{g}</b><span className="cell-sub" style={{ display: 'inline' }}>{list.length}건</span>{gd > 0 && <Status kind="bad">하락 {gd}</Status>}{gu > 0 && <Status kind="ok">상승 {gu}</Status>}<span className="cell-sub" style={{ marginLeft: 'auto' }}>{isOpen ? '▲' : '▼'}</span></button>{canRe && <button type="button" className="btn ghost" style={{ padding: '3px 10px', fontSize: 12 }} disabled={busy} onClick={() => re({ group: g })}>업체 재체크</button>}{list.length > 0 && <a className="btn ghost" href={`/rank-watch/report?u=${sel}&g=${encodeURIComponent(g)}`} title="고객용 순위 리포트 (PNG/PDF)" style={{ padding: '3px 10px', fontSize: 12 }} onClick={e => e.stopPropagation()}>리포트</a>}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 260 }}><h1 style={{ margin: 0, fontSize: 22, letterSpacing: '-0.02em' }}>순위 체크 <span style={{ fontSize: 14, color: '#98A2B3', fontWeight: 600 }}>{rows.length}개</span></h1>
+          <div style={{ fontSize: 13, color: '#667085', marginTop: 4 }}>평일 10시·14시에 키워드별로 자동 조회 (상위 100위) · 「재체크」는 바로 조회 · ★ 주요 업체는 순위가 바뀌면 알림{lastAt ? ` · 마지막 조회 ${fmtKST(lastAt)}` : ''}</div></div>
+        {me.role !== 'staff' && people.length > 0 && <select value={sel} onChange={e => r.push(`/rank-watch?u=${e.target.value}`)} style={{ width: 'auto', minHeight: 38, borderRadius: 10 }}>{people.map(p => <option key={p.user_id} value={p.user_id}>{p.name} ({p.login})</option>)}</select>}
+        {myLink && isMe && <><button type="button" onClick={() => { setGOpen(v => !v); setAddOpen(false); }} style={{ ...mini, padding: '9px 16px', fontSize: 13.5, borderRadius: 10 }}>{gOpen ? '닫기' : '업체 추가'}</button>
+          <button type="button" onClick={() => { setAddOpen(v => !v); setGOpen(false); }} style={{ border: 0, background: '#101828', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>{addOpen ? '닫기' : '+ 상품 추가'}</button></>}
+      </div>
+      {err && <div className="err">순위 체크 목록을 읽지 못했습니다: {err}</div>}
+      {isMe && (!myLink || acc) && <div style={{ border: '1px solid #E9EDF3', borderRadius: 14, padding: '14px 16px', background: '#F8FAFF', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <b style={{ fontSize: 13.5 }}>{myLink ? '담당 계정 변경' : '먼저 담당 계정(ykreward 아이디)을 연결하세요'}</b>
+        <input value={login} onChange={e => setLogin(e.target.value)} placeholder="ykreward 아이디" style={{ width: 220, minHeight: 38 }} autoCapitalize="none" /><button type="button" className="btn" disabled={busy || !login.trim() || login.trim() === myLink} onClick={link}>{myLink ? '변경' : '연결'}</button>
+        <span style={{ fontSize: 12, color: '#98A2B3' }}>이 계정 담당으로 등록된 상품이 아래에 나옵니다</span></div>}
+      {gOpen && <form onSubmit={e => { e.preventDefault(); mkGroup(); }} style={{ border: '1px solid #E9EDF3', borderRadius: 14, padding: 16, background: '#fff', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><b style={{ fontSize: 13.5 }}>업체 추가</b><input value={gName} onChange={e => setGName(e.target.value)} placeholder="업체명 (예: 올포홈)" style={{ width: 260, minHeight: 38 }} autoFocus /><button type="submit" className="btn" disabled={busy || !gName.trim()}>추가</button><span style={{ fontSize: 12, color: '#98A2B3' }}>추가하면 바로 그 업체로 상품 등록 칸이 열립니다</span></form>}
+      {addOpen && <form onSubmit={e => { e.preventDefault(); add(new FormData(e.currentTarget)); }} style={{ border: '1px solid #E9EDF3', borderRadius: 14, padding: 16, background: '#fff', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+        <label style={{ display: 'grid', gap: 5 }}><span style={{ fontSize: 12.5, color: '#475467', fontWeight: 600 }}>업체 (그룹)</span><input name="group" list="rw-groups" placeholder="예: 올포홈" defaultValue={preGroup} key={preGroup} /></label>
+        <label style={{ display: 'grid', gap: 5 }}><span style={{ fontSize: 12.5, color: '#475467', fontWeight: 600 }}>상품 URL</span><input name="url" required placeholder="https://smartstore.naver.com/스토어/products/숫자" /></label>
+        <label style={{ display: 'grid', gap: 5, gridColumn: '1 / -1' }}><span style={{ fontSize: 12.5, color: '#475467', fontWeight: 600 }}>키워드 — 쉼표나 줄바꿈으로 여러 개</span><textarea name="keywords" required rows={2} placeholder="어린이집네임택, 네임스티커, 이름표" /></label>
+        <label style={{ display: 'grid', gap: 5 }}><span style={{ fontSize: 12.5, color: '#475467', fontWeight: 600 }}>메모 (선택)</span><input name="memo" placeholder="리워드 11월 · 담당 OO" /></label>
+        <div style={{ alignSelf: 'end', display: 'flex', gap: 10, alignItems: 'center' }}><button type="submit" disabled={busy} style={{ border: 0, background: '#101828', color: '#fff', borderRadius: 10, padding: '11px 22px', fontWeight: 700, cursor: 'pointer' }}>{busy ? '등록·조회 중…' : '등록'}</button><span style={{ fontSize: 12, color: '#98A2B3' }}>등록하면 첫 순위를 바로 조회합니다</span></div>
+      </form>}
+      {(myLink || !isMe) && <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+          <Stat l="모니터링 상품 수" v={rows.length} sub={`업체 ${new Set(rows.map(w => w.group)).size}곳 · 키워드 ${new Set(rows.map(w => w.keyword)).size}개`} />
+          <Stat l="평균 순위" v={avg != null ? <>{avg}<span style={{ fontSize: 13 }}>위</span></> : '-'} sub="100위 안에 있는 항목 기준" color="#12B76A" />
+          <Stat l="순위 평균 변동" v={avgD != null ? (avgD > 0 ? `▲ ${avgD}` : avgD < 0 ? `▼ ${-avgD}` : '0') : '-'} sub="직전 조회 대비" color={avgD != null && avgD > 0 ? '#079455' : avgD != null && avgD < 0 ? '#D92D20' : undefined} />
+          <Stat l="변동 하락 상품" v={nDown} sub={`상승 ${nUp} · 100위 밖 ${nNone}`} color={nDown ? '#D92D20' : undefined} />
+        </div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="업체명, 상품명, 키워드로 검색" style={{ background: '#F2F4F7', border: '1px solid #EAECF0', borderRadius: 12, minHeight: 46 }} />
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="button" style={pill(filter === 'all')} onClick={() => setFilter('all')}>전체 {rows.length}</button>
+            <button type="button" style={pill(filter === 'down', '#D92D20')} onClick={() => setFilter('down')}>하락 {nDown}</button>
+            <button type="button" style={pill(filter === 'up', '#079455')} onClick={() => setFilter('up')}>상승 {nUp}</button>
+            <button type="button" style={pill(filter === 'star', '#F79009')} onClick={() => setFilter('star')}>★ 주요</button>
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              {canRe && nDown > 0 && <button type="button" style={{ ...mini, color: '#D92D20', borderColor: '#FDA29B' }} disabled={busy} onClick={() => re({ ids: rows.filter(isDown).map(w => w.id) })}>{busy ? '조회 중…' : `하락 ${nDown}건 재체크`}</button>}
+              <button type="button" style={mini} onClick={() => setAll(true)}>모두 펼침</button><button type="button" style={mini} onClick={() => setAll(false)}>모두 접기</button>
+              <select value={sort} onChange={e => setSort(e.target.value)} style={{ width: 'auto', minHeight: 32, fontSize: 12.5, borderRadius: 8, padding: '0 8px' }}><option value="">기본 순서</option><option value="rank">순위 높은 순</option><option value="drop">하락 큰 순</option><option value="rise">상승 큰 순</option><option value="recent">최근 조회 순</option></select>
+              {isMe && myLink && <button type="button" style={mini} onClick={() => setAcc(v => !v)}>계정 {myLink}</button>}
+            </span>
+          </div>
+        </div>
+        {groups.length === 0 && <div style={{ border: '1px dashed #D0D5DD', borderRadius: 14, padding: '44px 16px', textAlign: 'center', color: '#667085' }}><div style={{ fontSize: 15, fontWeight: 600 }}>{rows.length ? '조건에 맞는 항목이 없습니다' : '아직 등록된 모니터링 상품이 없습니다'}</div>{!rows.length && <div style={{ fontSize: 13, color: '#98A2B3', marginTop: 6 }}>「+ 상품 추가」 버튼을 눌러 시작해 보세요</div>}</div>}
+        {groupsOrdered.map(([g, list0]) => { const list = sort ? [...list0].sort(sortFn[sort]) : list0; const isOpen = open[g] ?? (filter !== 'all' || groups.length <= 3); const gd = list.filter(isDown).length, gu = list.filter(isUp).length; const st = stars.includes(g); const dragOk = canDrag && !sort;
+          return <div key={g} style={{ border: '1px solid #E9EDF3', borderRadius: 16, background: '#fff', overflow: 'hidden', outline: over === 'g:' + g ? '2px solid #2563EB' : undefined, opacity: drag?.kind === 'g' && drag.key === g ? .4 : 1 }}>
+            <div draggable={dragOk} onDragStart={() => setDrag({ kind: 'g', key: g })} onDragOver={e => { if (drag?.kind === 'g') { e.preventDefault(); setOver('g:' + g); } }} onDragLeave={() => setOver(null)} onDrop={() => dropGroup(g)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: dragOk ? 'grab' : undefined, flexWrap: 'wrap' }}>
+              {isMe ? <button type="button" title={st ? '주요 해제' : '주요 업체로 — 순위가 바뀌면 알림'} onClick={() => star(g, !st)} style={{ border: 0, background: 'transparent', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: st ? '#F79009' : '#D0D5DD', padding: 0 }}>★</button> : <span style={{ fontSize: 20, color: st ? '#F79009' : '#D0D5DD' }}>★</span>}
+              <button type="button" onClick={() => setOpen({ ...open, [g]: !isOpen })} style={{ border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', flex: 1, minWidth: 180, display: 'flex', gap: 8, alignItems: 'center', padding: 0 }}>
+                <b style={{ fontSize: 16, letterSpacing: '-0.01em' }}>{g}</b><span style={{ fontSize: 12.5, color: '#98A2B3', fontWeight: 600 }}>{list.length}개</span>
+                {gd > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: '#D92D20', background: '#FEF3F2', borderRadius: 999, padding: '2px 9px' }}>하락 {gd}</span>}{gu > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: '#079455', background: '#ECFDF3', borderRadius: 999, padding: '2px 9px' }}>상승 {gu}</span>}
+                <span style={{ marginLeft: 6, color: '#98A2B3', fontSize: 12 }}>{isOpen ? '접기 ▲' : '펼치기 ▼'}</span></button>
+              {canRe && list.length > 0 && <button type="button" style={mini} disabled={busy} onClick={() => re({ group: g })}>{busy ? '조회 중…' : '업체 재체크'}</button>}
+              {list.length > 0 && <a href={`/rank-watch/report?u=${sel}&g=${encodeURIComponent(g)}`} title="고객용 순위 리포트 (PNG/PDF)" style={{ ...mini, textDecoration: 'none' }} onClick={e => e.stopPropagation()}>리포트</a>}
             </div>
-            {isOpen && list.length === 0 && <div style={{ padding: '10px 18px', display: 'flex', gap: 8, alignItems: 'center' }}><span className="cell-sub">아직 상품 없음</span>{isMe && <><button type="button" className="btn ghost" style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => { setPreGroup(g); setAddOpen(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>이 업체에 상품 등록</button><button type="button" className="btn ghost" style={{ padding: '3px 10px', fontSize: 12, color: 'var(--bad-ink)' }} onClick={async () => { if (!confirm(`${g} 업체를 지울까요?`)) return; const x = await removeGroup(g); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }}>업체 삭제</button></>}</div>}
-            {isOpen && list.length > 0 && <table><thead><tr><th style={{ width: 52 }}>{canDrag ? <span className="cell-sub" title="줄을 끌어서 순서 변경">⋮⋮</span> : ''}</th><th>상품</th><th>키워드</th><th className="num">순위</th><th>30일 추이</th><th>수집</th><th>메모</th><th></th></tr></thead><tbody>
-              {list.map(w => <Fragment key={w.id}><tr draggable={canDrag} onDragStart={e => { e.stopPropagation(); setDrag({ kind: 'i', key: w.id, group: g }); }} onDragOver={e => { if (drag?.kind === 'i' && drag.group === g) { e.preventDefault(); setOver('i:' + w.id); } }} onDragLeave={() => setOver(null)} onDrop={() => dropItem(g, w.id, list.map(x => x.id))} style={{ background: isDown(w) ? 'var(--bad-soft)' : undefined, cursor: canDrag ? 'grab' : 'pointer', opacity: drag?.kind === 'i' && drag.key === w.id ? .4 : 1, outline: over === 'i:' + w.id ? '2px solid var(--accent)' : undefined }} onClick={() => setDetail(detail === w.id ? null : w.id)}><td>{w.image_url ? <img src={w.image_url} alt="" width={44} height={44} style={{ borderRadius: 8, objectFit: 'cover', display: 'block', border: '1px solid var(--line)' }} /> : <div style={{ width: 44, height: 44, borderRadius: 8, background: 'var(--bg)' }} />}</td><td><div style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.url ? <a href={w.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }} onClick={e => e.stopPropagation()}>{w.title ?? w.url}</a> : (w.title ?? '-')}</div><div className="cell-sub">{w.store ?? ''}</div></td><td><b>{w.keyword}</b></td><td style={{ textAlign: 'right' }}>{cell(w)}</td><td><Spark pts={hist[w.id] ?? []} /></td><td className="cell-sub num">{w.cur_at ? fmtKST(w.cur_at) : '-'}</td><td className="cell-sub">{w.memo ?? ''}</td><td style={{ whiteSpace: 'nowrap' }}>{w.q_status === 'pending' || w.q_status === 'running' ? <Status kind="wait">{w.q_status === 'running' ? '수집 중' : '대기 중'}</Status> : w.q_status === 'error' ? <Status kind="bad">오류</Status> : null}{canRe && <button type="button" className="btn ghost" style={{ padding: '2px 8px', fontSize: 12, marginLeft: 4 }} disabled={busy} onClick={e => { e.stopPropagation(); re({ ids: [w.id] }); }}>재체크</button>}{isMe && <><button type="button" className="btn ghost" style={{ padding: '2px 8px', fontSize: 12, marginLeft: 4 }} onClick={e => { e.stopPropagation(); setMv(mv?.id === w.id ? null : { id: w.id, group: w.group === '(미분류)' ? '' : w.group }); }}>업체 이동</button><button type="button" className="btn ghost" style={{ padding: '2px 8px', fontSize: 12, marginLeft: 4, color: 'var(--bad-ink)' }} onClick={e => { e.stopPropagation(); del(w); }}>삭제</button></>}{mv?.id === w.id && <form onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); move(w.id, mv.group); }} style={{ display: 'flex', gap: 4, marginTop: 4 }}><input list="rw-groups" value={mv.group} onChange={e => setMv({ id: w.id, group: e.target.value })} placeholder="업체명 (비우면 미분류)" style={{ padding: '3px 8px', width: 140 }} /><button type="submit" className="btn" style={{ padding: '2px 8px', fontSize: 12 }} disabled={busy}>이동</button></form>}</td></tr>{detail === w.id && <tr key={w.id + '-d'}><td colSpan={8} style={{ background: 'var(--bg)', padding: '12px 18px' }}><History pts={hist[w.id] ?? []} w={w} /></td></tr>}</Fragment>)}
-            </tbody></table>}
+            {isOpen && list.length === 0 && <div style={{ padding: '12px 16px', borderTop: '1px solid #F2F4F7', display: 'flex', gap: 8, alignItems: 'center' }}><span style={{ fontSize: 13, color: '#98A2B3' }}>아직 상품 없음</span>{isMe && <><button type="button" style={mini} onClick={() => { setPreGroup(g); setAddOpen(true); setGOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>이 업체에 상품 등록</button><button type="button" style={{ ...mini, color: '#D92D20' }} onClick={async () => { if (!confirm(`${g} 업체를 지울까요?`)) return; const x = await removeGroup(g); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); }}>업체 삭제</button></>}</div>}
+            {isOpen && list.map(w => <div key={w.id} style={{ borderTop: '1px solid #F2F4F7' }}>
+              <div draggable={dragOk} onDragStart={e => { e.stopPropagation(); setDrag({ kind: 'i', key: w.id, group: g }); }} onDragOver={e => { if (drag?.kind === 'i' && drag.group === g) { e.preventDefault(); setOver('i:' + w.id); } }} onDragLeave={() => setOver(null)} onDrop={() => dropItem(g, w.id, list.map(x => x.id))} onClick={() => setDetail(detail === w.id ? null : w.id)}
+                style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '12px 16px', cursor: dragOk ? 'grab' : 'pointer', background: isDown(w) ? '#FFFBFA' : undefined, opacity: drag?.kind === 'i' && drag.key === w.id ? .4 : 1, outline: over === 'i:' + w.id ? '2px solid #2563EB' : undefined, flexWrap: 'wrap' }}>
+                {w.image_url ? <img src={w.image_url} alt="" width={52} height={52} style={{ borderRadius: 10, objectFit: 'cover', border: '1px solid #EAECF0', flex: 'none' }} /> : <div style={{ width: 52, height: 52, borderRadius: 10, background: '#F2F4F7', flex: 'none' }} />}
+                <div style={{ flex: 1, minWidth: 220 }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}><span style={{ fontSize: 13, fontWeight: 800, color: '#1D4ED8', background: '#EFF4FF', borderRadius: 999, padding: '3px 11px' }}>{w.keyword}</span>{w.mid_type === '원부' && <span style={{ fontSize: 11, fontWeight: 700, color: '#6941C6', background: '#F4F3FF', borderRadius: 999, padding: '2px 8px' }}>원부</span>}{w.memo && <span style={{ fontSize: 12, color: '#98A2B3' }}>{w.memo}</span>}</div>
+                  <div style={{ fontSize: 13.5, color: '#344054', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 520 }}>{w.url ? <a href={w.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }} onClick={e => e.stopPropagation()}>{w.title || w.url}</a> : (w.title || '-')}</div>
+                  <div style={{ fontSize: 12, color: '#98A2B3', marginTop: 2 }}>{[w.store, w.cur_at ? `${fmtKST(w.cur_at)} 조회` : ''].filter(Boolean).join(' · ')}</div>
+                </div>
+                <div style={{ flex: 'none' }}><Spark pts={hist[w.id] ?? []} /></div>
+                <div style={{ flex: 'none', minWidth: 92 }}>{rankBox(w)}</div>
+                <div style={{ flex: 'none', display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
+                  {canRe && <button type="button" style={mini} disabled={busy} onClick={() => re({ ids: [w.id] })}>재체크</button>}
+                  {isMe && <><button type="button" style={mini} onClick={() => setMv(mv?.id === w.id ? null : { id: w.id, group: w.group === '(미분류)' ? '' : w.group })}>이동</button><button type="button" style={{ ...mini, color: '#D92D20' }} onClick={() => del(w)}>삭제</button></>}
+                </div>
+                {mv?.id === w.id && <form onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); move(w.id, mv.group); }} style={{ display: 'flex', gap: 6, flexBasis: '100%', justifyContent: 'flex-end' }}><input list="rw-groups" value={mv.group} onChange={e => setMv({ id: w.id, group: e.target.value })} placeholder="옮길 업체명 (비우면 미분류)" style={{ width: 220, minHeight: 34 }} /><button type="submit" className="btn" disabled={busy}>이동</button></form>}
+              </div>
+              {detail === w.id && <div style={{ background: '#F9FAFB', padding: '14px 16px', borderTop: '1px solid #F2F4F7' }}><History pts={hist[w.id] ?? []} w={w} /></div>}
+            </div>)}
           </div>; })}
-      </Section>}
+      </>}
     </div>
   );
 }
@@ -99,7 +153,7 @@ function Spark({ pts }: { pts: HistPt[] }) {
 /** 펼친 상세: 큰 차트(마우스 따라 순위 표시) + 날짜별 순위 */
 function History({ pts, w }: { pts: HistPt[]; w: WatchRow }) {
   const [hi, setHi] = useState<number | null>(null);
-  if (!pts.length) return <Empty>최근 30일 수집 기록 없음</Empty>;
+  if (!pts.length) return <Empty>최근 30일 조회 기록 없음</Empty>;
   const W = 720, H = 150, vals = pts.map(p => p.r).filter((r): r is number => r != null); const max = Math.max(...vals, 1), min = Math.min(...vals, max);
   const y = (r: number | null) => r == null ? H - 10 : 14 + (max === min ? (H - 40) / 2 : ((r - min) / (max - min)) * (H - 40));
   const x = (i: number) => 40 + (i / Math.max(1, pts.length - 1)) * (W - 60);
@@ -109,17 +163,17 @@ function History({ pts, w }: { pts: HistPt[]; w: WatchRow }) {
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => { const b = e.currentTarget.getBoundingClientRect(); const px = (e.clientX - b.left) / b.width * W; let best = 0, bd = 1e9; pts.forEach((_, i) => { const dd = Math.abs(x(i) - px); if (dd < bd) { bd = dd; best = i; } }); setHi(best); };
   const hp = hi != null ? pts[hi] : null;
   return <div style={{ display: 'grid', gap: 10 }}>
-    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>{w.image_url && <img src={w.image_url} alt="" width={64} height={64} style={{ borderRadius: 10, objectFit: 'cover', border: '1px solid var(--line)' }} />}<div><b>{w.title ?? w.keyword}</b><div className="cell-sub">{w.store ?? ''} · {w.keyword} · MID {w.mid ?? '-'}{w.url && <> · <a href={w.url} target="_blank" rel="noreferrer">상품 열기</a></>}</div></div><div className="cell-sub" style={{ marginLeft: 'auto' }}>30일 최고 <b style={{ color: 'var(--ok-ink)' }}>{best}</b> · 최저 <b style={{ color: 'var(--bad-ink)' }}>{worst}</b> · 수집 {pts.length}회</div></div>
+    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>{w.image_url && <img src={w.image_url} alt="" width={64} height={64} style={{ borderRadius: 10, objectFit: 'cover', border: '1px solid var(--line)' }} />}<div><b>{w.title ?? w.keyword}</b><div className="cell-sub">{w.store ?? ''} · {w.keyword} · MID {w.mid ?? '-'}{w.url && <> · <a href={w.url} target="_blank" rel="noreferrer">상품 열기</a></>}</div></div><div className="cell-sub" style={{ marginLeft: 'auto' }}>30일 최고 <b style={{ color: 'var(--ok-ink)' }}>{best}</b> · 최저 <b style={{ color: 'var(--bad-ink)' }}>{worst}</b> · 조회 {pts.length}회</div></div>
     <div style={{ position: 'relative', maxWidth: W }}>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', background: '#fff', border: '1px solid var(--line)', borderRadius: 10, cursor: 'crosshair' }} onMouseMove={onMove} onMouseLeave={() => setHi(null)}>
         <text x={4} y={18} fontSize={10} fill="var(--muted)">{min}위</text><text x={4} y={H - 24} fontSize={10} fill="var(--muted)">{max}위</text>
-        <line x1={40} x2={W - 20} y1={H - 10} y2={H - 10} stroke="var(--line)" strokeDasharray="3 3" /><text x={4} y={H - 6} fontSize={10} fill="var(--bad-ink)">미노출</text>
+        <line x1={40} x2={W - 20} y1={H - 10} y2={H - 10} stroke="var(--line)" strokeDasharray="3 3" /><text x={4} y={H - 6} fontSize={10} fill="var(--bad-ink)">100위 밖</text>
         <path d={d} fill="none" stroke="var(--accent)" strokeWidth={2} />
         {pts.map((p, i) => <circle key={i} cx={x(i)} cy={y(p.r)} r={hi === i ? 5 : 2.5} fill={p.r == null ? 'var(--bad)' : 'var(--accent)'} />)}
         {hp && hi != null && <line x1={x(hi)} x2={x(hi)} y1={8} y2={H - 10} stroke="var(--muted)" strokeDasharray="2 2" />}
       </svg>
-      {hp && hi != null && <div style={{ position: 'absolute', left: `${Math.min(88, x(hi) / W * 100)}%`, top: 6, transform: 'translateX(-50%)', background: '#111', color: '#fff', fontSize: 12, padding: '4px 8px', borderRadius: 6, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{fmtKST(hp.t)} · <b style={{ fontSize: 14 }}>{hp.r == null ? '미노출' : `${hp.r}위`}</b></div>}
+      {hp && hi != null && <div style={{ position: 'absolute', left: `${Math.min(88, x(hi) / W * 100)}%`, top: 6, transform: 'translateX(-50%)', background: '#111', color: '#fff', fontSize: 12, padding: '4px 8px', borderRadius: 6, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{fmtKST(hp.t)} · <b style={{ fontSize: 14 }}>{hp.r == null ? '100위 밖' : `${hp.r}위`}</b></div>}
     </div>
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{[...byDay.entries()].reverse().map(([d2, p]) => <span key={d2} className="num" style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, background: p.r == null ? 'var(--bad-soft)' : 'var(--bg)', color: p.r == null ? 'var(--bad-ink)' : undefined }}>{d2.slice(5).replace('-', '/')} <b>{p.r ?? '미노출'}</b></span>)}</div>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{[...byDay.entries()].reverse().map(([d2, p]) => <span key={d2} className="num" style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, background: p.r == null ? 'var(--bad-soft)' : 'var(--bg)', color: p.r == null ? 'var(--bad-ink)' : undefined }}>{d2.slice(5).replace('-', '/')} <b>{p.r ?? '밖'}</b></span>)}</div>
   </div>;
 }

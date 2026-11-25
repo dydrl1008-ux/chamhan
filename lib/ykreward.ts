@@ -197,6 +197,7 @@ export async function checkWatch(rows: WatchRow[], budgetMs = 40000): Promise<{ 
 }
 /** 재체크 — 바로 조회 */
 export async function requeueWatch(rows: WatchRow[]): Promise<{ ok: boolean; msg: string; n: number }> { return checkWatch(rows); }
+const DROP_ALERT = 10;   // 이만큼 이상 떨어지면 급하락 알림
 /** 자동 조회 — 평일 10시·14시. 이번 회차에 아직 안 찍힌 항목만 모아 키워드별로 조회. 한 번 호출에 budgetMs 만큼, 나머지는 다음 호출이 이어서 */
 export async function rankWatchTick(budgetMs = 20000): Promise<string> {
   if (!ykrReady()) return 'off';
@@ -204,8 +205,20 @@ export async function rankWatchTick(budgetMs = 20000): Promise<string> {
   if (dow === 0 || dow === 6 || hm < '10:00' || hm >= '19:00') return 'off';
   const slotKey = `${today} ${hm < '14:00' ? '10' : '14'}`; const slot = new Date(`${today}T${hm < '14:00' ? '10' : '14'}:00:00+09:00`).toISOString();
   const wh = supabaseAdmin(); const { data: done } = await wh.from('ai_settings').select('value').eq('key', 'rankwatch_slot_done').maybeSingle(); if (done?.value === slotKey) return 'done';
-  const todo = (await watchRows()).filter(w => !w.cur_at || w.cur_at < slot);
-  if (!todo.length) { await wh.from('ai_settings').upsert({ key: 'rankwatch_slot_done', value: slotKey, updated_at: new Date().toISOString() }, { onConflict: 'key' }); return 'done now'; }
+  const all = await watchRows(); const todo = all.filter(w => !w.cur_at || w.cur_at < slot);
+  if (!todo.length) {
+    await wh.from('ai_settings').upsert({ key: 'rankwatch_slot_done', value: slotKey, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    // 회차가 끝나면 급하락 알림 — 직전 조회보다 DROP_ALERT 위 이상 떨어졌거나 100위 밖으로 빠진 항목을 담당자에게 한 번에
+    let sent = 0;
+    try {
+      const { data: links } = await wh.from('reward_watch_links').select('user_id,login_id'); const by = new Map<string, string[]>();
+      for (const w of all) { if (!w.cur_at || w.cur_at < slot || w.prev_rank == null) continue; const out = w.cur_rank == null; const d = out ? 0 : (w.cur_rank as number) - w.prev_rank; if (!out && d < DROP_ALERT) continue;
+        by.set(w.owner_login, [...(by.get(w.owner_login) ?? []), `▼ ${w.group !== GROUP_NONE ? w.group + ' · ' : ''}${w.keyword}  ${w.prev_rank}위 → ${out ? '100위 밖' : `${w.cur_rank}위 (${d}↓)`}`]); }
+      const rows = (links ?? []).filter((l: any) => by.has(l.login_id)).map((l: any) => { const arr = by.get(l.login_id)!; return { user_id: l.user_id, kind: 'alert', title: `순위 급하락 ${arr.length}건 — ${slotKey.slice(11)}시 조회`, body: arr.slice(0, 30).join('\n').slice(0, 1500), link: '/rank-watch' }; });
+      if (rows.length) { await wh.from('notifications').insert(rows); sent = rows.length; }
+    } catch { /* 알림 실패는 조회에 영향 없음 */ }
+    return `done now alert ${sent}`;
+  }
   const r = await checkWatch(todo, budgetMs);
   if (!r.ok) return 'err ' + r.msg.slice(0, 80);
   return `rank ${r.n}rows left ${r.left}kw`;
