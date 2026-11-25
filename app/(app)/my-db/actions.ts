@@ -125,19 +125,19 @@ export async function dbTransfer(ids: number[], to: string): Promise<R> {
 }
 
 /** 순위 체크 — 이 줄의 키워드를 지수 프로그램에서 새로 조회(캐시 안 씀)해 상위 100 안에서 이 업체를 찾는다.
- *  URL 에 상품 번호(/products/123)가 있으면 그 상품으로, 없으면 상호명 = 스토어명으로 찾는다. 0 = 100위 밖 */
+ *  URL 칸의 상품 링크(/products/번호 또는 /catalog/번호)로 그 상품을 찾는다 — 스토어 주소만 있으면 조회하지 않는다. 0 = 100위 밖 */
 export async function dbRank(id: number): Promise<R<{ row: DbRow }>> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
   const sb = supabaseAdmin(); const { data: cur, error } = await sb.from('my_db').select('owner_id,name,item,url,url2,rank_now,deleted_at').eq('id', id).maybeSingle();
   if (error) return { ok: false, msg: needSql(error.message) }; if (!cur || cur.deleted_at) return { ok: false, msg: '없는 DB' };
   if (!(await canSee(me, cur.owner_id))) return { ok: false, msg: '권한 없음' };
   const kw = String(cur.item ?? '').trim(); if (!kw) return { ok: false, msg: '키워드 칸을 먼저 채워 주세요' };
-  let res; try { res = await search(kw, me.id, true); } catch (e: any) { return { ok: false, msg: String(e?.message ?? e).slice(0, 120) }; }
-  const norm = (t: string) => (t ?? '').toLowerCase().replace(/\s|\(주\)|주식회사|스토어|store|공식|몰$/g, '');
   const pid = [cur.url, cur.url2].map(u => String(u ?? '').match(/\/products\/(\d+)/)?.[1]).find(Boolean); const cat = [cur.url, cur.url2].map(u => String(u ?? '').match(/\/catalog\/(\d+)/)?.[1]).find(Boolean);
-  const prods = (res.products ?? []) as any[]; const nm = norm(cur.name);
-  const hit = prods.filter(p => (pid && String(p.link ?? '').includes(`/products/${pid}`)) || (cat && String(p.nvmid ?? '') === cat) || (!pid && !cat && nm.length >= 2 && norm(String(p.mallName ?? '')) === nm)).sort((a, b) => a.rank - b.rank)[0];
+  if (!pid && !cat) return { ok: false, msg: 'URL 칸에 상품 링크를 넣어 주세요 (…/products/상품번호) — 스토어 주소만으로는 순위를 못 찾습니다' };
+  let res; try { res = await search(kw, me.id, true); } catch (e: any) { return { ok: false, msg: String(e?.message ?? e).slice(0, 120) }; }
+  const prods = (res.products ?? []) as any[];
+  const hit = prods.filter(p => (pid && String(p.link ?? '').includes(`/products/${pid}`)) || (cat && String(p.nvmid ?? '') === cat)).sort((a, b) => a.rank - b.rank)[0];
   const up = { rank_prev: cur.rank_now, rank_now: hit ? Number(hit.rank) || 0 : 0, rank_at: new Date().toISOString(), rank_title: hit ? String(hit.productTitle ?? '').slice(0, 120) : '' };
   const { data, error: e2 } = await sb.from('my_db').update(up).eq('id', id).select(COLS).single(); if (e2) return { ok: false, msg: needSql(e2.message) };
-  return { ok: true, msg: hit ? `「${kw}」 ${hit.rank}위` : `「${kw}」 100위 안에 없음${pid || cat ? '' : ' (상호명과 스토어명이 다르면 URL 에 상품 주소를 넣어 주세요)'}`, row: data as DbRow };
+  return { ok: true, msg: hit ? `「${kw}」 ${hit.rank}위` : `「${kw}」 100위 안에 없음`, row: data as DbRow };
 }
