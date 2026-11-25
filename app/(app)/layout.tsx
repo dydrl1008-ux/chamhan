@@ -28,6 +28,31 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="brand">워크허브<small>참한기획</small></div>
         <NavLink href="/">홈</NavLink>
 
+        <NavGroup title="근태 · 계획" hrefs={['/attendance', '/leave', '/plans']}>
+          <NavLink href="/attendance">출퇴근</NavLink>
+          <NavLink href="/leave">근태 신청 · 승인</NavLink>
+          <NavLink href="/plans">계획 캘린더</NavLink>
+        </NavGroup>
+
+        <NavGroup title="영업 · 리드" hrefs={['/calls', '/my-db', '/leads', '/proposals', '/quotes', '/mail', '/mail/export', '/mail/optouts', '/mail/discover', '/brief', '/kw-calls', '/threads', '/missions', '/sales-stats', '/renewals', '/notifications']}>
+          {!p.is_mgmt && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
+          {lead && <NavLink href="/leads">콜 리스트 관리</NavLink>}
+          <NavLink href="/proposals">키워드 제안서</NavLink>
+          <NavLink href="/quotes">견적서</NavLink>
+          <NavLink href="/mail">메일 발송</NavLink>
+          {p.role === 'head' && <NavLink href="/mail/export">수동 발송 엑셀</NavLink>}
+          {(p.role === 'head' || p.role === 'admin') && <NavLink href="/mail/optouts">수신거부 목록</NavLink>}
+          {p.role === 'head' && <NavLink href="/mail/discover">키워드 발굴</NavLink>}
+          {p.role === 'head' && <NavLink href="/threads">쓰레드 자동 발행</NavLink>}
+          {canBrief(p) && <NavLink href="/brief">영업 브리핑</NavLink>}
+          <NavLink href="/kw-calls">키워드 콜 리스트</NavLink>
+          {!p.is_mgmt && <NavLink href="/my-db">내 DB</NavLink>}
+          {lead && <NavLink href="/missions">경쟁사 미션</NavLink>}
+          {(mgr || mgmt) && <NavLink href="/sales-stats">콜 성과</NavLink>}
+          <NavLink href="/renewals">이탈 고객</NavLink>
+          <NavLink href="/notifications">알림{notiBadge}</NavLink>
+        </NavGroup>
+
         {mgmt && pendingCount > 0 && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
         <NavGroup title="정산" hrefs={['/pending', '/settle-request', '/settle-refund', '/settle-customers', '/settle-data', '/settlement']}>
           {mgmt && <NavLink href="/pending">정산 승인 대기{badge}</NavLink>}
@@ -52,10 +77,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {lead && <NavLink href="/pv3">맞춤 제안서 · 광고 설계</NavLink>}
         </NavGroup>
 
-        <NavGroup title="근태 · 계획" hrefs={['/attendance', '/leave', '/plans']}>
-          <NavLink href="/attendance">출퇴근</NavLink>
-          <NavLink href="/leave">근태 신청 · 승인</NavLink>
-          <NavLink href="/plans">계획 캘린더</NavLink>
+        <NavGroup title="리워드" hrefs={['/slots-open', '/rank-watch']}>
+          <NavLink href="/slots-open">슬롯 오픈</NavLink>
+          <NavLink href="/rank-watch">순위 체크</NavLink>
         </NavGroup>
 
         {unreadIssues > 0 && <NavLink href="/issues">금일 이슈 미확인{issueBadge}</NavLink>}
@@ -66,30 +90,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/reports">보고서</NavLink>
           <NavLink href="/issues">금일 이슈{issueBadge}</NavLink>
           <NavLink href="/products">상품 안내 · 접수</NavLink>
-        </NavGroup>
-
-        <NavGroup title="리워드" hrefs={['/slots-open', '/rank-watch']}>
-          <NavLink href="/slots-open">슬롯 오픈</NavLink>
-          <NavLink href="/rank-watch">순위 체크</NavLink>
-        </NavGroup>
-
-        <NavGroup title="영업 · 리드" hrefs={['/calls', '/my-db', '/leads', '/proposals', '/quotes', '/mail', '/mail/export', '/mail/optouts', '/mail/discover', '/brief', '/kw-calls', '/threads', '/missions', '/sales-stats', '/renewals', '/notifications']}>
-          {!p.is_mgmt && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
-          {lead && <NavLink href="/leads">콜 리스트 관리</NavLink>}
-          <NavLink href="/proposals">키워드 제안서</NavLink>
-          <NavLink href="/quotes">견적서</NavLink>
-          <NavLink href="/mail">메일 발송</NavLink>
-          {p.role === 'head' && <NavLink href="/mail/export">수동 발송 엑셀</NavLink>}
-          {(p.role === 'head' || p.role === 'admin') && <NavLink href="/mail/optouts">수신거부 목록</NavLink>}
-          {p.role === 'head' && <NavLink href="/mail/discover">키워드 발굴</NavLink>}
-          {p.role === 'head' && <NavLink href="/threads">쓰레드 자동 발행</NavLink>}
-          {canBrief(p) && <NavLink href="/brief">영업 브리핑</NavLink>}
-          <NavLink href="/kw-calls">키워드 콜 리스트</NavLink>
-          {!p.is_mgmt && <NavLink href="/my-db">내 DB</NavLink>}
-          {lead && <NavLink href="/missions">경쟁사 미션</NavLink>}
-          {(mgr || mgmt) && <NavLink href="/sales-stats">콜 성과</NavLink>}
-          <NavLink href="/renewals">이탈 고객</NavLink>
-          <NavLink href="/notifications">알림{notiBadge}</NavLink>
         </NavGroup>
 
         {(mgr || lead) && (
