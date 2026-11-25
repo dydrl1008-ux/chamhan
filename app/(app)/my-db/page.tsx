@@ -28,7 +28,7 @@ export default async function MyDbPage({ searchParams }: { searchParams: { u?: s
   }
   const href = (u: string, v?: string) => `/my-db?${[u !== me.id ? `u=${u}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&')}`;
   return <div style={{ display: 'grid', gap: 20 }}>
-    <PageHeader title={(target === me.id ? '내 DB' : `${who} · DB`) + (trash ? ' · 휴지통' : '')} desc="내 가망 고객을 한곳에 모아 등급·다음 연락일로 관리합니다. 엑셀로 올리거나 콜 리스트에서 「내 DB」로 담을 수 있습니다 · 결제로 바꾸면 줄이 노랗게 표시됩니다 · 순위는 평일 10시·14시에 자동 조회(상품 링크가 있는 줄), 「순위」 버튼은 바로 조회"
+    <PageHeader title={(target === me.id ? '내 DB' : `${who} · DB`) + (trash ? ' · 휴지통' : '')} desc="내 가망 고객을 한곳에 모아 등급·다음 연락일로 관리합니다. 엑셀로 올리거나 콜 리스트에서 「내 DB」로 담을 수 있습니다 · 결제로 바꾸면 줄이 노랗게 표시됩니다"
       actions={<span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>{trash ? <Link href={href(target)} className="btn ghost">← 목록으로</Link> : <Link href={href(target, 'trash')} className="btn ghost">휴지통</Link>}{target !== me.id && <Link href="/my-db" className="btn ghost">내 DB</Link>}</span>} />
     {canPick && sum.length > 0 && <div className="card" style={{ padding: 0 }}>
       <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)' }}><b>사람별 현황</b> <span className="cell-sub">이름을 누르면 그 사람 DB · 방치 = 30일 넘게 기록 없는 진행 건{boss ? ' · 지운 DB 는 총괄 화면에 계속 남습니다' : ''}</span></div>
