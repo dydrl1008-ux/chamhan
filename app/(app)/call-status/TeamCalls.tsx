@@ -8,7 +8,7 @@ const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const dow = (d: string) => new Date(d + 'T00:00:00Z').getUTCDay();
 export default async function TeamCalls({ teamId, teamName, from, to, sums, missing }: { teamId: number; teamName: string; from: string; to: string; sums: Sm[][]; missing: string[] }) {
   const sb = supabaseServer(); const today = todayKST();
-  const { data: ppl } = await sb.from('v_sales_people').select('id,name,team_id').eq('team_id', teamId).order('name');
+  const { data: ppl } = await supabaseAdmin().from('profiles').select('id,name,team_id').eq('is_active', true).in('role', ['manager', 'staff']).or('is_mgmt.is.null,is_mgmt.eq.false').eq('team_id', teamId).order('name');   // 서버 권한 — 팀은 페이지에서 이미 가려서 넘어온다
   const people = (ppl ?? []) as { id: string; name: string }[]; if (!people.length) return null; const ids = people.map(p => p.id);
   const days: string[] = []; for (let d = from; d <= to && days.length < 14; d = addDays(d, 1)) days.push(d);
   const [kw] = await Promise.all([   // 날짜별 콜 리스트 합계(sums)는 페이지에서 한 번만 읽어 팀마다 나눠 쓴다 (팀 수만큼 같은 조회를 반복하지 않게)

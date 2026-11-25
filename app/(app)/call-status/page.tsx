@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { PageHeader } from '@/components/ui';
 import { todayKST, addDays, weekStartOf, fmtMD } from '@/lib/date/kst';
 import TeamCalls, { type Sm } from './TeamCalls';
@@ -16,14 +17,16 @@ export default async function CallStatusPage({ searchParams }: { searchParams: {
   if (!searchParams.from && !searchParams.to) { from = today; to = today; }
   if (addDays(from, 13) < to) from = addDays(to, -13);   // 최대 14일
   const t0 = Date.now();
-  const sb = supabaseServer(); const { data: ts } = await sb.from('teams').select('id,name').eq('is_active', true).neq('name', '관리팀').order('sort_order');
+  const adm = supabaseAdmin(); const sb = supabaseServer(); const { data: ts } = await sb.from('teams').select('id,name').eq('is_active', true).neq('name', '관리팀').order('sort_order');
   const teams = ((ts ?? []) as { id: number; name: string }[]).filter(t => me.role !== 'manager' || t.id === me.team_id);
   // 날짜별 콜 리스트 합계 — 전 팀이 같이 쓰므로 여기서 한 번만, 한 날짜씩 차례로 읽는다 (한꺼번에 수십 개를 던지면 DB 가 멈춘다). 40초를 넘기면 남은 날짜는 비워 둔다
   const days: string[] = []; for (let d = from; d <= to && days.length < 14; d = addDays(d, 1)) days.push(d);
   const sums: Sm[][] = []; const missing: string[] = [];
   for (const d of days) {
     if (!teams.length || Date.now() - t0 > 40_000) { sums.push([]); if (teams.length) missing.push(d); continue; }
-    let r = d === today ? await sb.rpc('leads_today_summary', { p_date: d }) : await sb.rpc('leads_day_summary', { p_date: d });
+    // 서버 권한으로 한 번에 읽는다 (0099) — 팀장 계정은 예전 함수가 줄마다 팀 확인을 하느라 시간 초과가 나서 숫자가 비어 보였다. 누구 팀을 보여 줄지는 아래 teams 로 이미 가려져 있다
+    let r: { data: any; error: any } = await adm.rpc('leads_summary_all', { p_date: d });
+    if (r.error) r = d === today ? await sb.rpc('leads_today_summary', { p_date: d }) : await sb.rpc('leads_day_summary', { p_date: d });   // 0099 실행 전
     if (r.error && d !== today) r = await sb.rpc('leads_today_summary', { p_date: d });   // 「오늘의 콜 리스트」 화면과 같은 방식
     if (r.error) missing.push(d); sums.push((r.data ?? []) as Sm[]);
   }
