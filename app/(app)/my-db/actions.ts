@@ -2,13 +2,14 @@
 // 내 DB — 직원 개인별 가망 고객 정리. 표(my_db)는 RLS 로 막아 두고 여기서만 권한을 따져 읽고 쓴다
 import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { search } from '@/lib/nsc';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
-export type DbRow = { id: number; owner_id: string; source: string; contact_date: string | null; name: string; phone: string; biz_no: string; kind: string; gender: string; channel: string; item: string; url: string; url2: string; grade: string; status: string; paid_at: string | null; next_on: string | null; alarm_time: string; note1: string; note2: string; note3: string; deleted_at: string | null; deleted_by: string | null; created_at: string; updated_at: string; owner_name?: string; deleted_name?: string };
+export type DbRow = { id: number; owner_id: string; source: string; contact_date: string | null; name: string; phone: string; biz_no: string; kind: string; gender: string; channel: string; item: string; url: string; url2: string; grade: string; status: string; paid_at: string | null; next_on: string | null; alarm_time: string; rank_now: number | null; rank_prev: number | null; rank_at: string | null; rank_title: string; note1: string; note2: string; note3: string; deleted_at: string | null; deleted_by: string | null; created_at: string; updated_at: string; owner_name?: string; deleted_name?: string };
 export type DbIn = { contact_date?: string | null; name: string; phone?: string; biz_no?: string; kind?: string; gender?: string; channel?: string; item?: string; url?: string; url2?: string; grade?: string; status?: string; next_on?: string | null; alarm_time?: string; note1?: string; note2?: string; note3?: string };
-const COLS = 'id,owner_id,source,contact_date,name,phone,biz_no,kind,gender,channel,item,url,url2,grade,status,paid_at,next_on,alarm_time,note1,note2,note3,deleted_at,deleted_by,created_at,updated_at';
+const COLS = 'id,owner_id,source,contact_date,name,phone,biz_no,kind,gender,channel,item,url,url2,grade,status,paid_at,next_on,alarm_time,rank_now,rank_prev,rank_at,rank_title,note1,note2,note3,deleted_at,deleted_by,created_at,updated_at';
 const GRADES = ['', 'S', 'A', 'B', 'C', 'D', 'E', 'F']; const STATUSES = ['진행', '결제', '보류', '종료'];
 const TRASH_DAYS = 30;   // 직원은 지운 지 30일까지만 되살릴 수 있음. 총괄 화면에는 계속 남는다
-const needSql = (m: string) => /my_db/.test(m) ? '0092 SQL(my_db 표)을 먼저 실행해 주세요' : m;
+const needSql = (m: string) => /rank_/.test(m) ? '0094 SQL(순위 칸)을 먼저 실행해 주세요' : /alarm_/.test(m) ? '0093 SQL(알람 시각 칸)을 먼저 실행해 주세요' : /my_db/.test(m) ? '0092 SQL(my_db 표)을 먼저 실행해 주세요' : m;
 const active = async () => { const me = await getProfile(); return me && me.is_active ? me : null; };
 const isBoss = (me: { role: string }) => me.role === 'head' || me.role === 'admin';
 const s = (x: unknown, n: number) => String(x ?? '').trim().slice(0, n);
@@ -121,4 +122,22 @@ export async function dbTransfer(ids: number[], to: string): Promise<R> {
   await sb.from('my_db_logs').insert(data.map(d => ({ db_id: d.id, user_id: me.id, action: '넘김', detail: `→ ${p.name}` })));
   if (to !== me.id) await sb.from('notifications').insert({ user_id: to, kind: 'info', title: `DB ${data.length}건을 넘겨받았습니다 — ${me.name}`, body: data.slice(0, 8).map(d => d.name).join(', ').slice(0, 300), link: '/my-db' });
   return { ok: true, msg: `${data.length}건을 ${p.name} 님에게 넘겼습니다` };
+}
+
+/** 순위 체크 — 이 줄의 키워드를 지수 프로그램에서 새로 조회(캐시 안 씀)해 상위 100 안에서 이 업체를 찾는다.
+ *  URL 에 상품 번호(/products/123)가 있으면 그 상품으로, 없으면 상호명 = 스토어명으로 찾는다. 0 = 100위 밖 */
+export async function dbRank(id: number): Promise<R<{ row: DbRow }>> {
+  const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
+  const sb = supabaseAdmin(); const { data: cur, error } = await sb.from('my_db').select('owner_id,name,item,url,url2,rank_now,deleted_at').eq('id', id).maybeSingle();
+  if (error) return { ok: false, msg: needSql(error.message) }; if (!cur || cur.deleted_at) return { ok: false, msg: '없는 DB' };
+  if (!(await canSee(me, cur.owner_id))) return { ok: false, msg: '권한 없음' };
+  const kw = String(cur.item ?? '').trim(); if (!kw) return { ok: false, msg: '키워드 칸을 먼저 채워 주세요' };
+  let res; try { res = await search(kw, me.id, true); } catch (e: any) { return { ok: false, msg: String(e?.message ?? e).slice(0, 120) }; }
+  const norm = (t: string) => (t ?? '').toLowerCase().replace(/\s|\(주\)|주식회사|스토어|store|공식|몰$/g, '');
+  const pid = [cur.url, cur.url2].map(u => String(u ?? '').match(/\/products\/(\d+)/)?.[1]).find(Boolean); const cat = [cur.url, cur.url2].map(u => String(u ?? '').match(/\/catalog\/(\d+)/)?.[1]).find(Boolean);
+  const prods = (res.products ?? []) as any[]; const nm = norm(cur.name);
+  const hit = prods.filter(p => (pid && String(p.link ?? '').includes(`/products/${pid}`)) || (cat && String(p.nvmid ?? '') === cat) || (!pid && !cat && nm.length >= 2 && norm(String(p.mallName ?? '')) === nm)).sort((a, b) => a.rank - b.rank)[0];
+  const up = { rank_prev: cur.rank_now, rank_now: hit ? Number(hit.rank) || 0 : 0, rank_at: new Date().toISOString(), rank_title: hit ? String(hit.productTitle ?? '').slice(0, 120) : '' };
+  const { data, error: e2 } = await sb.from('my_db').update(up).eq('id', id).select(COLS).single(); if (e2) return { ok: false, msg: needSql(e2.message) };
+  return { ok: true, msg: hit ? `「${kw}」 ${hit.rank}위` : `「${kw}」 100위 안에 없음${pid || cat ? '' : ' (상호명과 스토어명이 다르면 URL 에 상품 주소를 넣어 주세요)'}`, row: data as DbRow };
 }
