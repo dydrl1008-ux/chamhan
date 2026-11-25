@@ -4,9 +4,9 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { search } from '@/lib/nsc';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
-export type DbRow = { id: number; owner_id: string; source: string; contact_date: string | null; name: string; phone: string; biz_no: string; kind: string; gender: string; channel: string; item: string; url: string; url2: string; grade: string; status: string; paid_at: string | null; next_on: string | null; alarm_time: string; rank_now: number | null; rank_prev: number | null; rank_at: string | null; rank_title: string; note1: string; note2: string; note3: string; deleted_at: string | null; deleted_by: string | null; created_at: string; updated_at: string; owner_name?: string; deleted_name?: string };
+export type DbRow = { id: number; owner_id: string; source: string; contact_date: string | null; name: string; phone: string; biz_no: string; kind: string; gender: string; channel: string; item: string; url: string; url2: string; grade: string; status: string; paid_at: string | null; next_on: string | null; alarm_time: string; rank_now: number | null; rank_prev: number | null; rank_at: string | null; rank_title: string; rank_hist: { t: string; r: number; k: string }[]; note1: string; note2: string; note3: string; deleted_at: string | null; deleted_by: string | null; created_at: string; updated_at: string; owner_name?: string; deleted_name?: string };
 export type DbIn = { contact_date?: string | null; name: string; phone?: string; biz_no?: string; kind?: string; gender?: string; channel?: string; item?: string; url?: string; url2?: string; grade?: string; status?: string; next_on?: string | null; alarm_time?: string; note1?: string; note2?: string; note3?: string };
-const COLS = 'id,owner_id,source,contact_date,name,phone,biz_no,kind,gender,channel,item,url,url2,grade,status,paid_at,next_on,alarm_time,rank_now,rank_prev,rank_at,rank_title,note1,note2,note3,deleted_at,deleted_by,created_at,updated_at';
+const COLS = 'id,owner_id,source,contact_date,name,phone,biz_no,kind,gender,channel,item,url,url2,grade,status,paid_at,next_on,alarm_time,rank_now,rank_prev,rank_at,rank_title,rank_hist,note1,note2,note3,deleted_at,deleted_by,created_at,updated_at';
 const GRADES = ['', 'S', 'A', 'B', 'C', 'D', 'E', 'F']; const STATUSES = ['진행', '결제', '보류', '종료'];
 const TRASH_DAYS = 30;   // 직원은 지운 지 30일까지만 되살릴 수 있음. 총괄 화면에는 계속 남는다
 const needSql = (m: string) => /rank_/.test(m) ? '0094 SQL(순위 칸)을 먼저 실행해 주세요' : /alarm_/.test(m) ? '0093 SQL(알람 시각 칸)을 먼저 실행해 주세요' : /my_db/.test(m) ? '0092 SQL(my_db 표)을 먼저 실행해 주세요' : m;
@@ -128,7 +128,7 @@ export async function dbTransfer(ids: number[], to: string): Promise<R> {
  *  URL 칸의 상품 링크(/products/번호 또는 /catalog/번호)로 그 상품을 찾는다 — 스토어 주소만 있으면 조회하지 않는다. 0 = 100위 밖 */
 export async function dbRank(id: number): Promise<R<{ row: DbRow }>> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
-  const sb = supabaseAdmin(); const { data: cur, error } = await sb.from('my_db').select('owner_id,name,item,url,url2,rank_now,deleted_at').eq('id', id).maybeSingle();
+  const sb = supabaseAdmin(); const { data: cur, error } = await sb.from('my_db').select('owner_id,name,item,url,url2,rank_now,rank_hist,deleted_at').eq('id', id).maybeSingle();
   if (error) return { ok: false, msg: needSql(error.message) }; if (!cur || cur.deleted_at) return { ok: false, msg: '없는 DB' };
   if (!(await canSee(me, cur.owner_id))) return { ok: false, msg: '권한 없음' };
   const kw = String(cur.item ?? '').trim(); if (!kw) return { ok: false, msg: '키워드 칸을 먼저 채워 주세요' };
@@ -137,7 +137,8 @@ export async function dbRank(id: number): Promise<R<{ row: DbRow }>> {
   let res; try { res = await search(kw, me.id, true); } catch (e: any) { return { ok: false, msg: String(e?.message ?? e).slice(0, 120) }; }
   const prods = (res.products ?? []) as any[];
   const hit = prods.filter(p => (pid && String(p.link ?? '').includes(`/products/${pid}`)) || (cat && String(p.nvmid ?? '') === cat)).sort((a, b) => a.rank - b.rank)[0];
-  const up = { rank_prev: cur.rank_now, rank_now: hit ? Number(hit.rank) || 0 : 0, rank_at: new Date().toISOString(), rank_title: hit ? String(hit.productTitle ?? '').slice(0, 120) : '' };
+  const now = new Date().toISOString(); const rk = hit ? Number(hit.rank) || 0 : 0;
+  const up = { rank_prev: cur.rank_now, rank_now: rk, rank_at: now, rank_title: hit ? String(hit.productTitle ?? '').slice(0, 120) : '', rank_hist: [...(Array.isArray(cur.rank_hist) ? cur.rank_hist : []), { t: now, r: rk, k: kw }].slice(-90) };
   const { data, error: e2 } = await sb.from('my_db').update(up).eq('id', id).select(COLS).single(); if (e2) return { ok: false, msg: needSql(e2.message) };
   return { ok: true, msg: hit ? `「${kw}」 ${hit.rank}위` : `「${kw}」 100위 안에 없음`, row: data as DbRow };
 }

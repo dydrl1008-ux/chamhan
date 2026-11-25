@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { dbAdd, dbUpdate, dbDelete, dbRestore, dbPurge, dbTransfer, dbRank, type DbRow, type DbIn } from './actions';
@@ -12,6 +12,21 @@ const ROW_BG: Record<string, string> = { S: '#FFD9D5', A: '#FFE7D1', B: '#DFF3E1
 const SORTS: Record<string, (r: DbRow) => string | number> = { contact_date: r => r.contact_date ?? '', name: r => r.name, phone: r => r.phone, gender: r => r.gender, channel: r => r.channel, item: r => r.item, grade: r => { const i = GRADES.indexOf(r.grade); return i < 0 ? 99 : i; }, status: r => STATUSES.indexOf(r.status), next_on: r => (r.next_on ?? '9999') + (r.alarm_time ?? ''), rank: r => r.rank_at ? (r.rank_now || 999) : 9999 };
 const CHANNELS = ['카톡', '문자', '전화', '이메일'];
 type Parsed = { sheet: string; rows: DbIn[] };
+type Hist = { t: string; r: number; k: string };
+const kstMD = (t: string) => new Date(new Date(t).getTime() + 9 * 3600e3).toISOString().slice(5, 16).replace('-', '/').replace('T', ' ');
+/** 순위 이력 그래프 — 위쪽이 1위, 100위 밖은 맨 아래 점선 아래에 찍는다 */
+function RankChart({ h, w, ht, big }: { h: Hist[]; w: number; ht: number; big?: boolean }) {
+  if (h.length < 2 && !big) return null; const pad = big ? 22 : 3; const n = h.length; const top = big ? 16 : 3;
+  const y = (r: number) => top + ((r ? Math.min(r, 100) : 108) - 1) / 107 * (ht - top - pad); const x = (i: number) => (big ? 30 : 3) + (n === 1 ? 0 : i / (n - 1)) * (w - (big ? 44 : 6));
+  const pts = h.map((p, i) => `${x(i).toFixed(1)},${y(p.r).toFixed(1)}`).join(' ');
+  return <svg width={w} height={ht} style={{ display: 'block' }}>
+    {big && [1, 10, 40, 100].map(v => <g key={v}><line x1={30} x2={w - 10} y1={y(v)} y2={y(v)} stroke="#E4E7EC" strokeDasharray={v === 100 ? '4 3' : undefined} /><text x={26} y={y(v) + 4} fontSize={10} textAnchor="end" fill="#98A2B3">{v}위</text></g>)}
+    <polyline points={pts} fill="none" stroke="#2F54EB" strokeWidth={big ? 2 : 1.5} strokeLinejoin="round" />
+    {h.map((p, i) => <g key={i}><circle cx={x(i)} cy={y(p.r)} r={big ? 3.5 : i === n - 1 ? 2.5 : 0} fill={p.r ? '#2F54EB' : '#98A2B3'}><title>{`${kstMD(p.t)} · ${p.r ? p.r + '위' : '100위 밖'} · ${p.k}`}</title></circle>
+      {big && (n <= 14 || i === n - 1 || i % Math.ceil(n / 12) === 0) && <text x={x(i)} y={y(p.r) - 7} fontSize={10.5} textAnchor="middle" fontWeight={700} fill={p.r ? '#1D2939' : '#98A2B3'}>{p.r || '밖'}</text>}
+      {big && (n <= 10 || i === 0 || i === n - 1 || i % Math.ceil(n / 8) === 0) && <text x={x(i)} y={ht - 6} fontSize={9.5} textAnchor="middle" fill="#98A2B3">{kstMD(p.t).slice(0, 5)}</text>}</g>)}
+  </svg>;
+}
 
 /** 엑셀 시트 → 등록 행. 머리글(상호명·번호·성별·껀덕지·키워드·URL·성과조회·상황설명·1차 콜·URL2)을 이름으로 찾고, 날짜는 빈 칸이면 윗줄 날짜를 이어받는다. 노란 줄은 결제로 읽음 */
 function parseSheet(XLSX: any, ws: any, today: string): DbIn[] {
@@ -59,6 +74,7 @@ export default function MyDbClient({ me, target, who, trash, today, rows0, err, 
     if (sort) { const g = SORTS[sort.k]; out.sort((a, b) => { const x = g(a), y = g(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.d; }); }
     return out; /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [rows, tab, kw, today, sort, flt]);
   const patch = async (r: DbRow, p: Partial<DbIn>) => { const x = await dbUpdate(r.id, p); if (!x.ok) return notify(x.msg, 'bad'); setRows(rs => rs.map(y => y.id === r.id ? x.row : y)); if ('status' in p || 'grade' in p || 'next_on' in p || 'alarm_time' in p) notify(p.status === '결제' ? '결제로 표시했습니다' : 'alarm_time' in p || 'next_on' in p ? (x.row.next_on ? `⏰ 알람 설정 — ${x.row.next_on.slice(5).replace('-', '/')} ${x.row.alarm_time || '아침'}` : '알람 해제') : '저장됨', 'ok'); };
+  const [open, setOpen] = useState(0);   // 순위 이력을 펼친 줄
   const [rk, setRk] = useState(0); const md = (t: string) => new Date(new Date(t).getTime() + 9 * 3600e3).toISOString().slice(5, 16).replace('-', '/').replace('T', ' ');
   const rank = async (r: DbRow) => { setRk(r.id); const x = await dbRank(r.id); setRk(0); notify(x.msg, x.ok ? 'ok' : 'bad', 5000); if (x.ok) setRows(rs => rs.map(y => y.id === r.id ? x.row : y)); };
   const run = async (fn: () => Promise<{ ok: boolean; msg: string }>, drop = true) => { setBusy(true); const x = await fn(); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad', 5000); if (x.ok) { if (drop) setRows(rs => rs.filter(r => !sel.has(r.id))); setSel(new Set()); router.refresh(); } };
@@ -130,12 +146,13 @@ export default function MyDbClient({ me, target, who, trash, today, rows0, err, 
       {view.length ? <div style={{ overflow: 'auto' }}><table style={{ fontSize: 12.5 }}>
         <thead><tr><th style={{ width: 28 }}><input type="checkbox" style={{ width: 'auto' }} checked={view.slice(0, shown).every(r => sel.has(r.id))} onChange={e => setSel(e.target.checked ? new Set(view.slice(0, shown).map(r => r.id)) : new Set())} /></th>
           <Th k="rank" l="순위" /><Th k="name" l="상호명" w={120} /><Th k="phone" l="번호" /><Th k="channel" l="껀덕지" f="channel" /><Th k="item" l="키워드" f="item" /><Th k="grade" l="등급" f="grade" /><Th k="status" l="상태" f="status" /><Th k="next_on" l="⏰ 알람" /><Th l="상황설명 및 진행사항" w={300} /><Th l="1차 콜" w={210} /><Th l="2차 콜" w={170} /><Th k="gender" l="성별" f="gender" /><Th l="URL" /><Th k="contact_date" l="영업 날짜" f="contact_date" />{trash && <th>지운 날</th>}</tr></thead>
-        <tbody>{view.slice(0, shown).map(r => { const paid = r.status === '결제'; const late = due(r); return <tr key={r.id} style={{ background: paid ? PAID_BG : ROW_BG[r.grade], opacity: r.status === '종료' ? .55 : 1, verticalAlign: 'top' }}>
+        <tbody>{view.slice(0, shown).map(r => { const paid = r.status === '결제'; const late = due(r); return <Fragment key={r.id}><tr style={{ background: paid ? PAID_BG : ROW_BG[r.grade], opacity: r.status === '종료' ? .55 : 1, verticalAlign: 'top' }}>
           <td><input type="checkbox" style={{ width: 'auto' }} checked={sel.has(r.id)} onChange={() => setSel(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} /></td>
           <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
             {r.rank_at ? <div title={r.rank_title ? `찾은 상품: ${r.rank_title}` : '상위 100 안에서 못 찾음'} style={{ fontWeight: 800, fontSize: 14, color: r.rank_now ? (r.rank_now <= 10 ? '#B42318' : r.rank_now <= 40 ? '#B54708' : 'inherit') : '#98A2B3' }}>{r.rank_now ? `${r.rank_now}위` : '100위 밖'}{!!r.rank_now && !!r.rank_prev && r.rank_prev !== r.rank_now && <span style={{ fontSize: 11, marginLeft: 3, color: r.rank_prev > r.rank_now ? '#067647' : '#B42318' }}>{r.rank_prev > r.rank_now ? `▲${r.rank_prev - r.rank_now}` : `▼${r.rank_now - r.rank_prev}`}</span>}</div> : null}
             {!trash && <button type="button" className="btn ghost" disabled={rk === r.id} onClick={() => rank(r)} title="URL 칸의 상품 링크로, 키워드를 지수 프로그램에서 지금 새로 조회해 상위 100 안 순위를 봅니다" style={{ padding: '2px 8px', fontSize: 11.5, minHeight: 0 }}>{rk === r.id ? '조회 중…' : r.rank_at ? '다시' : '순위'}</button>}
-            {r.rank_at && <div className="cell-sub" style={{ fontSize: 10.5 }}>{md(r.rank_at)}</div>}</td>
+            {r.rank_at && <div className="cell-sub" style={{ fontSize: 10.5 }}>{md(r.rank_at)}</div>}
+            {(r.rank_hist ?? []).length > 0 && <button type="button" onClick={() => setOpen(o => o === r.id ? 0 : r.id)} title="누르면 순위 이력 그래프" style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, margin: '2px auto 0', display: 'block' }}><RankChart h={(r.rank_hist ?? []).slice(-20)} w={70} ht={22} /><span className="help" style={{ fontSize: 10.5 }}>이력 {(r.rank_hist ?? []).length}회 {open === r.id ? '▲' : '▼'}</span></button>}</td>
           <td><div style={{ fontWeight: 700 }}><Txt r={r} k="name" /></div><div className="cell-sub" style={{ fontSize: 11 }}>{[r.source, r.kind, r.biz_no && `사업자 ${r.biz_no}`].filter(Boolean).join(' · ')}</div></td>
           <td style={{ whiteSpace: 'nowrap' }}><Txt r={r} k="phone" w={108} /></td>
           <td>{canEdit ? <select defaultValue={r.channel} onChange={e => patch(r, { channel: e.target.value })} style={{ ...inp, width: 74, background: 'transparent' }}><option value=""></option>{Array.from(new Set([...CHANNELS, r.channel].filter(Boolean))).map(c => <option key={c}>{c}</option>)}</select> : r.channel}</td>
@@ -149,7 +166,13 @@ export default function MyDbClient({ me, target, who, trash, today, rows0, err, 
           <td style={{ minWidth: 190 }}>{canEdit ? <><Txt r={r} k="url" w={170} ph="상품 링크 (…/products/번호)" /><div style={{ fontSize: 11, marginTop: 2 }}>{r.url && <a href={/^https?:/i.test(r.url.trim()) ? r.url.trim() : `https://${r.url.trim()}`} target="_blank" rel="noreferrer">열기</a>}{r.url && !/\/(products|catalog)\/\d+/.test(r.url) && <span style={{ color: '#B54708', marginLeft: 6 }}>상품 링크 아님 — 순위 조회 불가</span>}{r.url2 && <> · <a href={/^https?:/i.test(r.url2.trim()) ? r.url2.trim() : `https://${r.url2.trim()}`} target="_blank" rel="noreferrer">URL2</a></>}</div></>
             : <>{r.url ? <a href={/^https?:/i.test(r.url.trim()) ? r.url.trim() : `https://${r.url.trim()}`} target="_blank" rel="noreferrer">열기</a> : ''}{r.url2 ? <> · <a href={/^https?:/i.test(r.url2.trim()) ? r.url2.trim() : `https://${r.url2.trim()}`} target="_blank" rel="noreferrer">2</a></> : ''}</>}</td>
           <td style={{ whiteSpace: 'nowrap' }}>{canEdit ? <input type="date" defaultValue={r.contact_date ?? ''} onBlur={e => { if (e.target.value !== (r.contact_date ?? '')) patch(r, { contact_date: e.target.value || null }); }} style={{ ...inp, width: 132, background: 'transparent' }} /> : (r.contact_date ?? '').slice(5)}</td>
-          {trash && <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{(r.deleted_at ?? '').slice(0, 10)}</td>}</tr>; })}
+          {trash && <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{(r.deleted_at ?? '').slice(0, 10)}</td>}</tr>
+          {open === r.id && <tr><td colSpan={16} style={{ background: '#F8FAFF', padding: '12px 16px' }}>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <div><b>{r.name} · 순위 이력</b> <span className="cell-sub">위쪽이 1위 · 점 위에 마우스를 올리면 조회 시각</span><RankChart h={r.rank_hist ?? []} w={560} ht={190} big /></div>
+              <div style={{ maxHeight: 200, overflow: 'auto', fontSize: 12.5 }}><table style={{ fontSize: 12.5 }}><thead><tr><th>조회 시각</th><th>키워드</th><th className="num">순위</th><th className="num">변동</th></tr></thead><tbody>
+                {[...(r.rank_hist ?? [])].map((p, i, a) => ({ p, prev: i ? a[i - 1] : null })).reverse().map(({ p, prev }, i) => { const d = prev && prev.r && p.r ? prev.r - p.r : 0; return <tr key={i}><td style={{ whiteSpace: 'nowrap' }}>{kstMD(p.t)}</td><td>{p.k}</td><td className="num" style={{ fontWeight: 700 }}>{p.r ? `${p.r}위` : '100위 밖'}</td><td className="num" style={{ color: d > 0 ? '#067647' : d < 0 ? '#B42318' : '#98A2B3' }}>{d > 0 ? `▲${d}` : d < 0 ? `▼${-d}` : prev ? (prev.r && !p.r ? '이탈' : !prev.r && p.r ? '진입' : '-') : ''}</td></tr>; })}</tbody></table></div>
+            </div></td></tr>}</Fragment>; })}
           {view.length > shown && <tr><td colSpan={16} style={{ textAlign: 'center', padding: 14 }}><button type="button" className="btn" onClick={() => setShown(n => n + 100)}>100건 더 보기 ({shown} / {view.length})</button> <button type="button" className="btn ghost" onClick={() => setShown(view.length)}>전부 보기</button></td></tr>}</tbody></table></div>
         : <div style={{ padding: 28, textAlign: 'center', color: 'var(--muted)' }}>{trash ? '지운 DB 가 없습니다' : rows.length ? '조건에 맞는 DB 가 없습니다' : '아직 DB 가 없습니다 — 「엑셀 올리기」로 쓰던 파일을 올리거나 「+ 한 건 추가」를 눌러 주세요'}</div>}
     </div>
