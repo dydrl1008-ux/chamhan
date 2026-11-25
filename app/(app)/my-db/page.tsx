@@ -19,7 +19,8 @@ export default async function MyDbPage({ searchParams }: { searchParams: { u?: s
   // 사람별 요약 (팀장·총괄) — 방치 DB 는 자동으로 풀지 않고 여기서 보고 총괄이 판단
   let sum: { id: string; name: string; n: number; due: number; hot: number; paid: number; stale: number; del: number }[] = [];
   if (canPick) {
-    const { data } = await sb.from('my_db').select('owner_id,grade,status,next_on,updated_at,deleted_at').in('owner_id', people.map(p => p.id)).limit(20000);
+    const data: any[] = [];   // 1,000줄씩 나눠 끝까지 (한 번에 1,000줄까지만 내려옴)
+    for (let from = 0; from < 100000; from += 1000) { const { data: d, error } = await sb.from('my_db').select('owner_id,grade,status,next_on,updated_at,deleted_at').in('owner_id', people.map(p => p.id)).order('id').range(from, from + 999); if (error) break; data.push(...(d ?? [])); if ((d ?? []).length < 1000) break; }
     const cut = new Date(Date.now() - 30 * 86400e3).toISOString();
     sum = people.map(p => { const m = (data ?? []).filter((x: any) => x.owner_id === p.id); const a = m.filter((x: any) => !x.deleted_at); const live = a.filter((x: any) => x.status === '진행');
       return { id: p.id, name: p.name, n: a.length, due: live.filter((x: any) => x.next_on && x.next_on <= today).length, hot: live.filter((x: any) => ['S', 'A', 'B'].includes(x.grade)).length, paid: a.filter((x: any) => x.status === '결제').length, stale: live.filter((x: any) => x.updated_at < cut).length, del: m.length - a.length }; })

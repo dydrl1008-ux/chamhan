@@ -28,10 +28,14 @@ const clean = (r: DbIn) => ({ contact_date: day(r.contact_date), name: s(r.name,
 export async function dbList(userId?: string, trash = false): Promise<R<{ rows: DbRow[] }>> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
   const target = userId || me.id; if (!(await canSee(me, target))) return { ok: false, msg: '권한 없음' };
-  const sb = supabaseAdmin(); let q = sb.from('my_db').select(COLS).eq('owner_id', target).order('id', { ascending: false }).limit(5000);
-  if (trash) { q = q.not('deleted_at', 'is', null); if (!isBoss(me)) q = q.gt('deleted_at', new Date(Date.now() - TRASH_DAYS * 86400e3).toISOString()); } else q = q.is('deleted_at', null);
-  const { data, error } = await q; if (error) return { ok: false, msg: needSql(error.message) };
-  return { ok: true, msg: '', rows: (data ?? []) as DbRow[] };
+  const sb = supabaseAdmin(); const cut = new Date(Date.now() - TRASH_DAYS * 86400e3).toISOString(); const rows: DbRow[] = [];
+  for (let from = 0; from < 20000; from += 1000) {   // 한 번에 1,000줄까지만 내려오므로 나눠서 끝까지 읽는다
+    let q = sb.from('my_db').select(COLS).eq('owner_id', target).order('id', { ascending: false }).range(from, from + 999);
+    if (trash) { q = q.not('deleted_at', 'is', null); if (!isBoss(me)) q = q.gt('deleted_at', cut); } else q = q.is('deleted_at', null);
+    const { data, error } = await q; if (error) return { ok: false, msg: needSql(error.message) };
+    rows.push(...((data ?? []) as unknown as DbRow[])); if ((data ?? []).length < 1000) break;
+  }
+  return { ok: true, msg: '', rows };
 }
 /** 여러 건 넣기 (직접 입력·엑셀·붙여넣기). 같은 전화번호가 이미 누군가의 DB 에 있으면 건너뛰고 누가 관리 중인지 알려 준다. forUser: 총괄이 다른 직원에게 배정 */
 export async function dbAdd(rows: DbIn[], source: string, forUser?: string): Promise<R<{ added: number; dup: { name: string; who: string }[] }>> {
