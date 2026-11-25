@@ -1,5 +1,6 @@
 'use client';
 import { useEffect } from 'react';
+import { dbFrom } from '../my-db/actions';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
@@ -109,6 +110,7 @@ export default function CallsClient({ rows, props, origin, history = {}, indexes
             <input style={{ marginTop: 6, width: '100%' }} placeholder="메모 (통화 내용·다음 연락일)" defaultValue={l.note} onChange={e => setNote(s => ({ ...s, [l.id]: e.target.value }))} />
             <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               <button className="btn xs" style={{ background: 'var(--ok)', borderColor: 'var(--ok)' }} disabled={busy} title="키워드·업체명·순위로 제안서 링크 바로 생성 + 복사" onClick={() => start(async () => { const x = await quickLeadLink(l.id); if (x.ok && x.url) { try { await navigator.clipboard.writeText(x.url); } catch {} } notify(x.msg, x.ok ? 'ok' : 'bad', 6000); if (x.ok) { keepRow(l.id); r.refresh(); } })}>제안서 링크</button><a className="help" style={{ fontSize: 12 }} href={`/proposals?kw=${encodeURIComponent(l.keyword)}&lead=${l.id}&store=${encodeURIComponent(l.store_name)}&rank=${l.rank_now ?? ''}`} title="미리보기·PDF·가격 넣기">편집</a>
+              <button type="button" className="btn ghost xs" title="이 업체를 「내 DB」에 담아 등급·다음 연락일로 관리" onClick={async () => { const x = await dbFrom('lead', l.id); notify(x.msg, x.ok ? 'ok' : 'bad', 4000); }}>내 DB 담기</button>
               {ps.map(p => <button key={p.code} className="btn ghost xs" onClick={() => copyLink(p.code)}>링크 복사 · {p.views}회</button>)}
               {linkFor === l.id ? <>
                 <input style={{ flex: 1, minWidth: 180 }} placeholder="제안서 주소 https://…" value={url[l.id] ?? ''} onChange={e => setUrl(s => ({ ...s, [l.id]: e.target.value }))} />

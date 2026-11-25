@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { notify } from '@/components/Toast';
+import { dbFrom } from '../my-db/actions';
 import { kwContacts, kwSetResult, kwRequest, kwRequests, kwCloseRequest, kwDeleteRequest, type KwCount, type Contact, type KwReq } from './actions';
 const RESULTS = ['부재', '관심', '재연락', '거절', '계약'];
 const COLOR: Record<string, string> = { 관심: '#067647', 계약: '#175CD3', 재연락: '#B54708', 거절: '#B42318', 부재: '#667085' };
@@ -84,7 +85,7 @@ export default function KwCallsClient({ me, keywords, err, reqs0, reqErr, initia
               {take && prevLine({ who: r.claimed_name, result: r.result, memo: r.memo, at: r.result_at ?? '' }, -1)}
               {(r.prev ?? []).map(prevLine)}
             </div> : <div>{(r.prev ?? []).length > 0 && <div style={{ marginBottom: 3 }}>{(r.prev ?? []).map(prevLine)}</div>}<b style={{ color: COLOR[r.result] ?? 'inherit' }}>{r.result || (rsvOther ? '요청자 우선' : '-')}</b><div className="cell-sub">{r.memo || (rsvOther && r.reserved_until ? `${md(r.reserved_until).slice(0, 5)} 이후 누구나 가능` : '')}</div></div>}</td>
-            <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{r.claimed_name || (r.reserved_by ? `${rsvMine ? '나' : r.reserved_name} (요청)` : '-')}</td></tr>; })}
+            <td className="cell-sub" style={{ whiteSpace: 'nowrap' }}>{r.claimed_name || (r.reserved_by ? `${rsvMine ? '나' : r.reserved_name} (요청)` : '-')}{mine && <div style={{ marginTop: 4 }}><button type="button" className="btn ghost" title="이 업체를 「내 DB」에 담아 등급·다음 연락일로 관리" onClick={async () => { const x = await dbFrom('kw', r.id); notify(x.msg, x.ok ? 'ok' : 'bad', 4000); }}>내 DB 담기</button></div>}</td></tr>; })}
             {!view.length && !busy && <tr><td colSpan={6} style={{ color: 'var(--muted)', textAlign: 'center', padding: 24 }}>조건에 맞는 업체가 없습니다 — 위 체크를 풀어 보세요</td></tr>}</tbody></table></div>
       </>}
     </div>
