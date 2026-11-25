@@ -5,19 +5,18 @@ import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import { Empty } from '@/components/ui';
 import { fmtKST } from '@/lib/date/kst';
-import { linkAccount, toggleGroupStar, recheck, addItems, moveGroup, removeItems, reorder, addGroup, removeGroup } from './actions';
-import type { WatchRow, HistPt } from '@/lib/ykreward';
+import { toggleGroupStar, recheck, addItems, moveGroup, removeItems, reorder, addGroup, removeGroup } from './actions';
+import type { WatchRow, HistPt } from '@/lib/rankWatch';
 
-type Props = { me: { id: string; name: string; role: string }; myLink: string; people: { user_id: string; login: string; name: string }[]; sel: string; rows: WatchRow[]; hist: Record<string, HistPt[]>; stars: string[]; emptyGroups?: string[]; err: string };
+type Props = { me: { id: string; name: string; role: string }; people: { user_id: string; name: string }[]; sel: string; rows: WatchRow[]; hist: Record<string, HistPt[]>; stars: string[]; emptyGroups?: string[]; err: string };
 
-export default function RankWatchClient({ me, myLink, people, sel, rows, hist, stars, emptyGroups = [], err }: Props) {
-  const r = useRouter(); const [login, setLogin] = useState(myLink); const [busy, setBusy] = useState(false); const [filter, setFilter] = useState<'all' | 'down' | 'up' | 'star'>('all'); const [q, setQ] = useState('');
+export default function RankWatchClient({ me, people, sel, rows, hist, stars, emptyGroups = [], err }: Props) {
+  const r = useRouter(); const myLink = true; const [busy, setBusy] = useState(false); const [filter, setFilter] = useState<'all' | 'down' | 'up' | 'star'>('all'); const [q, setQ] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({}); const [detail, setDetail] = useState<string | null>(null);
-  const [sort, setSort] = useState(''); const [acc, setAcc] = useState(false);
+  const [sort, setSort] = useState('');
   const isMe = sel === me.id;
-  const link = async () => { setBusy(true); const x = await linkAccount(login); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
-  const selLogin = people.find(p => p.user_id === sel)?.login ?? myLink; const canRe = isMe || me.role === 'admin' || me.role === 'head';
-  const re = async (p: { ids?: string[]; group?: string }) => { if (busy) return; setBusy(true); const x = await recheck({ ...p, login: selLogin }); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
+  const canRe = isMe || me.role === 'admin' || me.role === 'head';
+  const re = async (p: { ids?: string[]; group?: string }) => { if (busy) return; setBusy(true); const x = await recheck({ ...p, user: sel }); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (x.ok) r.refresh(); };
   const [drag, setDrag] = useState<{ kind: 'g' | 'i'; key: string; group?: string } | null>(null); const [over, setOver] = useState<string | null>(null);
   const [gOrder, setGOrder] = useState<string[] | null>(null); const [iOrder, setIOrder] = useState<Record<string, string[]>>({});
   const canDrag = isMe && filter === 'all' && !q.trim();
@@ -63,19 +62,15 @@ export default function RankWatchClient({ me, myLink, people, sel, rows, hist, s
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 260 }}><h1 style={{ margin: 0, fontSize: 22, letterSpacing: '-0.02em' }}>순위 체크 <span style={{ fontSize: 14, color: '#98A2B3', fontWeight: 600 }}>{rows.length}개</span></h1>
           <div style={{ fontSize: 13, color: '#667085', marginTop: 4 }}>평일 10시·14시에 키워드별로 자동 조회 (상위 100위) · 「재체크」는 바로 조회 · ★ 주요 업체는 순위가 바뀌면 알림{lastAt ? ` · 마지막 조회 ${fmtKST(lastAt)}` : ''}</div></div>
-        {me.role !== 'staff' && people.length > 0 && <select value={sel} onChange={e => r.push(`/rank-watch?u=${e.target.value}`)} style={{ width: 'auto', minHeight: 38, borderRadius: 10 }}>{people.map(p => <option key={p.user_id} value={p.user_id}>{p.name} ({p.login})</option>)}</select>}
+        {me.role !== 'staff' && people.length > 1 && <select value={sel} onChange={e => r.push(`/rank-watch?u=${e.target.value}`)} style={{ width: 'auto', minHeight: 38, borderRadius: 10 }}>{people.map(p => <option key={p.user_id} value={p.user_id}>{p.name}</option>)}</select>}
         {myLink && isMe && <><button type="button" onClick={() => { setGOpen(v => !v); setAddOpen(false); }} style={{ ...mini, padding: '9px 16px', fontSize: 13.5, borderRadius: 10 }}>{gOpen ? '닫기' : '업체 추가'}</button>
           <button type="button" onClick={() => { setAddOpen(v => !v); setGOpen(false); }} style={{ border: 0, background: '#101828', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>{addOpen ? '닫기' : '+ 상품 추가'}</button></>}
       </div>
       {err && <div className="err">순위 체크 목록을 읽지 못했습니다: {err}</div>}
-      {isMe && (!myLink || acc) && <div style={{ border: '1px solid #E9EDF3', borderRadius: 14, padding: '14px 16px', background: '#F8FAFF', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <b style={{ fontSize: 13.5 }}>{myLink ? '담당 계정 변경' : '먼저 담당 계정(ykreward 아이디)을 연결하세요'}</b>
-        <input value={login} onChange={e => setLogin(e.target.value)} placeholder="ykreward 아이디" style={{ width: 220, minHeight: 38 }} autoCapitalize="none" /><button type="button" className="btn" disabled={busy || !login.trim() || login.trim() === myLink} onClick={link}>{myLink ? '변경' : '연결'}</button>
-        <span style={{ fontSize: 12, color: '#98A2B3' }}>이 계정 담당으로 등록된 상품이 아래에 나옵니다</span></div>}
       {gOpen && <form onSubmit={e => { e.preventDefault(); mkGroup(); }} style={{ border: '1px solid #E9EDF3', borderRadius: 14, padding: 16, background: '#fff', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><b style={{ fontSize: 13.5 }}>업체 추가</b><input value={gName} onChange={e => setGName(e.target.value)} placeholder="업체명 (예: 올포홈)" style={{ width: 260, minHeight: 38 }} autoFocus /><button type="submit" className="btn" disabled={busy || !gName.trim()}>추가</button><span style={{ fontSize: 12, color: '#98A2B3' }}>추가하면 바로 그 업체로 상품 등록 칸이 열립니다</span></form>}
       {addOpen && <form onSubmit={e => { e.preventDefault(); add(new FormData(e.currentTarget)); }} style={{ border: '1px solid #E9EDF3', borderRadius: 14, padding: 16, background: '#fff', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
         <label style={{ display: 'grid', gap: 5 }}><span style={{ fontSize: 12.5, color: '#475467', fontWeight: 600 }}>업체 (그룹)</span><input name="group" list="rw-groups" placeholder="예: 올포홈" defaultValue={preGroup} key={preGroup} /></label>
-        <label style={{ display: 'grid', gap: 5 }}><span style={{ fontSize: 12.5, color: '#475467', fontWeight: 600 }}>상품 URL</span><input name="url" required placeholder="https://smartstore.naver.com/스토어/products/숫자" /></label>
+        <label style={{ display: 'grid', gap: 5 }}><span style={{ fontSize: 12.5, color: '#475467', fontWeight: 600 }}>상품 URL</span><input name="url" required placeholder="상품 링크(…/products/숫자) 또는 원부 링크(…/catalog/숫자)" /></label>
         <label style={{ display: 'grid', gap: 5, gridColumn: '1 / -1' }}><span style={{ fontSize: 12.5, color: '#475467', fontWeight: 600 }}>키워드 — 쉼표나 줄바꿈으로 여러 개</span><textarea name="keywords" required rows={2} placeholder="어린이집네임택, 네임스티커, 이름표" /></label>
         <label style={{ display: 'grid', gap: 5 }}><span style={{ fontSize: 12.5, color: '#475467', fontWeight: 600 }}>메모 (선택)</span><input name="memo" placeholder="리워드 11월 · 담당 OO" /></label>
         <div style={{ alignSelf: 'end', display: 'flex', gap: 10, alignItems: 'center' }}><button type="submit" disabled={busy} style={{ border: 0, background: '#101828', color: '#fff', borderRadius: 10, padding: '11px 22px', fontWeight: 700, cursor: 'pointer' }}>{busy ? '등록·조회 중…' : '등록'}</button><span style={{ fontSize: 12, color: '#98A2B3' }}>등록하면 첫 순위를 바로 조회합니다</span></div>
@@ -98,7 +93,6 @@ export default function RankWatchClient({ me, myLink, people, sel, rows, hist, s
               {canRe && nDown > 0 && <button type="button" style={{ ...mini, color: '#D92D20', borderColor: '#FDA29B' }} disabled={busy} onClick={() => re({ ids: rows.filter(isDown).map(w => w.id) })}>{busy ? '조회 중…' : `하락 ${nDown}건 재체크`}</button>}
               <button type="button" style={mini} onClick={() => setAll(true)}>모두 펼침</button><button type="button" style={mini} onClick={() => setAll(false)}>모두 접기</button>
               <select value={sort} onChange={e => setSort(e.target.value)} style={{ width: 'auto', minHeight: 32, fontSize: 12.5, borderRadius: 8, padding: '0 8px' }}><option value="">기본 순서</option><option value="rank">순위 높은 순</option><option value="drop">하락 큰 순</option><option value="rise">상승 큰 순</option><option value="recent">최근 조회 순</option></select>
-              {isMe && myLink && <button type="button" style={mini} onClick={() => setAcc(v => !v)}>계정 {myLink}</button>}
             </span>
           </div>
         </div>

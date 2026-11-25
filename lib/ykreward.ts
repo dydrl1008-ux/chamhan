@@ -1,8 +1,6 @@
 // ykreward (리워드 슬롯 관리, 별도 Supabase 프로젝트) 연동 — 서비스 키로 서버에서만 호출
 //   env: YKREWARD_URL, YKREWARD_SERVICE_KEY
 import { createClient } from '@supabase/supabase-js';
-import { supabaseAdmin } from '@/lib/supabase/admin';
-import { search } from '@/lib/nsc';
 
 export const ykrReady = () => !!(process.env.YKREWARD_URL && process.env.YKREWARD_SERVICE_KEY);
 export const ykr = () => createClient(process.env.YKREWARD_URL!, process.env.YKREWARD_SERVICE_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -123,12 +121,7 @@ export async function watchRows(logins?: string[]): Promise<WatchRow[]> {
   const { data, error } = await q; if (error) throw new Error('ykreward 순위 체크 조회 실패: ' + error.message);
   const { data: accs2 } = await sb.from('accounts').select('id,login_id').in('id', [...new Set((data ?? []).map((x: any) => x.owner_id))]);
   const lg = new Map((accs2 ?? []).map(a => [a.id, a.login_id]));
-  // 순위는 워크허브가 지수 프로그램으로 직접 조회해 워크허브 DB(rank_watch_ranks)에 둔다 — 조회한 적 있으면 그 값, 없으면 예전 ykreward 수집값
-  const wr = new Map<string, any>(); { const idl = (data ?? []).map((x: any) => String(x.id)); const wh = supabaseAdmin();
-    for (let i = 0; i < idl.length; i += 300) { const { data: d } = await wh.from('rank_watch_ranks').select('watch_id,cur_rank,cur_at,prev_rank,title,store').in('watch_id', idl.slice(i, i + 300)); for (const r of d ?? []) wr.set(r.watch_id, r); } }
-  return (data ?? []).map((x0: any) => { const o = wr.get(String(x0.id)); if (!o) return x0; const cur = o.cur_rank > 0 ? o.cur_rank : null, prev = o.prev_rank > 0 ? o.prev_rank : null;
-    return { ...x0, cur_rank: cur, cur_at: o.cur_at, prev_rank: prev, diff: cur && prev ? prev - cur : null, trend: o.prev_rank == null ? 'NEW' : !cur && !prev ? '변동 없음' : !cur ? '이탈' : !prev ? '진입' : cur === prev ? '변동 없음' : cur < prev ? '상승' : '하락', title: o.title || x0.title, store: o.store || x0.store, q_status: null }; })
-    .map((x: any) => ({ id: x.id, owner_login: lg.get(x.owner_id) ?? '', owner: x.owner ?? '', group: x.group_name?.trim() || GROUP_NONE, keyword: x.keyword, title: x.title, store: x.store, url: x.url, memo: x.memo, cur_rank: x.cur_rank > 0 ? x.cur_rank : null, cur_at: x.cur_at, prev_rank: x.prev_rank > 0 ? x.prev_rank : null, diff: x.diff, trend: x.trend, active: !!x.active, q_status: x.q_status, mid: x.mid, mid_type: x.mid_type, cmp_mid: x.cmp_mid, image_url: x.image_url }));
+  return (data ?? []).map((x: any) => ({ id: x.id, owner_login: lg.get(x.owner_id) ?? '', owner: x.owner ?? '', group: x.group_name?.trim() || GROUP_NONE, keyword: x.keyword, title: x.title, store: x.store, url: x.url, memo: x.memo, cur_rank: x.cur_rank > 0 ? x.cur_rank : null, cur_at: x.cur_at, prev_rank: x.prev_rank > 0 ? x.prev_rank : null, diff: x.diff, trend: x.trend, active: !!x.active, q_status: x.q_status, mid: x.mid, mid_type: x.mid_type, cmp_mid: x.cmp_mid, image_url: x.image_url }));
 }
 export async function accountExists(login: string): Promise<{ ok: boolean; name?: string }> {
   const { data } = await ykr().from('accounts').select('name').eq('login_id', login.trim().toLowerCase()).maybeSingle();
@@ -167,61 +160,16 @@ export async function rankAlerts(wh: { from: (t: string) => any }, delta: number
   return { users: links.length, checked, notified, items };
 }
 
-/** 순위 조회 — 키워드별로 묶어 지수 프로그램을 키워드당 한 번만 새로 조회하고, 그 키워드를 쓰는 항목 전부에 순위를 적는다 (워크허브 DB).
- *  상위 100 안에서 상품 번호(MID)로 찾고, 없으면 100위 밖(0). budgetMs 를 넘기면 남은 키워드는 다음 차례로 */
-export async function checkWatch(rows: WatchRow[], budgetMs = 40000): Promise<{ ok: boolean; msg: string; n: number; left: number }> {
-  if (!rows.length) return { ok: false, msg: '대상 없음', n: 0, left: 0 };
-  const wh = supabaseAdmin(); const t0 = Date.now();
-  const { data: links } = await wh.from('reward_watch_links').select('user_id,login_id'); const uid = new Map<string, string>((links ?? []).map((l: any) => [l.login_id, l.user_id]));
-  const fallback = (links ?? [])[0]?.user_id as string | undefined;
-  const by = new Map<string, WatchRow[]>(); for (const w of rows) { const k = String(w.keyword ?? '').trim().replace(/\s+/g, ' '); if (!k || k.length > 40 || !w.mid) continue; by.set(k, [...(by.get(k) ?? []), w]); }
-  let n = 0, kws = 0; let err = '';
-  for (const [kw, list] of by) {
-    if (Date.now() - t0 > budgetMs) break;
-    const user = list.map(w => uid.get(w.owner_login)).find(Boolean) ?? fallback; if (!user) { err = '조회할 계정 연결이 없습니다'; break; }
-    let prods: any[]; try { prods = ((await search(kw, user, true)).products ?? []) as any[]; } catch (e: any) { err = `「${kw}」 조회 실패: ${String(e?.message ?? e).slice(0, 80)}`; break; }
-    const at = new Date().toISOString(); const ids = list.map(w => String(w.id));
-    const { data: old } = await wh.from('rank_watch_ranks').select('watch_id,cur_rank').in('watch_id', ids); const was = new Map<string, number | null>((old ?? []).map((o: any) => [o.watch_id, o.cur_rank]));
-    const ups: any[] = [], hs: any[] = [];
-    for (const w of list) {
-      const hit = prods.filter(p => String(p.link ?? '').includes(`/products/${w.mid}`) || String(p.nvmid ?? '') === String(w.mid) || (!!w.cmp_mid && String(p.nvmid ?? '') === String(w.cmp_mid))).sort((a, b) => a.rank - b.rank)[0]; const rk = hit ? Number(hit.rank) || 0 : 0;
-      ups.push({ watch_id: String(w.id), cur_rank: rk, cur_at: at, prev_rank: was.has(String(w.id)) ? was.get(String(w.id)) : (w.cur_rank ?? null), title: hit ? String(hit.productTitle ?? '').slice(0, 200) : (w.title ?? ''), store: hit ? String(hit.mallName ?? '').slice(0, 80) : (w.store ?? '') });
-      hs.push({ watch_id: String(w.id), rank: rk, checked_at: at });
-    }
-    const { error } = await wh.from('rank_watch_ranks').upsert(ups, { onConflict: 'watch_id' }); if (error) { err = /rank_watch_ranks/.test(error.message) ? '0096 SQL(순위 체크 표)을 먼저 실행해 주세요' : error.message; break; }
-    await wh.from('rank_watch_hist').insert(hs); n += list.length; kws++;
+/** 재체크 — 순위 수집 큐에 다시 넣음 (ykreward 봇이 다음 순서에 수집). rank_watch_requeue 와 같은 효과 */
+export async function requeueWatch(rows: WatchRow[]): Promise<{ ok: boolean; msg: string; n: number }> {
+  if (!rows.length) return { ok: false, msg: '대상 없음', n: 0 };
+  const sb = ykr();
+  const { error } = await sb.from('rank_watch_queue').upsert(rows.map(w => ({ watch_id: w.id, keyword: w.keyword, mid: w.mid, mid_type: w.mid_type, url: w.url, cmp_mid: w.cmp_mid, status: 'pending', tries: 0, last_error: null, claimed_at: null })), { onConflict: 'watch_id' });
+  if (error) {   // 큐 직접 쓰기가 막혀 있으면 ykreward 함수로
+    const { error: e2 } = await sb.rpc('rank_watch_requeue', { p_ids: rows.map(w => w.id) });
+    if (e2) return { ok: false, msg: '재체크 요청 실패: ' + e2.message, n: 0 };
   }
-  const left = by.size - kws;
-  if (err && !n) return { ok: false, msg: err, n: 0, left };
-  return { ok: true, msg: `${n}건 순위 조회 (키워드 ${kws}개)` + (left ? ` · 남은 키워드 ${left}개는 다시 눌러 주세요` : '') + (err ? ` · ${err}` : ''), n, left };
-}
-/** 재체크 — 바로 조회 */
-export async function requeueWatch(rows: WatchRow[]): Promise<{ ok: boolean; msg: string; n: number }> { return checkWatch(rows); }
-const DROP_ALERT = 10;   // 이만큼 이상 떨어지면 급하락 알림
-/** 자동 조회 — 평일 10시·14시. 이번 회차에 아직 안 찍힌 항목만 모아 키워드별로 조회. 한 번 호출에 budgetMs 만큼, 나머지는 다음 호출이 이어서 */
-export async function rankWatchTick(budgetMs = 20000): Promise<string> {
-  if (!ykrReady()) return 'off';
-  const now = new Date(Date.now() + 9 * 3600e3); const today = now.toISOString().slice(0, 10); const hm = now.toISOString().slice(11, 16); const dow = now.getUTCDay();
-  if (dow === 0 || dow === 6 || hm < '10:00' || hm >= '19:00') return 'off';
-  const slotKey = `${today} ${hm < '14:00' ? '10' : '14'}`; const slot = new Date(`${today}T${hm < '14:00' ? '10' : '14'}:00:00+09:00`).toISOString();
-  const wh = supabaseAdmin(); const { data: done } = await wh.from('ai_settings').select('value').eq('key', 'rankwatch_slot_done').maybeSingle(); if (done?.value === slotKey) return 'done';
-  const all = await watchRows(); const todo = all.filter(w => !w.cur_at || w.cur_at < slot);
-  if (!todo.length) {
-    await wh.from('ai_settings').upsert({ key: 'rankwatch_slot_done', value: slotKey, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-    // 회차가 끝나면 급하락 알림 — 직전 조회보다 DROP_ALERT 위 이상 떨어졌거나 100위 밖으로 빠진 항목을 담당자에게 한 번에
-    let sent = 0;
-    try {
-      const { data: links } = await wh.from('reward_watch_links').select('user_id,login_id'); const by = new Map<string, string[]>();
-      for (const w of all) { if (!w.cur_at || w.cur_at < slot || w.prev_rank == null) continue; const out = w.cur_rank == null; const d = out ? 0 : (w.cur_rank as number) - w.prev_rank; if (!out && d < DROP_ALERT) continue;
-        by.set(w.owner_login, [...(by.get(w.owner_login) ?? []), `▼ ${w.group !== GROUP_NONE ? w.group + ' · ' : ''}${w.keyword}  ${w.prev_rank}위 → ${out ? '100위 밖' : `${w.cur_rank}위 (${d}↓)`}`]); }
-      const rows = (links ?? []).filter((l: any) => by.has(l.login_id)).map((l: any) => { const arr = by.get(l.login_id)!; return { user_id: l.user_id, kind: 'alert', title: `순위 급하락 ${arr.length}건 — ${slotKey.slice(11)}시 조회`, body: arr.slice(0, 30).join('\n').slice(0, 1500), link: '/rank-watch' }; });
-      if (rows.length) { await wh.from('notifications').insert(rows); sent = rows.length; }
-    } catch { /* 알림 실패는 조회에 영향 없음 */ }
-    return `done now alert ${sent}`;
-  }
-  const r = await checkWatch(todo, budgetMs);
-  if (!r.ok) return 'err ' + r.msg.slice(0, 80);
-  return `rank ${r.n}rows left ${r.left}kw`;
+  return { ok: true, msg: `${rows.length}건 재체크 요청 — 수집 봇이 순서대로 다시 확인합니다`, n: rows.length };
 }
 
 /** 순위 히스토리 (최근 N일, 성공 수집만) → watch_id 별 [{t, r}] 시간순. r = null 은 미노출 */
@@ -229,9 +177,6 @@ export type HistPt = { t: string; r: number | null };
 export async function watchHistory(ids: string[], days = 30): Promise<Record<string, HistPt[]>> {
   if (!ids.length) return {};
   const since = new Date(Date.now() - days * 864e5).toISOString(); const out: Record<string, HistPt[]> = {};
-  // 워크허브가 직접 조회한 이력 — 있으면 그 첫 조회 이전 구간만 예전 ykreward 이력으로 채운다
-  const mine: Record<string, HistPt[]> = {}; { const wh = supabaseAdmin();
-    for (let i = 0; i < ids.length; i += 100) for (let off = 0; ; off += 1000) { const { data } = await wh.from('rank_watch_hist').select('watch_id,rank,checked_at').in('watch_id', ids.slice(i, i + 100).map(String)).gte('checked_at', since).order('checked_at').range(off, off + 999); for (const h of data ?? []) (mine[h.watch_id] ??= []).push({ t: h.checked_at, r: h.rank > 0 ? h.rank : null }); if (!data || data.length < 1000) break; } }
   for (let i = 0; i < ids.length; i += 100) {
     const chunk = ids.slice(i, i + 100);
     for (let off = 0; ; off += 1000) {                       // PostgREST 1000행 제한 → 페이지로 전부
@@ -240,7 +185,6 @@ export async function watchHistory(ids: string[], days = 30): Promise<Record<str
       if (!data || data.length < 1000) break;
     }
   }
-  for (const id of new Set([...Object.keys(out), ...Object.keys(mine)])) { const m = mine[id] ?? []; out[id] = m.length ? [...(out[id] ?? []).filter(p => p.t < m[0].t), ...m] : (out[id] ?? []); }
   return out;
 }
 
@@ -258,9 +202,8 @@ export async function addWatch(p: { ownerLogin: string; url: string; keywords: s
   const group = p.group.trim() && p.group.trim() !== GROUP_NONE ? p.group.trim() : null;
   const { data: ins, error } = await sb.from('rank_watch').insert(todo.map(k => ({ owner_id: acc.id, mid: r.mid, url: r.url, keyword: k, group_name: group, memo: p.memo.trim() || null, active: true, cmp_checked: true, sort_order: (so += 100) }))).select('id,keyword,mid,url');
   if (error) return { ok: false, msg: '등록 실패: ' + error.message, n: 0 };
-  // 수집 봇 큐에는 넣지 않는다 — 등록하자마자 워크허브가 지수 프로그램으로 첫 순위를 바로 조회
-  let first = ''; try { const c = await checkWatch((ins ?? []).map((w: any) => ({ id: w.id, owner_login: p.ownerLogin, keyword: w.keyword, mid: w.mid, url: w.url, cmp_mid: null, cur_rank: null, title: null, store: null }) as unknown as WatchRow), 25000); first = c.ok ? ' · 첫 순위 조회 완료' : ` · 첫 순위는 「재체크」로 (${c.msg})`; } catch { first = ' · 첫 순위는 「재체크」로'; }
-  return { ok: true, msg: `${ins?.length ?? 0}개 등록${first}${have.size ? ` (이미 있던 ${have.size}개 제외)` : ''}`, n: ins?.length ?? 0 };
+  await sb.from('rank_watch_queue').upsert((ins ?? []).map((w: any) => ({ watch_id: w.id, keyword: w.keyword, mid: w.mid, url: w.url, status: 'pending', tries: 0 })), { onConflict: 'watch_id' });
+  return { ok: true, msg: `${ins?.length ?? 0}개 등록 — 곧 첫 순위가 수집됩니다${have.size ? ` (이미 있던 ${have.size}개 제외)` : ''}`, n: ins?.length ?? 0 };
 }
 /** 업체(그룹) 이동 · 이름 변경 */
 export async function setWatchGroup(ids: string[], group: string): Promise<{ ok: boolean; msg: string }> {

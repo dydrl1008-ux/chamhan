@@ -1,7 +1,7 @@
 // 고객 순위 리포트 — 순위 체크 업체(그룹) 하나를 고객에게 보내는 리포트로. PNG/PDF 저장 + 카톡 문구. 외부 링크 없음(참한/워크허브 노출 X)
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
-import { watchRows, watchHistory, ykrReady, GROUP_NONE } from '@/lib/ykreward';
+import { watchRows, watchHistory, GROUP_NONE } from '@/lib/rankWatch';
 import { PageHeader, Empty } from '@/components/ui';
 import { todayKST, addDays } from '@/lib/date/kst';
 import ReportClient, { type ReportData, type KwReport } from './ReportClient';
@@ -12,11 +12,11 @@ const KST_DAY = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'A
 export default async function ReportPage({ searchParams }: { searchParams: { u?: string; g?: string; from?: string; to?: string; pre?: string } }) {
   const me = (await getProfile())!; const sb = supabaseServer();
   const back = <div style={{ display: 'grid', gap: 14 }}><PageHeader title="고객 리포트" /><div className="card"><Empty>순위 체크에서 업체 옆 「리포트」를 눌러 들어오세요.</Empty></div></div>;
-  if (!ykrReady() || !searchParams.g) return back;
+  if (!searchParams.g) return back;
   const g = searchParams.g;
   const [{ data: links }, { data: profs }] = await Promise.all([sb.from('reward_watch_links').select('user_id,login_id,phone'), sb.from('profiles').select('id,name').eq('is_active', true)]);
-  const uid = me.role === 'staff' ? me.id : (searchParams.u && links?.some(l => l.user_id === searchParams.u) ? searchParams.u : me.id);
-  const link = links?.find(l => l.user_id === uid); if (!link) return back;
+  const uid = me.role === 'staff' ? me.id : (searchParams.u && profs?.some(p => p.id === searchParams.u) ? searchParams.u : me.id);
+  const link = links?.find(l => l.user_id === uid);
   const owner = profs?.find(p => p.id === uid)?.name ?? '';
   const { data: setting } = await sb.from('reward_watch_reports').select('start_on,end_on,note').eq('user_id', uid).eq('group_key', g).maybeSingle();
 
@@ -29,7 +29,7 @@ export default async function ReportPage({ searchParams }: { searchParams: { u?:
 
   let err = ''; let kws: KwReport[] = [];
   try {
-    const rows = (await watchRows([link.login_id])).filter(w => w.group === g);
+    const rows = (await watchRows([uid])).filter(w => w.group === g);
     const spanDays = Math.ceil((Date.now() - new Date(from + 'T00:00:00+09:00').getTime()) / 864e5) + 1;
     const hist = await watchHistory(rows.map(w => w.id), spanDays);
     kws = rows.map(w => {
@@ -52,6 +52,6 @@ export default async function ReportPage({ searchParams }: { searchParams: { u?:
     });
   } catch (e: any) { err = e?.message ?? String(e); }
 
-  const data: ReportData = { group: g === GROUP_NONE ? '' : g, owner, phone: link.phone ?? '', isMe: uid === me.id, uid, start, end, pre, today, days, kws, note: setting?.note ?? '', saved: !!setting };
+  const data: ReportData = { group: g === GROUP_NONE ? '' : g, owner, phone: link?.phone ?? '', isMe: uid === me.id, uid, start, end, pre, today, days, kws, note: setting?.note ?? '', saved: !!setting };
   return <ReportClient data={data} err={err} />;
 }

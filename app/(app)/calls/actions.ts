@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { randomBytes } from 'crypto';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseServer } from '@/lib/supabase/server';
-import { addWatch, ykrReady } from '@/lib/ykreward';
+import { addWatch } from '@/lib/rankWatch';
 
 type R = { ok: boolean; msg: string; code?: string };
 const RESULTS = ['called', 'interested', 'rejected', 'won', 'excluded'];
@@ -52,14 +52,11 @@ export async function registerWatchFromLead(p: { leadId: number; group: string; 
   const sb = supabaseServer();
   const group = p.group.trim(); if (!group) return { ok: false, msg: '업체명을 입력하세요' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(p.start) || !/^\d{4}-\d{2}-\d{2}$/.test(p.end) || p.start > p.end) return { ok: false, msg: '계약 기간을 확인하세요' };
-  const { data: link } = await sb.from('reward_watch_links').select('login_id').eq('user_id', me.id).maybeSingle();
-  if (!link?.login_id) return { ok: false, msg: '순위 체크 메뉴에서 내 ykreward 계정을 먼저 연결하세요' };
   const kws = p.keywords.split(/[\n,，]/).map(k => k.trim()).filter(Boolean);
   let msg = '';
   if (p.url.trim()) {
-    if (!ykrReady()) return { ok: false, msg: 'ykreward 연동 설정이 없습니다' };
     if (!kws.length) return { ok: false, msg: '키워드를 입력하세요' };
-    const r = await addWatch({ ownerLogin: link.login_id, url: p.url.trim(), keywords: kws, group, memo: '콜 리스트 계약' });
+    const r = await addWatch({ userId: me.id, url: p.url.trim(), keywords: kws, group, memo: '콜 리스트 계약' });
     if (!r.ok) return { ok: false, msg: r.msg };
     msg = r.msg;
   }

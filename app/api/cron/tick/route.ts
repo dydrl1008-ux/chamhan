@@ -3,7 +3,7 @@
 //   · 순위 체크: 평일 10시·14시 회차 — 키워드당 한 번 조회, 한 번에 못 끝내면 다음 5분에 이어서
 import { NextResponse } from 'next/server';
 import { myDbTick } from '@/lib/myDb';
-import { rankWatchTick } from '@/lib/ykreward';
+import { rankWatchTick } from '@/lib/rankWatch';
 export const dynamic = 'force-dynamic'; export const maxDuration = 60;
 export async function GET(req: Request) {
   if (!process.env.CRON_SECRET || req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) return NextResponse.json({ ok: false }, { status: 401 });

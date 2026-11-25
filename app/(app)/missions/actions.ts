@@ -5,7 +5,7 @@ const allowed = async () => { const me = await getProfile(); return me && (me.ro
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { supabaseServer } from '@/lib/supabase/server';
 import { searchFresh } from '@/lib/nsc';
-import { addWatch, ykrReady } from '@/lib/ykreward';
+import { addWatch } from '@/lib/rankWatch';
 type R<T = {}> = { ok: boolean; msg: string } & Partial<T>;
 
 const norm = (s: string) => s.toLowerCase().replace(/[^가-힣a-z0-9]/g, '');
@@ -50,11 +50,8 @@ export async function watchMission(id: number): Promise<R> {
   const sb = supabaseServer();
   const { data: m } = await supabaseAdmin().from('competitor_missions').select('keyword,mall_name,product_url').eq('id', id).maybeSingle();
   if (!m?.product_url) return { ok: false, msg: '먼저 매칭해서 상품 URL을 잡아야 함' };
-  const { data: link } = await sb.from('reward_watch_links').select('login_id').eq('user_id', me.id).maybeSingle();
-  if (!link?.login_id) return { ok: false, msg: '순위 체크 메뉴에서 내 ykreward 계정을 먼저 연결하세요' };
-  if (!ykrReady()) return { ok: false, msg: 'ykreward 연동 설정이 없습니다' };
   const group = `[경쟁] ${m.mall_name || m.keyword}`;
-  const r = await addWatch({ ownerLogin: link.login_id, url: m.product_url, keywords: [m.keyword], group, memo: '경쟁사 미션' });
+  const r = await addWatch({ userId: me.id, url: m.product_url, keywords: [m.keyword], group, memo: '경쟁사 미션' });
   if (!r.ok) return { ok: false, msg: r.msg };
   await sb.from('reward_watch_groups').upsert({ user_id: me.id, name: group, memo: '경쟁사 리워드 미션' }, { onConflict: 'user_id,name' });
   return { ok: true, msg: `순위 체크 「${group}」 등록` };
