@@ -56,16 +56,18 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   }
   const target = (lead || mgr) && searchParams.u && people.some(p => p.id === searchParams.u) ? searchParams.u : me.id;
   const who = people.find(p => p.id === target)?.name ?? me.name;
+  // 팀장이 팀원 리스트를 볼 때: 콜 리스트 표는 '본인 배정분 또는 총괄'만 읽히게 막혀 있어 팀장에겐 빈 화면이었음 → 팀원(위에서 같은 팀으로 확인된 사람)일 때만 서버 권한으로 읽는다
+  const rd = mgr && target !== me.id ? adm : sb;
   const h = headers(); const origin = `${h.get('x-forwarded-proto') ?? 'https'}://${h.get('host')}`;
   const cols = 'id,store_name,store_url,product_url,keyword,category,phone,score,score_why,status,note,contact_round,rank_now,rank_prev,next_contact_on';
   const [{ data: todayRows }, { data: follow }, { data: wonRows }, { data: props }] = await Promise.all([
-    isToday ? sb.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', day).order('score', { ascending: false }).order('id', { ascending: true }).range(0, 4999)   // 점수 같으면 id 순 → 번호 고정
-      : sb.rpc('leads_day_list', { p_date: day, p_user: target }).then(r => r.error ? sb.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', day).order('score', { ascending: false }).order('id', { ascending: true }).range(0, 4999) : r),   // 지난 날짜: 배분 이력 + 그날 결과 (0072)
-    isToday ? sb.from('leads').select(cols).eq('assigned_to', target).eq('status', 'interested').order('last_result_at', { ascending: false }).order('id', { ascending: true }).limit(300) : Promise.resolve({ data: [] as any[] }),   // 관심: 오늘 포함 전부
-    isToday ? sb.from('leads').select(cols).eq('assigned_to', target).eq('status', 'won').order('last_result_at', { ascending: false }).order('id', { ascending: true }).limit(300) : Promise.resolve({ data: [] as any[] }),   // 계약 전부
-    sb.from('proposals').select('code,lead_id,title,views,last_view_at').eq('owner_id', target).order('last_view_at', { ascending: false, nullsFirst: false }).limit(300),
+    isToday ? rd.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', day).order('score', { ascending: false }).order('id', { ascending: true }).range(0, 4999)   // 점수 같으면 id 순 → 번호 고정
+      : rd.rpc('leads_day_list', { p_date: day, p_user: target }).then(r => r.error ? rd.from('leads').select(cols).eq('assigned_to', target).eq('assigned_date', day).order('score', { ascending: false }).order('id', { ascending: true }).range(0, 4999) : r),   // 지난 날짜: 배분 이력 + 그날 결과 (0072)
+    isToday ? rd.from('leads').select(cols).eq('assigned_to', target).eq('status', 'interested').order('last_result_at', { ascending: false }).order('id', { ascending: true }).limit(300) : Promise.resolve({ data: [] as any[] }),   // 관심: 오늘 포함 전부
+    isToday ? rd.from('leads').select(cols).eq('assigned_to', target).eq('status', 'won').order('last_result_at', { ascending: false }).order('id', { ascending: true }).limit(300) : Promise.resolve({ data: [] as any[] }),   // 계약 전부
+    rd.from('proposals').select('code,lead_id,title,views,last_view_at').eq('owner_id', target).order('last_view_at', { ascending: false, nullsFirst: false }).limit(300),
   ]);
-  const { data: myC } = await sb.from('my_customers').select('id,name,phone,memo,created_at').eq('user_id', target).order('created_at', { ascending: false });
+  const { data: myC } = await rd.from('my_customers').select('id,name,phone,memo,created_at').eq('user_id', target).order('created_at', { ascending: false });
   const [{ count: kwDone }, { data: rsv }] = await Promise.all([
     adm.from('kw_contacts').select('id', { count: 'exact', head: true }).eq('claimed_by', target).neq('result', '').gte('result_at', d0).lt('result_at', d1),
     isToday ? adm.from('kw_contacts').select('id,store_name,store_url,company,rep,email,phone,address,biz_no,keywords,reserved_kw,reserved_by,reserved_until,claimed_by,result,memo,result_at').or(`claimed_by.eq.${target},and(reserved_by.eq.${target},claimed_by.is.null,reserved_until.gt.${new Date().toISOString()})`).order('id', { ascending: true }).limit(3000) : Promise.resolve({ data: [] as any[] }),   // 내 담당 + 내 요청 건(우선 기간 중). 0090 실행 전엔 오류 → 빈 값
@@ -85,7 +87,7 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
   const ids = all.map(x => x.id);
   // 사람당 1,000곳 넘게 배분되면 한 번에 다 조회하다 화면이 안 열림 → 이력은 300개씩 나눠서, 지수는 앞쪽(점수 높은 순) 200곳 + 관심·계약만
   const chunks: number[][] = []; for (let i = 0; i < ids.length; i += 300) chunks.push(ids.slice(i, i + 300));
-  const hist = (await Promise.all(chunks.map(c => sb.from('lead_contacts').select('lead_id,user_id,round,status,note,created_at').in('lead_id', c).order('created_at', { ascending: false }).limit(1000)))).flatMap(r => r.data ?? []).sort((a: any, b: any) => a.created_at < b.created_at ? 1 : -1);
+  const hist = (await Promise.all(chunks.map(c => rd.from('lead_contacts').select('lead_id,user_id,round,status,note,created_at').in('lead_id', c).order('created_at', { ascending: false }).limit(1000)))).flatMap(r => r.data ?? []).sort((a: any, b: any) => a.created_at < b.created_at ? 1 : -1);
   const uids = [...new Set((hist ?? []).map((h: any) => h.user_id).filter(Boolean))];
   const { data: names } = uids.length ? await supabaseAdmin().from('profiles').select('id,name').in('id', uids) : { data: [] as any[] };   // 다른 팀 사람 이름도 보이게 (RLS 우회, 이름만)
   const nm = Object.fromEntries((names ?? []).map((x: any) => [x.id, x.name]));
@@ -103,7 +105,7 @@ export default async function CallsPage({ searchParams }: { searchParams: { u?: 
           { key: 'interested', label: '관심', rows: interested, empty: '관심으로 남긴 업체가 없습니다.', sub: '최근 결과 순 · 약속 날짜 지난 건 먼저 연락' },
           { key: 'won', label: '계약', rows: wonL, empty: '계약한 업체가 없습니다.', sub: '최근 계약 순' },
         ] : [{ key: 'today', label: dayLabel, rows: t, empty: `${dayLabel} 배분된 업체가 없습니다.`, sub: '배분 이력 기준' }]} />
-      {(target === me.id || lead) && <MyCustomers rows={(myC ?? []) as MyCustomer[]} canEdit={target === me.id} title={target === me.id ? '내 고객 (콜 리스트 제외)' : `${who} 고객 (콜 리스트 제외)`} />}
+      {(target === me.id || lead || mgr) && <MyCustomers rows={(myC ?? []) as MyCustomer[]} canEdit={target === me.id} title={target === me.id ? '내 고객 (콜 리스트 제외)' : `${who} 고객 (콜 리스트 제외)`} />}
     </div>
   );
 }
