@@ -2,6 +2,7 @@
 import { Fragment, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
+import { addItems } from '../rank-watch/actions';
 import { dbAdd, dbUpdate, dbDelete, dbRestore, dbPurge, dbTransfer, dbRank, type DbRow, type DbIn } from './actions';
 
 const GRADES = ['S', 'A', 'B', 'C', 'D', 'E', 'F'];
@@ -74,6 +75,8 @@ export default function MyDbClient({ me, target, who, trash, today, rows0, err, 
     if (sort) { const g = SORTS[sort.k]; out.sort((a, b) => { const x = g(a), y = g(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.d; }); }
     return out; /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [rows, tab, kw, today, sort, flt]);
   const patch = async (r: DbRow, p: Partial<DbIn>) => { const x = await dbUpdate(r.id, p); if (!x.ok) return notify(x.msg, 'bad'); setRows(rs => rs.map(y => y.id === r.id ? x.row : y)); if ('status' in p || 'grade' in p || 'next_on' in p || 'alarm_time' in p) notify(p.status === '결제' ? '결제로 표시했습니다' : 'alarm_time' in p || 'next_on' in p ? (x.row.next_on ? `⏰ 알람 설정 — ${x.row.next_on.slice(5).replace('-', '/')} ${x.row.alarm_time || '아침'}` : '알람 해제') : '저장됨', 'ok'); };
+  // 「순위 체크」 메뉴(매일 자동 수집)로 넘기기 — 상품 링크 + 키워드를 상호명 그룹으로 등록
+  const toWatch = async (r: DbRow) => { if (!r.item.trim()) return notify('키워드 칸을 먼저 채워 주세요', 'bad'); if (!/\/(products|catalog)\/\d+/.test(r.url)) return notify('URL 칸에 상품 링크를 넣어 주세요', 'bad'); const fd = new FormData(); fd.set('url', r.url.trim()); fd.set('keywords', r.item.trim()); fd.set('group', r.name); fd.set('memo', '내 DB 에서 등록'); const x = await addItems(fd); notify(x.ok ? `「${r.name}」 순위 체크에 등록했습니다 — 순위 체크 메뉴에서 매일 수집됩니다` : x.msg, x.ok ? 'ok' : 'bad', 5000); };
   const [open, setOpen] = useState(0);   // 순위 이력을 펼친 줄
   const [rk, setRk] = useState(0); const md = (t: string) => new Date(new Date(t).getTime() + 9 * 3600e3).toISOString().slice(5, 16).replace('-', '/').replace('T', ' ');
   const rank = async (r: DbRow) => { setRk(r.id); const x = await dbRank(r.id); setRk(0); notify(x.msg, x.ok ? 'ok' : 'bad', 5000); if (x.ok) setRows(rs => rs.map(y => y.id === r.id ? x.row : y)); };
@@ -150,7 +153,8 @@ export default function MyDbClient({ me, target, who, trash, today, rows0, err, 
           <td style={{ whiteSpace: 'nowrap' }}>{canEdit ? <input type="date" defaultValue={r.contact_date ?? ''} onBlur={e => { if (e.target.value !== (r.contact_date ?? '')) patch(r, { contact_date: e.target.value || null }); }} style={{ ...inp, width: 132, background: 'transparent' }} /> : (r.contact_date ?? '').slice(5)}</td>
           <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
             {r.rank_at ? <div title={r.rank_title ? `찾은 상품: ${r.rank_title}` : '상위 100 안에서 못 찾음'} style={{ fontWeight: 800, fontSize: 14, color: r.rank_now ? (r.rank_now <= 10 ? '#B42318' : r.rank_now <= 40 ? '#B54708' : 'inherit') : '#98A2B3' }}>{r.rank_now ? `${r.rank_now}위` : '100위 밖'}{!!r.rank_now && !!r.rank_prev && r.rank_prev !== r.rank_now && <span style={{ fontSize: 11, marginLeft: 3, color: r.rank_prev > r.rank_now ? '#067647' : '#B42318' }}>{r.rank_prev > r.rank_now ? `▲${r.rank_prev - r.rank_now}` : `▼${r.rank_now - r.rank_prev}`}</span>}</div> : null}
-            {!trash && <button type="button" className="btn ghost" disabled={rk === r.id} onClick={() => rank(r)} title="URL 칸의 상품 링크로, 키워드를 지수 프로그램에서 지금 새로 조회해 상위 100 안 순위를 봅니다" style={{ padding: '2px 8px', fontSize: 11.5, minHeight: 0 }}>{rk === r.id ? '조회 중…' : r.rank_at ? '다시' : '순위'}</button>}
+            {!trash && <button type="button" className="btn ghost" disabled={rk === r.id} onClick={() => rank(r)} title="바로 조회 — URL 칸의 상품 링크로 지금 새로 조회합니다. 누르지 않아도 평일 10시·14시에 자동으로 찍힙니다" style={{ padding: '2px 8px', fontSize: 11.5, minHeight: 0 }}>{rk === r.id ? '조회 중…' : r.rank_at ? '다시' : '순위'}</button>}
+            {mine && !trash && <button type="button" onClick={() => toWatch(r)} title="이 상품·키워드를 「순위 체크」 메뉴에 등록 — 매일 자동으로 순위가 수집됩니다 (결제 고객용)" style={{ display: 'block', margin: '3px auto 0', border: 0, background: 'none', cursor: 'pointer', padding: 0, fontSize: 10.5, color: 'var(--accent)', fontWeight: 700 }}>순위 체크로 →</button>}
             {r.rank_at && <div className="cell-sub" style={{ fontSize: 10.5 }}>{md(r.rank_at)}</div>}
             {(r.rank_hist ?? []).length > 0 && <button type="button" onClick={() => setOpen(o => o === r.id ? 0 : r.id)} title="누르면 순위 이력 그래프" style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, margin: '2px auto 0', display: 'block' }}><RankChart h={(r.rank_hist ?? []).slice(-20)} w={70} ht={22} /><span className="help" style={{ fontSize: 10.5 }}>이력 {(r.rank_hist ?? []).length}회 {open === r.id ? '▲' : '▼'}</span></button>}</td>
           <td><div style={{ fontWeight: 700 }}><Txt r={r} k="name" /></div><div className="cell-sub" style={{ fontSize: 11 }}>{[r.source, r.kind, r.channel, r.biz_no && `사업자 ${r.biz_no}`].filter(Boolean).join(' · ')}</div></td>

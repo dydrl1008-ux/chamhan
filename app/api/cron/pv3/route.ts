@@ -4,7 +4,7 @@ import { ingestAi, queueMissingRenders } from '@/lib/pv3Tasks';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { autoDiscover } from '@/lib/kwDiscover';
 import { threadsTick } from '@/lib/threads';
-import { myDbTick } from '@/lib/myDb';
+import { myDbTick, myDbRankTick } from '@/lib/myDb';
 
 const KEEP_DAYS = 30;
 /** 30일 지난 제안서 이미지 삭제 — 한 번에 최대 500개. 밀린 게 없으면 6시간에 한 번만 확인 (0080 SQL 필요, 없으면 아무것도 안 함) */
@@ -34,6 +34,7 @@ export async function GET(req: Request) {
     catch (e: any) { kw = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 키워드 발굴(자동) — 15분에 한 번, 실패해도 발송에 영향 없음
     let th = 'skip'; try { if (Date.now() - t0 < 25_000) th = await threadsTick(); } catch (e: any) { th = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 쓰레드 자동 발행 — 실패해도 발송에 영향 없음
     let md = 'skip'; try { md = await myDbTick(); } catch (e: any) { md = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 내 DB 알림 — 하루 한 번
-    return NextResponse.json({ ok: true, ...r, renders, gc, kw, th, md });
+    let mr = 'skip'; try { mr = await myDbRankTick(); } catch (e: any) { mr = 'err ' + String(e?.message ?? e).slice(0, 60); }   // 내 DB 순위 자동 조회 — 평일 10시·14시, 키워드당 한 번
+    return NextResponse.json({ ok: true, ...r, renders, gc, kw, th, md, mr });
   } catch (e: any) { return NextResponse.json({ ok: false, msg: e.message }, { status: 500 }); }
 }
