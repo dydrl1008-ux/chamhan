@@ -20,9 +20,9 @@ create table if not exists my_db (
   status       text not null default '진행',        -- 진행 / 결제 / 보류 / 종료
   paid_at      timestamptz,
   next_on      date,
-  note1        text not null default '',            -- 상황설명 및 진행사항
-  note2        text not null default '',            -- 1차 콜(추가 통화 1)
-  note3        text not null default '',            -- 추가 통화 2
+  note1        text not null default '',            -- 상황설명 및 진행사항 (= 1차 콜)
+  note2        text not null default '',            -- 2차 콜
+  note3        text not null default '',            -- 3차 콜
   deleted_at   timestamptz,
   deleted_by   uuid references profiles(id) on delete set null,
   created_at   timestamptz not null default now(),
