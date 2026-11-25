@@ -37,19 +37,20 @@ export async function dbList(userId?: string, trash = false): Promise<R<{ rows: 
   }
   return { ok: true, msg: '', rows };
 }
-/** 여러 건 넣기 (직접 입력·엑셀·붙여넣기). 같은 전화번호가 이미 누군가의 DB 에 있으면 건너뛰고 누가 관리 중인지 알려 준다. forUser: 총괄이 다른 직원에게 배정 */
+/** 여러 건 넣기 (직접 입력·엑셀·붙여넣기). 다른 직원과 겹쳐도 등록된다 — 막는 건 두 가지뿐: 내 DB 에 이미 있는 번호, 다른 직원이 「결제」로 관리 중인 번호. forUser: 총괄이 다른 직원에게 배정 */
 export async function dbAdd(rows: DbIn[], source: string, forUser?: string): Promise<R<{ added: number; dup: { name: string; who: string }[] }>> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
   const owner = forUser && forUser !== me.id ? (isBoss(me) ? forUser : null) : me.id; if (!owner) return { ok: false, msg: '다른 직원에게 넣는 건 총괄만 가능합니다' };
   const list = (rows ?? []).slice(0, 2000).map(clean).filter(r => r.name); if (!list.length) return { ok: false, msg: '넣을 업체가 없습니다 (상호명이 비어 있음)' };
   const sb = supabaseAdmin(); const keys = Array.from(new Set(list.map(r => r.phone_key).filter(k => k.length >= 8)));
-  const taken = new Map<string, string>();
-  for (let i = 0; i < keys.length; i += 300) { const { data, error } = await sb.from('my_db').select('phone_key,owner_id').in('phone_key', keys.slice(i, i + 300)).is('deleted_at', null); if (error) return { ok: false, msg: needSql(error.message) }; for (const r of data ?? []) taken.set(r.phone_key, r.owner_id); }
+  const taken = new Map<string, string>();   // 번호 → 막는 사람 (내 것이면 본인, 아니면 결제로 관리 중인 직원)
+  for (let i = 0; i < keys.length; i += 300) { const { data, error } = await sb.from('my_db').select('phone_key,owner_id,status').in('phone_key', keys.slice(i, i + 300)).is('deleted_at', null); if (error) return { ok: false, msg: needSql(error.message) };
+    for (const r of data ?? []) { if (r.owner_id === owner) taken.set(r.phone_key, owner); else if (r.status === '결제' && taken.get(r.phone_key) !== owner) taken.set(r.phone_key, r.owner_id); } }
   const ids = Array.from(new Set(taken.values())); const names = new Map<string, string>(); if (ids.length) { const { data } = await sb.from('profiles').select('id,name').in('id', ids); for (const p of data ?? []) names.set(p.id, p.name); }
   const dup: { name: string; who: string }[] = []; const seen = new Set<string>(); const ins: any[] = [];
   for (const r of list) {
     const k = r.phone_key.length >= 8 ? r.phone_key : '';
-    if (k && taken.has(k)) { dup.push({ name: r.name, who: taken.get(k) === owner ? '이미 있음' : `${names.get(taken.get(k)!) ?? '다른 직원'} 관리 중` }); continue; }
+    if (k && taken.has(k)) { dup.push({ name: r.name, who: taken.get(k) === owner ? '이미 있음' : `${names.get(taken.get(k)!) ?? '다른 직원'} 결제 고객` }); continue; }
     if (k && seen.has(k)) { dup.push({ name: r.name, who: '파일 안 중복' }); continue; } if (k) seen.add(k);
     ins.push({ ...r, owner_id: owner, created_by: me.id, source: owner === me.id ? s(source, 10) || '직접' : '배정', paid_at: r.status === '결제' ? new Date().toISOString() : null });
   }
@@ -61,14 +62,14 @@ export async function dbAdd(rows: DbIn[], source: string, forUser?: string): Pro
 export async function dbFrom(kind: 'lead' | 'kw', id: number): Promise<R> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
   const sb = supabaseAdmin(); const ref = `${kind}:${id}`;
-  const { data: ex, error: e0 } = await sb.from('my_db').select('id,owner_id').eq('src_ref', ref).is('deleted_at', null).limit(1); if (e0) return { ok: false, msg: needSql(e0.message) };
-  if (ex?.length) return { ok: false, msg: ex[0].owner_id === me.id ? '이미 내 DB 에 있습니다' : '다른 직원이 이미 담은 업체입니다' };
+  const { data: ex, error: e0 } = await sb.from('my_db').select('id').eq('src_ref', ref).eq('owner_id', me.id).is('deleted_at', null).limit(1); if (e0) return { ok: false, msg: needSql(e0.message) };
+  if (ex?.length) return { ok: false, msg: '이미 내 DB 에 있습니다' };
   let row: DbIn | null = null;
   if (kind === 'lead') { const { data } = await sb.from('leads').select('store_name,phone,keyword,category,store_url,product_url,note,assigned_to').eq('id', id).maybeSingle(); if (data && (data.assigned_to === me.id || isBoss(me))) row = { name: data.store_name, phone: data.phone ?? '', kind: '스토어', item: data.keyword ?? '', url: data.product_url || data.store_url || '', note1: data.note ?? '' }; }
   else { const { data } = await sb.from('kw_contacts').select('store_name,phone,biz_no,store_url,keywords,memo,result').eq('id', id).maybeSingle(); if (data) row = { name: data.store_name, phone: data.phone ?? '', biz_no: data.biz_no ?? '', kind: '스토어', item: (data.keywords ?? [])[0] ?? '', url: data.store_url ?? '', note1: [data.result, data.memo].filter(Boolean).join(' · ') }; }
   if (!row) return { ok: false, msg: '업체를 찾지 못했습니다' };
   const c = clean({ ...row, contact_date: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) });
-  if (c.phone_key.length >= 8) { const { data: d } = await sb.from('my_db').select('owner_id').eq('phone_key', c.phone_key).is('deleted_at', null).limit(1); if (d?.length) return { ok: false, msg: d[0].owner_id === me.id ? '같은 전화번호가 이미 내 DB 에 있습니다' : '같은 전화번호를 다른 직원이 관리 중입니다' }; }
+  if (c.phone_key.length >= 8) { const { data: d } = await sb.from('my_db').select('owner_id,status').eq('phone_key', c.phone_key).is('deleted_at', null).limit(50); if (d?.some(x => x.owner_id === me.id)) return { ok: false, msg: '같은 전화번호가 이미 내 DB 에 있습니다' }; if (d?.some(x => x.status === '결제')) return { ok: false, msg: '다른 직원의 결제 고객입니다' }; }
   const { error } = await sb.from('my_db').insert({ ...c, owner_id: me.id, created_by: me.id, source: kind === 'lead' ? '콜리스트' : '키워드콜', src_ref: ref });
   return error ? { ok: false, msg: needSql(error.message) } : { ok: true, msg: `「${c.name}」 내 DB 에 담았습니다` };
 }
