@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { notify } from '@/components/Toast';
 import { kwSetResult } from '../kw-calls/actions';
-export type KwRow = { id: number; store_name: string; store_url: string; company: string; rep: string; email: string; phone: string; address: string; keywords: string[]; reserved_kw: string; claimed: boolean; result: string; memo: string; result_at: string | null; until: string | null; prev: { who: string; result: string; memo: string; at: string }[] };
+export type KwRow = { id: number; store_name: string; store_url: string; company: string; rep: string; email: string; phone: string; address: string; biz_no: string; keywords: string[]; reserved_kw: string; claimed: boolean; result: string; memo: string; result_at: string | null; until: string | null; prev: { who: string; result: string; memo: string; at: string }[] };
 const RESULTS = ['부재', '관심', '재연락', '거절', '계약'];
 const COLOR: Record<string, string> = { 관심: '#067647', 계약: '#175CD3', 재연락: '#B54708', 거절: '#B42318', 부재: '#667085' };
 const V = '#7A5AF8';
@@ -24,6 +24,7 @@ export default function KwMine({ rows0, canEdit, who, today, owner }: { rows0: K
   const view = base.filter(r => cur.f(r) || (tab === 'open' && touched.has(r.id)));
   const kst = (t: string) => new Date(new Date(t).getTime() + 9 * 3600e3).toISOString();
   const todayN = rows.filter(r => r.result && r.result_at && kst(r.result_at).slice(0, 10) === today).length;
+  const bz = (b: string) => { const d = (b ?? '').replace(/\D/g, ''); return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : b; };   // 사업자등록번호 000-00-00000
   const copy = async (t: string) => { try { await navigator.clipboard.writeText(t); notify('복사됨', 'ok'); } catch { notify('복사 실패', 'bad'); } };
   const save = async (r: KwRow, result: string) => {
     const m = memo[r.id] ?? r.memo; const x = await kwSetResult(r.id, result, m, owner); notify(x.msg, x.ok ? 'ok' : 'bad'); if (!x.ok) return;
@@ -43,11 +44,11 @@ export default function KwMine({ rows0, canEdit, who, today, owner }: { rows0: K
         {kws.length === 1 && <span className="help" style={{ marginLeft: 8 }}>{kws[0][0]}</span>}
       </div>
     </div>
-    {view.length ? <div style={{ overflow: 'auto' }}><table><thead><tr><th style={{ width: 36 }}>#</th><th>업체</th><th>대표자</th><th>전화</th><th>이메일</th><th style={{ minWidth: 250 }}>결과 · 메모</th></tr></thead>
+    {view.length ? <div style={{ overflow: 'auto' }}><table><thead><tr><th style={{ width: 36 }}>#</th><th>업체 · 사업자번호</th><th>대표자</th><th>전화</th><th>이메일</th><th style={{ minWidth: 250 }}>결과 · 메모</th></tr></thead>
       <tbody>{view.slice(0, shown).map((r, i) => <tr key={r.id} style={{ opacity: r.result === '거절' ? .55 : 1 }}>
         <td className="cell-sub">{i + 1}</td>
         <td><div style={{ fontWeight: 700 }}>{r.store_url ? <a href={r.store_url} target="_blank" rel="noreferrer">{r.store_name}</a> : r.store_name}</div>
-          <div className="cell-sub"><span style={{ color: V, fontWeight: 700 }}>{kwOf(r)}</span>{[r.company, r.address.split(' ').slice(0, 2).join(' ')].filter(Boolean).map(x => ` · ${x}`).join('')}{!r.claimed && !r.result && r.until ? ` · ~${kst(r.until).slice(5, 10).replace('-', '/')} 까지 내 우선` : ''}</div></td>
+          <div className="cell-sub"><span style={{ color: V, fontWeight: 700 }}>{kwOf(r)}</span>{[r.company, r.address.split(' ').slice(0, 2).join(' ')].filter(Boolean).map(x => ` · ${x}`).join('')}{!r.claimed && !r.result && r.until ? ` · ~${kst(r.until).slice(5, 10).replace('-', '/')} 까지 내 우선` : ''}</div>{r.biz_no && <div className="cell-sub">사업자 <button type="button" onClick={() => copy(r.biz_no.replace(/\D/g, ''))} title="누르면 복사 (숫자만)" style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, fontSize: 12.5, color: 'inherit', fontWeight: 700 }}>{bz(r.biz_no)}</button></div>}</td>
         <td style={{ whiteSpace: 'nowrap' }}>{r.rep || '-'}</td>
         <td style={{ whiteSpace: 'nowrap' }}>{r.phone ? <button type="button" onClick={() => copy(r.phone)} title="누르면 복사" style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, fontWeight: 700, fontSize: 13.5 }}>{r.phone}</button> : '-'}</td>
         <td className="cell-sub">{r.email ? <button type="button" onClick={() => copy(r.email)} title="누르면 복사" style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0, fontSize: 12.5, color: 'inherit' }}>{r.email}</button> : '-'}</td>
