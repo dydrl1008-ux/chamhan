@@ -6,6 +6,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { todayKST } from '@/lib/date/kst';
 import { PageHeader } from '@/components/ui';
 import { dbList } from './actions';
+import { isMeta } from '@/lib/meta';
+import { linkRepair } from '@/lib/metaLink';
 import MyDbClient from './MyDbClient';
 export const dynamic = 'force-dynamic';
 export default async function MyDbPage({ searchParams }: { searchParams: { u?: string; v?: string } }) {
@@ -15,6 +17,7 @@ export default async function MyDbPage({ searchParams }: { searchParams: { u?: s
   { const q = sb.from('profiles').select('id,name,team_id').eq('is_active', true).neq('role', 'admin').order('name'); const { data } = boss ? await q : mgr ? await q.eq('team_id', me.team_id ?? -1) : await q; people = (data ?? []) as any[]; }
   const canPick = boss || mgr; const target = canPick && searchParams.u && people.some(p => p.id === searchParams.u) ? searchParams.u : me.id;
   const trash = searchParams.v === 'trash'; const who = people.find(p => p.id === target)?.name ?? me.name;
+  let linkErr = ''; if (boss || await isMeta(me)) { try { linkErr = (await linkRepair()).err; } catch { /* 맞추기 실패는 화면을 막지 않는다 */ } }   // 배정됐는데 내 DB 에 없는 메타 건을 채운다
   const r = await dbList(target, trash);
   // 사람별 요약 (팀장·총괄) — 방치 DB 는 자동으로 풀지 않고 여기서 보고 총괄이 판단
   let sum: { id: string; name: string; n: number; due: number; hot: number; paid: number; left: number; stale: number; del: number }[] = [];
@@ -28,6 +31,7 @@ export default async function MyDbPage({ searchParams }: { searchParams: { u?: s
   }
   const href = (u: string, v?: string) => `/my-db?${[u !== me.id ? `u=${u}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&')}`;
   return <div style={{ display: 'grid', gap: 20 }}>
+    {linkErr && <div className="card" style={{ color: '#B42318', marginBottom: 12 }}>메타 인바운드 건을 내 DB 로 가져오지 못했습니다 — {linkErr}</div>}
     <PageHeader title={(target === me.id ? '내 DB' : `${who} · DB`) + (trash ? ' · 휴지통' : '')} desc="내 가망 고객을 한곳에 모아 등급·다음 연락일로 관리합니다. 엑셀로 올리거나 콜 리스트에서 「내 DB」로 담을 수 있습니다 · 결제로 바꾸면 줄이 노랗게 표시됩니다"
       actions={<span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>{trash ? <Link href={href(target)} className="btn ghost">← 목록으로</Link> : <Link href={href(target, 'trash')} className="btn ghost">휴지통</Link>}{target !== me.id && <Link href="/my-db" className="btn ghost">내 DB</Link>}</span>} />
     {canPick && sum.length > 0 && <div className="card" style={{ padding: 0 }}>

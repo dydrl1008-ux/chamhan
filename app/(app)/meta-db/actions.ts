@@ -5,7 +5,7 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { metaAccess, metaTeamId, META_STATUSES } from '@/lib/meta';
 import { metaDeployed } from '@/lib/metaEdu';
-import { linkAssign, syncToMyDb } from '@/lib/metaLink';
+import { linkAssign, linkRepair, syncToMyDb } from '@/lib/metaLink';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
 export type MetaLead = { id: number; received_on: string; source: string; name: string; phone: string; product: string; inquiry: string; url: string; owner_id: string | null; status: string; paid_amt: number | null; cost_amt: number | null; paid_at: string | null; next_on: string | null; memo: string; updated_at: string; inflow: string; received_at: string | null; assigned_at: string | null; first_contact_at: string | null; last_contact_at: string | null; contacts: number };
 export type MetaIn = { received_on?: string | null; source?: string; name?: string; phone?: string; product?: string; inquiry?: string; url?: string };
@@ -26,6 +26,7 @@ export async function metaPeople(): Promise<{ id: string; name: string; role: st
 export async function mdList(owner?: string): Promise<R<{ rows: MetaLead[] }>> {
   const x = await who(); if (!x) return { ok: false, msg: '권한 없음' };
   const sb = supabaseAdmin(); const o = x.lead ? (owner || 'all') : x.me.id; const rows: MetaLead[] = [];
+  try { await linkRepair(); } catch { /* 내 DB 맞추기 실패는 목록을 막지 않는다 */ }
   for (let from = 0; from < 20000; from += 1000) {
     let q = sb.from('meta_leads').select(COLS).order('received_on', { ascending: false }).order('id', { ascending: false }).range(from, from + 999);
     if (o === 'none') q = q.is('owner_id', null); else if (o !== 'all') q = q.eq('owner_id', o);
@@ -60,9 +61,9 @@ export async function mdAssign(ids: number[], to: string): Promise<R> {
   const list = (ids ?? []).map(Number).filter(Number.isFinite).slice(0, 3000); if (!list.length) return { ok: false, msg: '먼저 체크해 주세요' };
   if (to && !(await metaPeople()).some(p => p.id === to)) return { ok: false, msg: '메타팀 사람에게만 배정할 수 있습니다' };
   const sb = supabaseAdmin(); const { data, error } = await sb.from('meta_leads').update({ owner_id: to || null, assigned_at: to ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).in('id', list).select('id'); if (error) return { ok: false, msg: needSql(error.message) };
-  await linkAssign((data ?? []).map(d => d.id), to || null, x.me.id);   // 내 DB 에 줄 생성 · 재배정이면 메모째 이동 · 해제면 내림
+  const warn = await linkAssign((data ?? []).map(d => d.id), to || null, x.me.id);   // 내 DB 에 줄 생성 · 재배정이면 메모째 이동 · 해제면 내림
   if (to && to !== x.me.id && data?.length) await sb.from('notifications').insert({ user_id: to, kind: 'info', title: `인바운드 DB ${data.length}건이 배정되었습니다`, body: '내 DB 에서 확인하고 바로 연락해 주세요', link: '/my-db' });
-  revalidatePath('/meta-db'); return { ok: true, msg: `${data?.length ?? 0}건 ${to ? '배정' : '미배정으로'}` };
+  revalidatePath('/meta-db'); return warn ? { ok: false, msg: `배정은 됐지만 내 DB 에 넣지 못했습니다 — ${warn}` } : { ok: true, msg: `${data?.length ?? 0}건 ${to ? '배정 — 내 DB 로 들어갔습니다' : '미배정으로'}` };
 }
 /** 처리 기록 — 담당자 본인 또는 팀장·총괄. 결제로 바꾸면 결제 시각이 찍힌다 */
 export async function mdUpdate(id: number, patch: { status?: string; paid_amt?: number | null; cost_amt?: number | null; next_on?: string | null; memo?: string; product?: string; name?: string; phone?: string }): Promise<R<{ row: MetaLead }>> {

@@ -8,16 +8,27 @@ export function metaStatusOf(my: string, touched: boolean): string {
 }
 const MY_OF: Record<string, string> = { 미연락: '진행', 상담중: '진행', 부재: '부재', 결제: '결제', 허수: '허수', 중복: '종료', 종료: '종료' };
 /** 배정 · 재배정 · 배정 해제 — leads: 방금 배정이 바뀐 인바운드 DB */
-export async function linkAssign(leadIds: number[], to: string | null, by: string): Promise<void> {
-  if (!leadIds.length) return; const sb = supabaseAdmin(); const now = new Date().toISOString();
-  const { data: leads } = await sb.from('meta_leads').select('id,received_on,source,name,phone,phone_key,product,inquiry,url,status').in('id', leadIds); if (!leads?.length) return;
-  const { data: have, error } = await sb.from('my_db').select('id,meta_id').in('meta_id', leadIds); if (error) return;   // 0104 SQL 전 — 내 DB 연결 없이 배정만
+/** 돌려주는 값: 내 DB 반영이 안 됐을 때의 사유 (정상이면 빈 문자열) */
+export async function linkAssign(leadIds: number[], to: string | null, by: string | null): Promise<string> {
+  if (!leadIds.length) return ''; const sb = supabaseAdmin(); const now = new Date().toISOString();
+  const { data: leads } = await sb.from('meta_leads').select('id,received_on,source,name,phone,phone_key,product,inquiry,url,status').in('id', leadIds); if (!leads?.length) return '';
+  const { data: have, error } = await sb.from('my_db').select('id,meta_id').in('meta_id', leadIds); if (error) return /meta_id/.test(error.message) ? '0104 SQL(내 DB 연결 칸)이 아직 반영되지 않았습니다' : error.message;
   const old = new Map((have ?? []).map(h => [Number(h.meta_id), h.id]));
-  if (!to) { if (old.size) await sb.from('my_db').update({ deleted_at: now, deleted_by: by, updated_at: now }).in('id', [...old.values()]).is('deleted_at', null); return; }   // 배정 해제 → 그 사람 목록에서 내림 (다시 배정하면 메모째 돌아온다)
+  if (!to) { if (old.size) await sb.from('my_db').update({ deleted_at: now, deleted_by: by, updated_at: now }).in('id', [...old.values()]).is('deleted_at', null); return ''; }   // 배정 해제 → 그 사람 목록에서 내림 (다시 배정하면 메모째 돌아온다)
   if (old.size) await sb.from('my_db').update({ owner_id: to, deleted_at: null, deleted_by: null, source: '메타', updated_at: now }).in('id', [...old.values()]);
   const ins = leads.filter(l => !old.has(l.id) && l.status !== '중복' && l.status !== '허수').map(l => ({ owner_id: to, created_by: by, source: '메타', src_ref: `meta:${l.id}`, meta_id: l.id, contact_date: l.received_on, name: l.name || l.phone || '(이름 없음)', phone: l.phone, phone_key: l.phone_key,
     kind: l.source, item: [l.product, l.inquiry].filter(Boolean).join(' · ').slice(0, 80), url: l.url, status: MY_OF[l.status] ?? '진행' }));
-  if (ins.length) await sb.from('my_db').insert(ins);
+  if (ins.length) { const { error: e2 } = await sb.from('my_db').insert(ins); if (e2) return e2.message; }
+  return '';
+}
+/** 배정은 됐는데 내 DB 에 줄이 없는 건(또는 담당자가 다른 건)을 찾아 맞춘다 — 화면을 열 때마다 조용히 한 번. 돌려주는 값: 고친 건수와 실패 사유 */
+export async function linkRepair(): Promise<{ fixed: number; err: string }> {
+  const sb = supabaseAdmin(); const { data: leads, error } = await sb.from('meta_leads').select('id,owner_id,status').not('owner_id', 'is', null).limit(5000); if (error || !leads?.length) return { fixed: 0, err: '' };
+  const want = leads.filter(l => l.status !== '중복' && l.status !== '허수'); const { data: have, error: e2 } = await sb.from('my_db').select('meta_id,owner_id,deleted_at').not('meta_id', 'is', null).limit(10000); if (e2) return { fixed: 0, err: /meta_id/.test(e2.message) ? '0104 SQL(내 DB 연결 칸)이 아직 반영되지 않았습니다' : e2.message };
+  const cur = new Map((have ?? []).map(h => [Number(h.meta_id), h])); const todo = new Map<string, number[]>();
+  for (const l of want) { const h = cur.get(l.id); if (!h || h.owner_id !== l.owner_id || h.deleted_at) todo.set(l.owner_id, [...(todo.get(l.owner_id) ?? []), l.id]); }
+  let fixed = 0, err = ''; for (const [o, ids] of todo) { const m = await linkAssign(ids, o, null); if (m) err = m; else fixed += ids.length; }
+  return { fixed, err };
 }
 /** 내 DB 에서 메타 건을 고쳤을 때 — 인바운드 DB 에 상태 · 결제 금액 · 상품비 · 다음 연락 · 연락 차수를 반영 */
 export async function syncFromMyDb(row: { meta_id?: number | null; status: string; paid_amt?: number | null; cost_amt?: number | null; next_on: string | null; note1: string; note2: string; note3: string; grade: string; channel: string }): Promise<void> {
