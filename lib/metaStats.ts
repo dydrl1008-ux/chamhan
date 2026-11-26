@@ -26,7 +26,7 @@ export async function computeMetaStats(month: string, people: { id: string; name
     for (const x of [g, tot]) { x.valid++; if (l.status === '미연락') x.wait++; if (reached) x.reached++; if (paid) x.paidLeads++; x.cohortAmt += c; }
     s.valid++; if (reached) s.reached++; if (paid) s.paidLeads++; s.cohortAmt += c; }
   for (const p of pays) { if (p.paid_on < from || p.paid_on > to) continue; const g = line(p.owner_id); const a = Number(p.amount), c = Number(p.cost);
-    for (const x of [g, tot]) { x.amt += a; x.cost += c; if (p.kind === '환불') x.refund += a; else if (first.get(p.lead_id) === p.id) { x.newCnt++; x.newAmt += a; } else { x.reCnt++; x.reAmt += a; } } }
+    for (const x of [g, tot]) { x.amt += a; x.cost += c; if (p.kind === '환불') x.refund += a; else if (p.kind !== '결제') { /* 킵 사용 — 상품비만 */ } else if (first.get(p.lead_id) === p.id) { x.newCnt++; x.newAmt += a; } else { x.reCnt++; x.reAmt += a; } } }
   const lines = [...by.values()].filter(l => l.staff || l.n || l.amt || l.newCnt || l.reCnt).sort((a, b) => Number(b.staff) - Number(a.staff));
   return { month, from, to, spend, unit: tot.valid ? spend / tot.valid : 0, lines, tot, src: [...src.values()], at: new Date().toISOString() };
 }

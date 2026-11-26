@@ -65,7 +65,7 @@ export default function RequestClient({ linked, settleId, lastError, today, canA
               {inb ? <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
                 <input placeholder="이름 · 전화번호로 찾기" value={inbQ} onChange={e => setInbQ(e.target.value)} />
                 <select value={inbLead} onChange={e => setInbLead(e.target.value ? Number(e.target.value) : '')}><option value="">내 인바운드 고객 선택 *</option>{metaLeads.filter(l => !inbQ.trim() || l.label.toLowerCase().replace(/[\s-]/g, '').includes(inbQ.trim().toLowerCase().replace(/[\s-]/g, ''))).slice(0, 200).map(l => <option key={l.id} value={l.id}>{l.label}</option>)}</select>
-                <div style={{ fontSize: 12, color: '#6941C6' }}>접수하면 이 고객의 결제 내역에 자동으로 들어갑니다 — 판매총액 {w(Math.round(i.saleTotalAmt / 1.1))} · 상품비 {w(Math.round(c.prodTotalAmt / 1.1))} (VAT 제외). 처음이면 1차, 이미 있으면 다음 차수로 붙습니다.</div>
+                <div style={{ fontSize: 12, color: '#6941C6' }}>접수하면 이 고객의 결제 내역에 자동으로 들어갑니다 — 결제 {w(Math.round(Math.max(0, c.expectAmt) / 1.1))} · 상품비 {w(Math.round(c.prodTotalAmt / 1.1))} (VAT 제외). 결제는 실제 입금분만 잡습니다: 선입금은 전액, 킵으로 쓰는 슬롯은 0원(상품비만).</div>
               </div> : <div style={{ fontSize: 12, color: '#667085', marginTop: 4 }}>체크를 풀면 이 정산은 메타 실적(결제 내역)에 잡히지 않습니다. 인바운드 고객이 아닐 때만 풀어 주세요.</div>}
             </div>}
             <div><button className="btn" disabled={busy || !i.custId || !i.prodId || !i.gubun} onClick={submit}>{busy ? '접수 중…' : '정산요청 접수'}</button></div>
