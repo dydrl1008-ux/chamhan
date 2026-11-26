@@ -68,14 +68,22 @@ export async function watchHistory(ids: string[], days = 30): Promise<Record<str
 }
 
 /** 순위 조회 — 키워드별로 묶어 지수 프로그램을 키워드당 한 번만 새로 조회, 그 키워드를 쓰는 항목 전부에 순위 기록. 0 = 100위 밖 */
+const GAP_MS = 2500;   // 지수 프로그램 조회 간격
 export async function checkWatch(rows: WatchRow[], budgetMs = 40000): Promise<{ ok: boolean; msg: string; n: number; left: number }> {
   if (!rows.length) return { ok: false, msg: '대상 없음', n: 0, left: 0 };
   const wh = supabaseAdmin(); const t0 = Date.now(); const by = new Map<string, WatchRow[]>();
   for (const w of rows) { const k = String(w.keyword ?? '').trim().replace(/\s+/g, ' '); if (!k || k.length > 40 || !w.mid) continue; by.set(k, [...(by.get(k) ?? []), w]); }
-  // 키워드 3개씩 동시에 조회 (한 키워드가 실패해도 나머지는 계속). 1인 하루 조회 한도는 적용하지 않는다
-  let n = 0, kws = 0, err = ''; const failed: string[] = []; const queue = [...by];
+  // 키워드를 하나씩, 조회 시작 간격 2.5초로 (동시에 여러 개 넣으면 지수 프로그램이 「너무 빠른 조회」로 막는다). 한 키워드가 실패해도 나머지는 계속. 1인 하루 조회 한도는 적용하지 않는다
+  let n = 0, kws = 0, err = '', cooled = false; const failed: string[] = []; const queue = [...by]; const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
   const one = async ([kw, list]: [string, WatchRow[]]) => {
-    let prods: any[]; try { prods = ((await search(kw, list[0].user_id, true, true)).products ?? []) as any[]; } catch (e: any) { failed.push(kw); if (!err) err = `「${kw}」 조회 실패: ${String(e?.message ?? e).slice(0, 80)}`; return; }
+    let prods: any[] = []; let got = false;
+    for (let t = 0; t < 2 && !got; t++) {   // 지수 프로그램이 「너무 빠른 조회」로 막으면 8초 쉬고 한 번 더. 또 막히면 이번 실행은 여기서 멈춘다(남은 건 5분 뒤 이어서)
+      try { prods = ((await search(kw, list[0].user_id, true, true)).products ?? []) as any[]; got = true; }
+      catch (e: any) { const m = String(e?.message ?? e); const fast = /빠른|잠시 후|429|too many/i.test(m);
+        if (fast && t === 0 && Date.now() - t0 + 9000 < budgetMs) { await sleep(8000); continue; }
+        if (fast) { cooled = true; queue.unshift([kw, list]); return; }
+        failed.push(kw); if (!err) err = `「${kw}」 조회 실패: ${m.slice(0, 80)}`; return; }
+    }
     const at = new Date().toISOString(); const ids = list.map(w => String(w.id));
     const { data: old } = await wh.from('rank_watch_ranks').select('watch_id,cur_rank').in('watch_id', ids); const was = new Map<string, number | null>((old ?? []).map((o: any) => [o.watch_id, o.cur_rank]));
     const { data: oc } = await wh.from('rank_watch_ranks').select('watch_id,cur_click,cur_sale,cur_quality').in('watch_id', ids); const wasC = new Map<string, any>((oc ?? []).map((o: any) => [o.watch_id, o]));   // 0098 실행 전엔 빈 값
@@ -93,10 +101,11 @@ export async function checkWatch(rows: WatchRow[], budgetMs = 40000): Promise<{ 
     for (const im of imgs) await wh.from('rank_watch_items').update({ image_url: im.image_url }).eq('id', im.id);
     n += list.length; kws++;
   };
-  while (queue.length && Date.now() - t0 < budgetMs) await Promise.all(queue.splice(0, 3).map(one));
+  while (queue.length && !cooled && Date.now() - t0 < budgetMs) { const s0 = Date.now(); await one(queue.shift()!); if (queue.length && !cooled) await sleep(Math.max(0, GAP_MS - (Date.now() - s0))); }
   const left = queue.length;   // 시간 안에 손도 못 댄 키워드 수 (실패한 건 다음 회차에 다시)
+  if (cooled && !n && !err) err = '지수 프로그램이 「너무 빠른 조회」로 막고 있습니다 — 잠시 후 이어서 조회합니다';
   if (err && !n) return { ok: false, msg: err, n: 0, left };
-  return { ok: true, msg: `${n}건 순위 조회 (키워드 ${kws}개)` + (left ? ` · 남은 키워드 ${left}개는 다시 눌러 주세요` : '') + (failed.length ? ` · 실패 ${failed.length}개(${failed.slice(0, 3).join(', ')}) — ${err}` : ''), n, left };
+  return { ok: true, msg: `${n}건 순위 조회 (키워드 ${kws}개)` + (left ? ` · 남은 키워드 ${left}개${cooled ? ' (조회 속도 제한으로 잠시 쉼)' : ''}` : '') + (failed.length ? ` · 실패 ${failed.length}개(${failed.slice(0, 3).join(', ')}) — ${err}` : ''), n, left };
 }
 
 /** 등록 — 상품 링크(단일) 또는 원부 링크 + 키워드 여러 개. 같은 상품·키워드는 건너뛰고, 등록하자마자 첫 순위를 조회 */

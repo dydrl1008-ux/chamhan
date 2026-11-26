@@ -4,10 +4,10 @@
 import { NextResponse } from 'next/server';
 import { myDbTick } from '@/lib/myDb';
 import { rankWatchTick } from '@/lib/rankWatch';
-export const dynamic = 'force-dynamic'; export const maxDuration = 60;
+export const dynamic = 'force-dynamic'; export const maxDuration = 300;
 export async function GET(req: Request) {
   if (!process.env.CRON_SECRET || req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) return NextResponse.json({ ok: false }, { status: 401 });
   let md = 'skip'; try { md = await myDbTick(); } catch (e: any) { md = 'err ' + String(e?.message ?? e).slice(0, 80); }
-  let rw = 'skip'; try { rw = await rankWatchTick(40000); } catch (e: any) { rw = 'err ' + String(e?.message ?? e).slice(0, 80); }
+  let rw = 'skip'; try { rw = await rankWatchTick(230000); } catch (e: any) { rw = 'err ' + String(e?.message ?? e).slice(0, 80); }
   return NextResponse.json({ ok: true, md, rw });
 }
