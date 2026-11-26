@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
+import MetaPayBox from '@/components/MetaPayBox';
 import { mdAdd, mdAssign, mdUpdate, mdDelete, type MetaLead, type MetaIn } from './actions';
 
 const STATUSES = ['미연락', '부재', '상담중', '결제', '허수', '중복', '종료'];
@@ -27,6 +28,7 @@ function parseGrid(g: any[][]): MetaIn[] {
 }
 export default function MetaDbClient({ rows: init, people, owner, lead, boss, meId, today }: { rows: MetaLead[]; people: { id: string; name: string; role: string }[]; owner: string; lead: boolean; boss: boolean; meId: string; today: string }) {
   const router = useRouter(); const [rows, setRows] = useState(init); const [st, setSt] = useState('전체'); const [q, setQ] = useState(''); const [show, setShow] = useState(100);
+  const [pay, setPay] = useState<number | null>(null);
   const [sel, setSel] = useState<Set<number>>(new Set()); const [busy, setBusy] = useState(false); const [open, setOpen] = useState(false);
   const [paste, setPaste] = useState(''); const [parsed, setParsed] = useState<MetaIn[]>([]); const [to, setTo] = useState('auto'); const [moveTo, setMoveTo] = useState(''); const fileRef = useRef<HTMLInputElement>(null);
   const nameOf = useMemo(() => new Map(people.map(p => [p.id, p.name])), [people]);
@@ -46,6 +48,7 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
   const inp: React.CSSProperties = { border: '1px solid #D0D5DD', borderRadius: 6, padding: '5px 7px', fontSize: 13, background: '#fff' };
   const cols = lead ? 12 : 10;
   return <>
+    {pay != null && <MetaPayBox leadId={pay} today={today} onClose={() => setPay(null)} onChanged={x => setRows(rs => rs.map(y => y.id === pay ? { ...y, paid_amt: x.amt, cost_amt: x.cost, status: x.paid ? '결제' : y.status } : y))} />}
     {lead && <div className="card" style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       <b style={{ fontSize: 13 }}>담당자</b>
       <select style={inp} value={owner} onChange={e => router.push('/meta-db' + (e.target.value === 'all' ? '' : '?u=' + e.target.value))}><option value="all">전체</option><option value="none">미배정</option>{people.map(p => <option key={p.id} value={p.id}>{p.name}{p.role === 'manager' ? ' (팀장)' : ''}</option>)}</select>
@@ -83,7 +86,7 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: lead ? 1300 : 1160 }}>
         <thead><tr style={{ background: '#F9FAFB', textAlign: 'left', color: '#475467', fontSize: 12.5 }}>
           {lead && <th style={{ padding: '8px 6px 8px 12px', width: 30 }}><input type="checkbox" checked={list.length > 0 && list.slice(0, show).every(r => sel.has(r.id))} onChange={e => setSel(e.target.checked ? new Set(list.slice(0, show).map(r => r.id)) : new Set())} /></th>}
-          {['접수일', '구분', '이름', '전화번호', '상품 · 문의', '상태', '결제 금액', '상품비', '다음 연락', '메모'].concat(lead ? ['담당자'] : []).map(h => <th key={h} style={{ padding: '8px 8px', whiteSpace: 'nowrap' }}>{h}</th>)}
+          {['접수일', '구분', '이름', '전화번호', '상품 · 문의', '상태', '결제 금액(누적)', '상품비', '다음 연락', '메모'].concat(lead ? ['담당자'] : []).map(h => <th key={h} style={{ padding: '8px 8px', whiteSpace: 'nowrap' }}>{h}</th>)}
         </tr></thead>
         <tbody>
           {list.slice(0, show).map(r => { const mine = lead || r.owner_id === meId; return <tr key={r.id} style={{ borderTop: '1px solid #EAECF0', background: BG[r.status], verticalAlign: 'top' }}>
@@ -94,9 +97,8 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
             <td style={{ padding: 8, whiteSpace: 'nowrap' }}>{r.phone}</td>
             <td style={{ padding: 8, minWidth: 220, maxWidth: 340 }}>{r.product && <b style={{ marginRight: 6 }}>{r.product}</b>}<span style={{ color: '#344054', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.inquiry}</span>{r.url && <> <a href={/^https?:/.test(r.url) ? r.url : 'https://' + r.url} target="_blank" rel="noreferrer" style={{ color: '#175CD3' }}>링크</a></>}{r.inflow && <div style={{ fontSize: 11.5, color: '#98A2B3', marginTop: 2 }}>유입 {r.inflow.split(' / ')[0]}</div>}</td>
             <td style={{ padding: 8 }}><select disabled={!mine} style={{ ...inp, color: SC[r.status], fontWeight: 700 }} value={r.status} onChange={e => save(r.id, { status: e.target.value })}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></td>
-            <td style={{ padding: 8 }}><input disabled={!mine} key={'a' + r.id + r.updated_at} style={{ ...inp, width: 110, textAlign: 'right' }} inputMode="numeric" placeholder={r.status === '결제' ? '금액 입력' : ''} defaultValue={r.paid_amt ? r.paid_amt.toLocaleString() : ''} onBlur={e => { const n = Number(e.target.value.replace(/[^\d]/g, '')) || null; if (n !== (r.paid_amt ?? null)) save(r.id, { paid_amt: n }); }} /></td>
-            <td style={{ padding: 8 }}><input disabled={!mine} key={'c' + r.id + r.updated_at} style={{ ...inp, width: 100, textAlign: 'right' }} inputMode="numeric" placeholder={r.status === '결제' ? '상품비' : ''} defaultValue={r.cost_amt ? r.cost_amt.toLocaleString() : ''} onBlur={e => { const n = Number(e.target.value.replace(/[^\d]/g, '')) || null; if (n !== (r.cost_amt ?? null)) save(r.id, { cost_amt: n }); }} />
-              {r.paid_amt != null && r.cost_amt != null && <div style={{ fontSize: 11.5, color: '#067647', textAlign: 'right', marginTop: 2 }}>마진 {(r.paid_amt - r.cost_amt).toLocaleString()}</div>}</td>
+            <td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>{r.paid_amt != null ? <b>{r.paid_amt.toLocaleString()}</b> : <span style={{ color: '#98A2B3' }}>—</span>}{r.owner_id && <div><button className="btn ghost" style={{ padding: '2px 8px', fontSize: 11.5, marginTop: 2 }} onClick={() => setPay(r.id)}>{r.paid_amt != null ? '결제 내역' : '+ 결제'}</button></div>}</td>
+            <td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>{r.cost_amt != null ? r.cost_amt.toLocaleString() : ''}{r.paid_amt != null && <div style={{ fontSize: 11.5, color: '#067647', fontWeight: 700 }}>마진 {(r.paid_amt - (r.cost_amt ?? 0)).toLocaleString()}</div>}</td>
             <td style={{ padding: 8 }}><input disabled={!mine} type="date" style={{ ...inp, color: r.next_on && r.next_on <= today ? '#B42318' : undefined }} value={r.next_on ?? ''} onChange={e => save(r.id, { next_on: e.target.value || null })} /></td>
             <td style={{ padding: 8, minWidth: 220 }}><textarea disabled={!mine} key={'m' + r.id + r.updated_at} style={{ ...inp, width: '100%', minHeight: 34, fontFamily: 'inherit', resize: 'vertical' }} defaultValue={r.memo} onBlur={e => { if (e.target.value !== r.memo) save(r.id, { memo: e.target.value }); }} /></td>
             {lead && <td style={{ padding: 8, whiteSpace: 'nowrap', color: r.owner_id ? '#344054' : '#B54708' }}>{r.owner_id ? (nameOf.get(r.owner_id) ?? '(팀 밖)') : '미배정'}

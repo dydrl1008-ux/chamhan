@@ -16,8 +16,9 @@ export async function dailyAuto(userId: string, day: string): Promise<DailyAuto>
   for (const r of rows) {
     if (kday(r.assigned_at) === day) a.assigned++; if (r.status === '미연락') a.waiting++; if (r.next_on === tm) a.tomorrow++;
     if (r.status !== '미연락' && kday(r.updated_at) === day) { a.handled++; a.by[r.status] = (a.by[r.status] ?? 0) + 1; }
-    if (r.status === '결제' && kday(r.paid_at) === day) { a.paid++; a.paidAmt += Number(r.paid_amt ?? 0); a.costAmt += Number(r.cost_amt ?? 0); if (r.cost_amt == null) a.noCost++; }
   }
+  { const { data: pays, error } = await supabaseAdmin().from('meta_payments').select('amount,cost,kind').eq('owner_id', userId).eq('paid_on', day).is('canceled_at', null); if (error) throw new Error(/meta_payments/.test(error.message) ? '0105 SQL(결제 내역 · 월 마감)을 먼저 실행해 주세요' : error.message);
+    for (const p of pays ?? []) { if (p.kind === '결제') a.paid++; a.paidAmt += Number(p.amount); a.costAmt += Number(p.cost); if (p.kind === '결제' && !Number(p.cost)) a.noCost++; } }   // 오늘 결제(1차 · 재결제 모두) — 결제 내역 기준
   a.margin = a.paidAmt - a.costAmt; return a;
 }
 /** 팀 전체의 한 주(월~일, 들어온 날 기준) 숫자 */
@@ -29,6 +30,8 @@ export async function weeklyAuto(from: string, people: { id: string; name: strin
   for (const r of rows) { const k = r.owner_id ?? 'none'; if (!by.has(k)) by.set(k, mk(k, k === 'none' ? '미배정' : '(팀 밖)')); const g = by.get(k)!; g.n++;
     if (r.status === '허수' || r.status === '중복') { junk++; continue; } g.valid++; if (r.status !== '미연락' && r.status !== '부재') g.reached++;
     if (!src.has(r.source)) src.set(r.source, { name: r.source, valid: 0, paid: 0 }); const s = src.get(r.source)!; s.valid++;
-    if (r.status === '결제') { g.paid++; g.amt += Number(r.paid_amt ?? 0); g.cost += Number(r.cost_amt ?? 0); s.paid++; } }
+    if (r.status === '결제') { g.paid++; s.paid++; } }
+  { const { data: pays, error } = await supabaseAdmin().from('meta_payments').select('owner_id,amount,cost').gte('paid_on', from).lte('paid_on', to).is('canceled_at', null).limit(5000); if (error) throw new Error(/meta_payments/.test(error.message) ? '0105 SQL(결제 내역 · 월 마감)을 먼저 실행해 주세요' : error.message);
+    for (const p of pays ?? []) { const k = p.owner_id ?? 'none'; if (!by.has(k)) by.set(k, mk(k, k === 'none' ? '미배정' : '(팀 밖)')); const g = by.get(k)!; g.amt += Number(p.amount); g.cost += Number(p.cost); } }   // 그 주에 결제한 금액 (재결제 포함)
   return { lines: [...by.values()], src: [...src.values()], total: rows.length, junk };
 }
