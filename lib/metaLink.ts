@@ -62,7 +62,15 @@ export async function metaNagTick(): Promise<string> {
   const by = new Map<string, typeof late>(); for (const l of late) by.set(l.owner_id, [...(by.get(l.owner_id) ?? []), l]);
   const { data: ppl } = await sb.from('profiles').select('id,name,team_id,role').in('id', [...by.keys()]); const tid = ppl?.[0]?.team_id; const { data: mgrs } = tid == null ? { data: [] as any[] } : await sb.from('profiles').select('id').eq('team_id', tid).eq('role', 'manager').eq('is_active', true);
   const rows: any[] = []; for (const [uid, list] of by) { const nm = ppl?.find(p => p.id === uid)?.name ?? ''; const body = list.slice(0, 8).map(l => `${l.name} (${l.product || '-'})`).join(', ');
-    rows.push({ user_id: uid, kind: 'alert', title: `첫 연락 지연 ${list.length}건 — 배정 후 ${FIRST_CALL_MIN}분이 지났습니다`, body, link: '/my-db' });
+    rows.push({ user_id: uid, kind: 'alert', title: `첫 연락 지연 ${list.length}건 — 배정 후 ${FIRST_CALL_MIN}분이 지났습니다`, body, link: '/meta-db' });
     for (const m of mgrs ?? []) if (m.id !== uid) rows.push({ user_id: m.id, kind: 'alert', title: `${nm} — 첫 연락 지연 ${list.length}건`, body, link: '/meta-db' }); }
   if (rows.length) await sb.from('notifications').insert(rows); return `nag ${late.length}`;
+}
+
+/** 5분마다 — 「다음 연락」에 시각을 정해 둔 메타 건: 그 시각이 되면 담당자에게 한 번 알린다 */
+export async function metaAlarmTick(): Promise<string> {
+  const k = new Date(Date.now() + 9 * 3600e3); const today = k.toISOString().slice(0, 10); const hm = k.toISOString().slice(11, 16); const sb = supabaseAdmin();
+  const { data, error } = await sb.from('meta_leads').select('id,owner_id,name,phone,alarm_time,memo').eq('next_on', today).neq('alarm_time', '').lte('alarm_time', hm).is('alarm_sent_on', null).not('owner_id', 'is', null).not('status', 'in', '("결제","종료","허수","중복")').limit(300); if (error) return 'skip'; if (!data?.length) return 'ok 0';
+  await sb.from('meta_leads').update({ alarm_sent_on: today }).in('id', data.map(d => d.id));
+  await sb.from('notifications').insert(data.map(d => ({ user_id: d.owner_id, kind: 'alert', title: `⏰ ${d.alarm_time} 연락 — ${d.name}`, body: [d.phone, d.memo].filter(Boolean).join(' · ').slice(0, 300), link: '/meta-db' }))); return `alarm ${data.length}`;
 }

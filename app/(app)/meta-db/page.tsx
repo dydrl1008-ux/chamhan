@@ -11,12 +11,12 @@ export const dynamic = 'force-dynamic';
 export default async function MetaDbPage({ searchParams }: { searchParams: { u?: string } }) {
   const me = await getProfile(); if (!me || !me.is_active) redirect('/login');
   const a = await metaAccess(me); if (!a.ok) redirect('/');
-  if (!a.lead) redirect((await metaDeployed(me)) ? '/my-db' : '/meta-edu');   // 사원: 받은 건은 내 DB 에서 관리 (투입 전이면 교육)   // 교육 · 시험 · 스크립트 승인 전에는 DB 대신 교육 화면
+  if (!a.lead && !(await metaDeployed(me))) redirect('/meta-edu');   // 교육 · 시험 · 스크립트 승인 전에는 DB 대신 교육 화면   // 교육 · 시험 · 스크립트 승인 전에는 DB 대신 교육 화면
   const people = a.lead ? await metaPeople() : [];
   const owner = a.lead ? (searchParams.u === 'none' || people.some(p => p.id === searchParams.u) ? searchParams.u! : 'all') : me.id;
   const r = await mdList(owner);
   return <>
-    <PageHeader title="인바운드 DB" desc={a.lead ? '들어온 문의를 배분합니다. 배정하면 그 사람의 「내 DB」에 바로 들어가고, 사원이 내 DB 에서 남긴 상태 · 결제 금액이 여기에 반영됩니다' : '나에게 배정된 문의입니다. 통화 후 상태 · 결제 금액 · 메모를 남겨 주세요'} />
+    <PageHeader title="메타 DB" desc={a.lead ? '들어온 문의를 배분하고, 담당자별 진행 상황을 봅니다. 삭제는 없습니다 — 잘못 들어온 건은 허수 · 중복으로 표시합니다' : '나에게 배정된 문의입니다. 연락할 때마다 「연락 기록」을 남기고, 인수인계에 필요한 내용은 「관리 내용」에 적어 주세요. 결제는 정산요청에서 인바운드 체크로 접수하면 자동으로 들어옵니다'} />
     {!r.ok ? <div className="card" style={{ color: '#B42318' }}>{r.msg}</div>
       : <MetaDbClient rows={r.rows} people={people} owner={owner} lead={a.lead} boss={a.boss} meId={me.id} today={todayKST()} />}
   </>;

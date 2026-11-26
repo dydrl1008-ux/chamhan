@@ -15,7 +15,7 @@ const BASE = 2200000, RATE = 0.1;   // 메타팀 급여: 기본급 220만 + 그 
 const pct = (a: number, b: number) => b ? (a / b * 100).toFixed(1) + '%' : '—';
 export default async function MetaStatsPage({ searchParams }: { searchParams: { m?: string } }) {
   const me = await getProfile(); if (!me || !me.is_active) redirect('/login');
-  const a = await metaAccess(me); if (!a.lead) redirect(a.ok ? '/my-db' : '/');
+  const a = await metaAccess(me); if (!a.lead) redirect(a.ok ? '/meta-db' : '/');
   const cur = bizMonthOf(todayKST()); const month = /^\d{4}-\d{2}$/.test(searchParams.m ?? '') ? searchParams.m! : cur;
   let live: MetaStats | null = null, closed: Awaited<ReturnType<typeof closedStats>> = null, err = '';
   try { live = await computeMetaStats(month, await metaPeople()); closed = await closedStats(month); } catch (e: any) { err = statsSqlMsg(String(e?.message ?? e)); }

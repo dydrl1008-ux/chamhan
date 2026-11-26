@@ -9,5 +9,8 @@ export async function metaAccess(p: { team_id: number | null; role: string }): P
   const boss = p.role === 'admin' || p.role === 'head'; const m = await isMeta(p); return { ok: boss || m, lead: boss || (m && p.role === 'manager'), boss };
 }
 /** 메타팀에게 막는 주소 (영업사원용 자료 · 마진 · 진급 기준) */
-export const META_BLOCK = ['/calls', '/kw-calls', '/leads', '/proposals', '/mail', '/brief', '/renewals', '/sales-stats', '/missions', '/call-status', '/margin', '/kpi', '/criteria', '/overview', '/monthly', '/weekly', '/reports', '/threads', '/pv3', '/ai'];
-export const META_STATUSES = ['미연락', '부재', '상담중', '결제', '허수', '중복', '종료'];
+export const META_BLOCK = ['/calls', '/kw-calls', '/my-db', '/leads', '/proposals', '/mail', '/brief', '/renewals', '/sales-stats', '/missions', '/call-status', '/margin', '/kpi', '/criteria', '/overview', '/monthly', '/weekly', '/reports', '/threads', '/pv3', '/ai'];
+export const META_STATUSES = ['미연락', '부재', '상담중', '보류', '결제', '종료', '허수', '중복'];
+export const META_GRADES = ['', 'S', 'A', 'B', 'C', 'D', 'E', 'F'];
+export const META_WAYS = ['전화', '카톡', '문자', '기타'];
+export const META_RESULTS = ['부재', '통화', '메시지 남김', '자료 발송', '거절'];

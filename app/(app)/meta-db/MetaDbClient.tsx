@@ -1,12 +1,14 @@
 'use client';
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import MetaPayBox from '@/components/MetaPayBox';
-import { mdAdd, mdAssign, mdUpdate, mdDelete, type MetaLead, type MetaIn } from './actions';
+import { mdAdd, mdAssign, mdUpdate, mcList, mcAdd, type MetaLead, type MetaIn, type MetaContact } from './actions';
 
-const STATUSES = ['미연락', '부재', '상담중', '결제', '허수', '중복', '종료'];
-const SC: Record<string, string> = { 미연락: '#175CD3', 부재: '#B54708', 상담중: '#067647', 결제: '#B42318', 허수: '#667085', 중복: '#98A2B3', 종료: '#667085' };
+const STATUSES = ['미연락', '부재', '상담중', '보류', '결제', '종료', '허수', '중복'];
+const GRADES = ['', 'S', 'A', 'B', 'C', 'D', 'E', 'F']; const WAYS = ['전화', '카톡', '문자', '기타']; const WAYS3 = ['카톡', '전화', '문자']; const RESULTS = ['부재', '통화', '메시지 남김', '자료 발송', '거절'];
+const GBG: Record<string, string> = { S: '#FFD9D5', A: '#FFE7D1', B: '#DFF3E1', C: '#DCEBFD', E: '#F0F2F5', F: '#E2E5EA' };   // 등급별 줄 색 (내 DB 와 같은 색)
+const SC: Record<string, string> = { 미연락: '#175CD3', 부재: '#B54708', 상담중: '#067647', 보류: '#6941C6', 결제: '#B42318', 허수: '#667085', 중복: '#98A2B3', 종료: '#667085' };
 const BG: Record<string, string> = { 결제: '#FFF27A', 허수: '#F0F2F5', 중복: '#F0F2F5', 종료: '#F7F8FA' };
 const HEAD: [keyof MetaIn, RegExp][] = [['received_on', /접수|날짜|일자|일시|등록/], ['source', /구분|경로|매체|유입/], ['name', /이름|성함|상호|업체|고객/], ['phone', /전화|연락처|번호|휴대/], ['product', /상품|서비스|종류/], ['inquiry', /문의|내용|메모|요청/], ['url', /url|링크|주소|스토어/i]];
 const ORDER: (keyof MetaIn)[] = ['received_on', 'source', 'name', 'phone', 'product', 'inquiry', 'url'];
@@ -33,16 +35,18 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
   const [paste, setPaste] = useState(''); const [parsed, setParsed] = useState<MetaIn[]>([]); const [to, setTo] = useState('auto'); const [moveTo, setMoveTo] = useState(''); const fileRef = useRef<HTMLInputElement>(null);
   const nameOf = useMemo(() => new Map(people.map(p => [p.id, p.name])), [people]);
   const cnt = useMemo(() => { const m: Record<string, number> = {}; for (const r of rows) m[r.status] = (m[r.status] ?? 0) + 1; return m; }, [rows]);
-  const due = rows.filter(r => r.next_on && r.next_on <= today && !['결제', '허수', '중복', '종료'].includes(r.status)).length;
-  const noCall = rows.filter(r => r.owner_id && r.status === '미연락' && !r.first_contact_at).length;
+  const isNow = (r: MetaLead) => !!r.owner_id && ((r.status === '미연락' && !r.first_contact_at) || (!!r.next_on && r.next_on <= today && !['결제', '허수', '중복', '종료'].includes(r.status)));   // 처음 연락할 건 + 약속 시각이 된 건
+  const nowCall = rows.filter(isNow).length;
+  const [logOf, setLogOf] = useState<number | null>(null); const [logs, setLogs] = useState<MetaContact[] | null>(null); const [lf, setLf] = useState({ way: '전화', result: '통화', note: '', next_on: '', alarm_time: '' });
+  const toggleLog = async (r: MetaLead) => { if (logOf === r.id) { setLogOf(null); return; } setLogOf(r.id); setLogs(null); setLf({ way: '전화', result: '통화', note: '', next_on: '', alarm_time: '' }); const x = await mcList(r.id); if (!x.ok) { notify(x.msg, 'bad'); setLogs([]); return; } setLogs(x.rows); };
+  const addLog = async (r: MetaLead) => { if (busy) return; setBusy(true); const x = await mcAdd(r.id, { way: lf.way, result: lf.result, note: lf.note, ...(lf.next_on ? { next_on: lf.next_on, alarm_time: lf.alarm_time } : {}) }); setBusy(false); notify(x.msg, x.ok ? 'ok' : 'bad'); if (!x.ok) return; setRows(a => a.map(y => y.id === r.id ? x.row : y)); setLogs(l => [...(l ?? []), x.contact]); setLf({ way: lf.way, result: '통화', note: '', next_on: '', alarm_time: '' }); };
   const list = useMemo(() => { const k = q.trim().toLowerCase(); const kd = k.replace(/\D/g, '');
-    return rows.filter(r => (st === '전체' || (st === '첫 연락 전' ? !!r.owner_id && r.status === '미연락' && !r.first_contact_at : st === '오늘 연락' ? !!r.next_on && r.next_on <= today && !['결제', '허수', '중복', '종료'].includes(r.status) : r.status === st)) && (!k || r.name.toLowerCase().includes(k) || r.product.toLowerCase().includes(k) || r.inquiry.toLowerCase().includes(k) || r.memo.toLowerCase().includes(k) || (kd.length >= 3 && r.phone.replace(/\D/g, '').includes(kd)))); }, [rows, st, q, today]);
+    return rows.filter(r => (st === '전체' || (st === '지금 연락' ? isNow(r) : r.status === st)) && (!k || r.name.toLowerCase().includes(k) || r.product.toLowerCase().includes(k) || r.inquiry.toLowerCase().includes(k) || r.memo.toLowerCase().includes(k) || r.care_note.toLowerCase().includes(k) || (kd.length >= 3 && r.phone.replace(/\D/g, '').includes(kd)))); }, [rows, st, q, today]);
   const save = async (id: number, patch: Parameters<typeof mdUpdate>[1]) => { const r = await mdUpdate(id, patch); if (!r.ok) { notify(r.msg, 'bad'); return; } setRows(a => a.map(x => x.id === id ? r.row : x)); };
   const onFile = async (f: File) => { try { const XLSX = await import('xlsx'); const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true }); const out: MetaIn[] = []; for (const n of wb.SheetNames) out.push(...parseGrid(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }) as any[][])); setParsed(out); setPaste(''); if (!out.length) notify('읽을 문의가 없습니다 — 이름이나 전화번호 칸이 있어야 합니다', 'bad'); } catch (e: any) { notify('엑셀을 읽지 못했습니다: ' + (e?.message ?? e), 'bad'); } if (fileRef.current) fileRef.current.value = ''; };
   const onPaste = (t: string) => { setPaste(t); setParsed(parseGrid(t.split(/\r?\n/).map(l => l.split('\t')))); };
   const add = async () => { if (!parsed.length || busy) return; setBusy(true); const r = await mdAdd(parsed, to); setBusy(false); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) { setParsed([]); setPaste(''); setOpen(false); router.refresh(); } };
   const assign = async () => { if (!sel.size || busy) return; setBusy(true); const r = await mdAssign([...sel], moveTo); setBusy(false); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) { setRows(a => a.map(x => sel.has(x.id) ? { ...x, owner_id: moveTo || null } : x)); setSel(new Set()); } };
-  const del = async () => { if (!sel.size || busy) return; setBusy(true); const r = await mdDelete([...sel]); setBusy(false); notify(r.msg, r.ok ? 'ok' : 'bad'); if (r.ok) { setRows(a => a.filter(x => !sel.has(x.id))); setSel(new Set()); } };
   const template = async () => { const XLSX = await import('xlsx'); const ws = XLSX.utils.aoa_to_sheet([['접수일', '구분', '이름', '전화번호', '상품', '문의내용', 'URL'], [today, '상담신청', '홍길동', '010-0000-0000', '쇼핑', '상위노출 문의드립니다', '']]); ws['!cols'] = [12, 12, 14, 16, 12, 50, 40].map(wch => ({ wch })); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '인바운드'); XLSX.writeFile(wb, '인바운드DB_양식.xlsx'); };
   const pill = (k: string, n?: number) => <button key={k} onClick={() => { setSt(k); setShow(100); }} style={{ padding: '5px 12px', borderRadius: 999, border: '1px solid ' + (st === k ? '#1D2939' : '#D0D5DD'), background: st === k ? '#1D2939' : '#fff', color: st === k ? '#fff' : (SC[k] ?? '#344054'), fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{k}{n != null && <span style={{ marginLeft: 5, opacity: .75 }}>{n}</span>}</button>;
   const inp: React.CSSProperties = { border: '1px solid #D0D5DD', borderRadius: 6, padding: '5px 7px', fontSize: 13, background: '#fff' };
@@ -57,7 +61,7 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
     </div>}
     {lead && open && <div className="card" style={{ marginBottom: 12 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-        <b>DB 올리기</b><span style={{ fontSize: 12.5, color: '#667085' }}>엑셀에서 복사해 붙여넣거나 파일을 올립니다. 제목 줄이 없으면 「접수일 · 구분 · 이름 · 전화번호 · 상품 · 문의내용 · URL」 순서로 읽습니다</span>
+        <b>DB 직접 올리기</b><span style={{ fontSize: 12.5, color: '#667085' }}>엑셀에서 복사해 붙여넣거나 파일을 올립니다. 제목 줄이 없으면 「접수일 · 구분 · 이름 · 전화번호 · 상품 · 문의내용 · URL」 순서로 읽습니다</span>
         <span style={{ flex: 1 }} /><button className="btn ghost" onClick={template}>양식 받기</button><button className="btn ghost" onClick={() => fileRef.current?.click()}>엑셀 올리기</button>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
       </div>
@@ -72,41 +76,58 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
       </div>}
     </div>}
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-      {pill('전체', rows.length)}{lead && noCall > 0 && pill('첫 연락 전', noCall)}{due > 0 && pill('오늘 연락', due)}{STATUSES.map(k => pill(k, cnt[k] ?? 0))}
-      <span style={{ flex: 1 }} /><input style={{ ...inp, width: 200 }} placeholder="이름 · 전화 · 내용 검색" value={q} onChange={e => { setQ(e.target.value); setShow(100); }} />
+      {pill('전체', rows.length)}{nowCall > 0 && pill('지금 연락', nowCall)}{STATUSES.map(k => pill(k, cnt[k] ?? 0))}
+      <span style={{ flex: 1 }} /><input style={{ ...inp, width: 220 }} placeholder="이름 · 전화 · 내용 검색" value={q} onChange={e => { setQ(e.target.value); setShow(100); }} />
     </div>
     {lead && sel.size > 0 && <div className="card" style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', background: '#F5F8FF' }}>
       <b style={{ fontSize: 13 }}>{sel.size}건 선택</b>
       <select style={inp} value={moveTo} onChange={e => setMoveTo(e.target.value)}><option value="">미배정으로</option>{people.map(p => <option key={p.id} value={p.id}>{p.name}에게</option>)}</select>
-      <button className="btn" disabled={busy} onClick={assign}>배정</button>
+      <button className="btn" disabled={busy} onClick={assign}>배정 · 넘기기</button>
+      <span style={{ fontSize: 12.5, color: '#667085' }}>연락 기록 · 관리 내용 · 결제 내역이 그대로 따라갑니다</span>
       <button className="btn ghost" onClick={() => setSel(new Set())}>선택 해제</button>
     </div>}
     <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: lead ? 1300 : 1160 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: lead ? 1560 : 1430 }}>
         <thead><tr style={{ background: '#F9FAFB', textAlign: 'left', color: '#475467', fontSize: 12.5 }}>
           {lead && <th style={{ padding: '8px 6px 8px 12px', width: 30 }}><input type="checkbox" checked={list.length > 0 && list.slice(0, show).every(r => sel.has(r.id))} onChange={e => setSel(e.target.checked ? new Set(list.slice(0, show).map(r => r.id)) : new Set())} /></th>}
-          {['접수일', '구분', '이름', '전화번호', '상품 · 문의', '상태', '결제 금액(누적)', '상품비', '다음 연락', '메모'].concat(lead ? ['담당자'] : []).map(h => <th key={h} style={{ padding: '8px 8px', whiteSpace: 'nowrap' }}>{h}</th>)}
+          {['접수', '고객', '첫 문의 내용', '연락방식', '등급', '상태', '⏰ 다음 연락', '연락 기록', '관리 내용 (인수인계)', '결제 (정산 자동)'].concat(lead ? ['담당자'] : []).map(h => <th key={h} style={{ padding: 8, whiteSpace: 'nowrap' }}>{h}</th>)}
         </tr></thead>
         <tbody>
-          {list.slice(0, show).map(r => { const mine = lead || r.owner_id === meId; return <tr key={r.id} style={{ borderTop: '1px solid #EAECF0', background: BG[r.status], verticalAlign: 'top' }}>
-            {lead && <td style={{ padding: '8px 6px 8px 12px' }}><input type="checkbox" checked={sel.has(r.id)} onChange={e => setSel(s => { const n = new Set(s); e.target.checked ? n.add(r.id) : n.delete(r.id); return n; })} /></td>}
-            <td style={{ padding: 8, whiteSpace: 'nowrap', color: '#475467' }}>{r.received_on.slice(5).replace('-', '/')}{r.received_at && <div style={{ fontSize: 11.5, color: '#98A2B3' }}>{new Date(new Date(r.received_at).getTime() + 9 * 3600e3).toISOString().slice(11, 16)}</div>}</td>
-            <td style={{ padding: 8, whiteSpace: 'nowrap' }}>{r.source}</td>
-            <td style={{ padding: 8, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name || '—'}</td>
-            <td style={{ padding: 8, whiteSpace: 'nowrap' }}>{r.phone}</td>
-            <td style={{ padding: 8, minWidth: 220, maxWidth: 340 }}>{r.product && <b style={{ marginRight: 6 }}>{r.product}</b>}<span style={{ color: '#344054', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.inquiry}</span>{r.url && <> <a href={/^https?:/.test(r.url) ? r.url : 'https://' + r.url} target="_blank" rel="noreferrer" style={{ color: '#175CD3' }}>링크</a></>}{r.inflow && <div style={{ fontSize: 11.5, color: '#98A2B3', marginTop: 2 }}>유입 {r.inflow.split(' / ')[0]}</div>}</td>
-            <td style={{ padding: 8 }}><select disabled={!mine} style={{ ...inp, color: SC[r.status], fontWeight: 700 }} value={r.status} onChange={e => save(r.id, { status: e.target.value })}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></td>
-            <td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>{r.paid_amt != null ? <b>{r.paid_amt.toLocaleString()}</b> : <span style={{ color: '#98A2B3' }}>—</span>}{r.owner_id && (boss || r.paid_amt != null) && <div><button className="btn ghost" style={{ padding: '2px 8px', fontSize: 11.5, marginTop: 2 }} onClick={() => setPay(r.id)}>{r.paid_amt != null ? '결제 내역' : '+ 결제'}</button></div>}</td>
-            <td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>{r.cost_amt != null ? r.cost_amt.toLocaleString() : ''}{r.paid_amt != null && <div style={{ fontSize: 11.5, color: '#067647', fontWeight: 700 }}>마진 {(r.paid_amt - (r.cost_amt ?? 0)).toLocaleString()}</div>}</td>
-            <td style={{ padding: 8 }}><input disabled={!mine} type="date" style={{ ...inp, color: r.next_on && r.next_on <= today ? '#B42318' : undefined }} value={r.next_on ?? ''} onChange={e => save(r.id, { next_on: e.target.value || null })} /></td>
-            <td style={{ padding: 8, minWidth: 220 }}><textarea disabled={!mine} key={'m' + r.id + r.updated_at} style={{ ...inp, width: '100%', minHeight: 34, fontFamily: 'inherit', resize: 'vertical' }} defaultValue={r.memo} onBlur={e => { if (e.target.value !== r.memo) save(r.id, { memo: e.target.value }); }} /></td>
-            {lead && <td style={{ padding: 8, whiteSpace: 'nowrap', color: r.owner_id ? '#344054' : '#B54708' }}>{r.owner_id ? (nameOf.get(r.owner_id) ?? '(팀 밖)') : '미배정'}
-              {r.owner_id && !['중복', '허수'].includes(r.status) && <div style={{ fontSize: 11.5, marginTop: 2, color: r.first_contact_at ? '#667085' : '#B42318', fontWeight: r.first_contact_at ? 400 : 700 }}>{r.first_contact_at ? `연락 ${r.contacts || 1}차 · ${hm(r.last_contact_at ?? r.first_contact_at)}` : `첫 연락 전${r.assigned_at ? ' · 배정 ' + hm(r.assigned_at) : ''}`}</div>}</td>}
-          </tr>; })}
-          {!list.length && <tr><td colSpan={cols} style={{ padding: 28, textAlign: 'center', color: '#98A2B3' }}>{rows.length ? '조건에 맞는 DB 가 없습니다' : lead ? '아직 올린 DB 가 없습니다 — 위 「+ DB 올리기」' : '아직 배정된 DB 가 없습니다'}</td></tr>}
+          {list.slice(0, show).map(r => { const mine = lead || r.owner_id === meId; const off = ['허수', '중복', '종료'].includes(r.status); const late = !!r.next_on && r.next_on <= today && !['결제', '허수', '중복', '종료'].includes(r.status); const chs = r.channel ? r.channel.split(',').filter(Boolean) : [];
+            return <Fragment key={r.id}><tr style={{ borderTop: '1px solid #EAECF0', background: r.status === '결제' ? '#FFF27A' : off ? '#F2F4F7' : GBG[r.grade], opacity: off ? .6 : 1, verticalAlign: 'top' }}>
+            {lead && <td style={{ padding: '8px 6px 8px 12px' }}><input type="checkbox" checked={sel.has(r.id)} onChange={e => setSel(x => { const n = new Set(x); e.target.checked ? n.add(r.id) : n.delete(r.id); return n; })} /></td>}
+            <td style={{ padding: 8, whiteSpace: 'nowrap', color: '#475467' }}>{r.received_on.slice(5).replace('-', '/')}{r.received_at && <div style={{ fontSize: 11.5, color: '#98A2B3' }}>{hm(r.received_at).slice(6)}</div>}<div style={{ fontSize: 11.5 }}>{r.source}</div></td>
+            <td style={{ padding: 8, whiteSpace: 'nowrap' }}><b>{r.name || '—'}</b><div>{r.phone}</div>{r.product && <div style={{ fontSize: 12, fontWeight: 700, color: '#6941C6' }}>{r.product}</div>}</td>
+            <td style={{ padding: 8, minWidth: 190, maxWidth: 280 }}><span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.inquiry || '—'}</span>{r.url && <> <a href={/^https?:/.test(r.url) ? r.url : 'https://' + r.url} target="_blank" rel="noreferrer" style={{ color: '#175CD3' }}>링크</a></>}{r.inflow && <div style={{ fontSize: 11.5, color: '#98A2B3', marginTop: 2 }}>유입 {r.inflow.split(' / ')[0]}</div>}</td>
+            <td style={{ padding: 8, whiteSpace: 'nowrap' }}>{WAYS3.map(c => <label key={c} style={{ display: 'block', fontSize: 12.5 }}><input type="checkbox" disabled={!mine} checked={chs.includes(c)} onChange={e => save(r.id, { channel: (e.target.checked ? [...chs, c] : chs.filter(x => x !== c)).join(',') })} /> {c}</label>)}</td>
+            <td style={{ padding: 8 }}><select disabled={!mine} style={{ ...inp, width: 52, fontWeight: 800, background: 'rgba(255,255,255,.7)' }} value={r.grade} onChange={e => save(r.id, { grade: e.target.value })}>{GRADES.map(g => <option key={g} value={g}>{g || '-'}</option>)}</select></td>
+            <td style={{ padding: 8 }}><select disabled={!mine} style={{ ...inp, color: SC[r.status], fontWeight: 700 }} value={r.status} onChange={e => save(r.id, { status: e.target.value })}>{STATUSES.map(x => <option key={x}>{x}</option>)}</select></td>
+            <td style={{ padding: 8, whiteSpace: 'nowrap' }}><input disabled={!mine} type="date" style={{ ...inp, display: 'block', color: late ? '#B42318' : undefined, fontWeight: late ? 700 : 400 }} value={r.next_on ?? ''} onChange={e => save(r.id, { next_on: e.target.value || null })} />{r.next_on && <input disabled={!mine} type="time" style={{ ...inp, marginTop: 3 }} value={r.alarm_time} onChange={e => save(r.id, { alarm_time: e.target.value })} title="이 시각에 알림이 갑니다" />}</td>
+            <td style={{ padding: 8, minWidth: 200, maxWidth: 260 }}>
+              {r.first_contact_at ? <div style={{ fontSize: 12, color: '#667085' }}><b style={{ color: '#1D2939' }}>{r.contacts || 1}차</b> · {hm(r.last_contact_at ?? r.first_contact_at)}</div> : r.owner_id ? <div style={{ fontSize: 12, color: '#B42318', fontWeight: 700 }}>첫 연락 전{r.assigned_at ? ' · 배정 ' + hm(r.assigned_at) : ''}</div> : null}
+              {r.memo && <div style={{ fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: 2 }}>{r.memo.length > 70 ? r.memo.slice(0, 70) + '…' : r.memo}</div>}
+              <button className="btn ghost" style={{ padding: '2px 8px', fontSize: 11.5, marginTop: 4 }} onClick={() => toggleLog(r)}>{logOf === r.id ? '접기' : mine ? '+ 연락 기록' : '기록 보기'}</button></td>
+            <td style={{ padding: 8, minWidth: 220 }}><textarea disabled={!mine} key={'c' + r.id + r.updated_at} placeholder="고객 성향 · 진행 키워드 · 약속한 것 · 주의할 점" style={{ ...inp, width: '100%', minHeight: 58, fontFamily: 'inherit', resize: 'vertical', background: 'rgba(255,255,255,.7)' }} defaultValue={r.care_note} onBlur={e => { if (e.target.value !== r.care_note) save(r.id, { care_note: e.target.value }); }} /></td>
+            <td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>{r.paid_amt != null ? <><b>{r.paid_amt.toLocaleString()}</b><div style={{ fontSize: 11.5, color: '#067647', fontWeight: 700 }}>마진 {(r.paid_amt - (r.cost_amt ?? 0)).toLocaleString()}</div></> : <span style={{ color: '#98A2B3' }}>—</span>}
+              {(boss || r.paid_amt != null) && r.owner_id && <div><button className="btn ghost" style={{ padding: '2px 8px', fontSize: 11.5, marginTop: 2 }} onClick={() => setPay(r.id)}>{r.paid_amt != null ? '결제 내역' : '+ 결제'}</button></div>}
+              {r.status === '결제' && r.paid_amt == null && !boss && <div><a href="/settle-request" style={{ fontSize: 11.5, color: '#B42318', fontWeight: 700 }}>정산요청에서 입력 →</a></div>}</td>
+            {lead && <td style={{ padding: 8, whiteSpace: 'nowrap', color: r.owner_id ? '#344054' : '#B54708' }}>{r.owner_id ? (nameOf.get(r.owner_id) ?? '(팀 밖)') : '미배정'}{r.prev_owner && <div style={{ fontSize: 11.5, color: '#98A2B3' }}>← {nameOf.get(r.prev_owner) ?? '이전 담당'}{r.moved_at ? ' ' + hm(r.moved_at).slice(0, 5) : ''}</div>}</td>}
+          </tr>
+          {logOf === r.id && <tr style={{ background: '#F9FAFB' }}><td colSpan={cols} style={{ padding: '10px 14px 14px' }}>
+            {!lead && r.prev_owner && <div style={{ fontSize: 12.5, color: '#6941C6', marginBottom: 6 }}>이전 담당자에게서 넘겨받은 건입니다 — 아래 기록과 관리 내용을 먼저 읽어 주세요</div>}
+            {logs == null ? <div style={{ color: '#98A2B3', fontSize: 13 }}>불러오는 중…</div> : logs.length ? logs.map((c, k) => <div key={c.id} style={{ display: 'flex', gap: 10, fontSize: 13, padding: '5px 0', borderTop: k ? '1px solid #EAECF0' : undefined }}><b style={{ width: 34 }}>{k + 1}차</b><span style={{ width: 96, color: '#667085' }}>{hm(c.at)}</span><span style={{ width: 40 }}>{c.way}</span><span style={{ width: 76, fontWeight: 700, color: c.result === '부재' ? '#B54708' : '#067647' }}>{c.result}</span><span style={{ flex: 1, whiteSpace: 'pre-wrap' }}>{c.note}</span><span style={{ color: '#98A2B3', fontSize: 12 }}>{c.by}</span></div>) : <div style={{ color: '#98A2B3', fontSize: 13 }}>아직 연락 기록이 없습니다</div>}
+            {mine && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+              <select style={inp} value={lf.way} onChange={e => setLf({ ...lf, way: e.target.value })}>{WAYS.map(x => <option key={x}>{x}</option>)}</select>
+              <select style={inp} value={lf.result} onChange={e => setLf({ ...lf, result: e.target.value })}>{RESULTS.map(x => <option key={x}>{x}</option>)}</select>
+              <input style={{ ...inp, flex: '1 1 260px' }} placeholder="통화 · 메시지 내용" value={lf.note} onChange={e => setLf({ ...lf, note: e.target.value })} />
+              <span style={{ fontSize: 12.5, color: '#667085' }}>다음 연락</span><input type="date" style={inp} min={today} value={lf.next_on} onChange={e => setLf({ ...lf, next_on: e.target.value })} /><input type="time" style={inp} value={lf.alarm_time} onChange={e => setLf({ ...lf, alarm_time: e.target.value })} />
+              <button className="btn" disabled={busy} onClick={() => addLog(r)}>{(logs?.length ?? 0) + 1}차 기록</button>
+            </div>}
+          </td></tr>}</Fragment>; })}
+          {!list.length && <tr><td colSpan={cols} style={{ padding: 28, textAlign: 'center', color: '#98A2B3' }}>{rows.length ? '조건에 맞는 DB 가 없습니다' : lead ? '아직 들어온 DB 가 없습니다' : '아직 배정된 DB 가 없습니다'}</td></tr>}
         </tbody>
       </table>
     </div>
-    {list.length > show && <div style={{ textAlign: 'center', marginTop: 10 }}><button className="btn ghost" onClick={() => setShow(s => s + 100)}>100건 더 보기 ({show}/{list.length})</button></div>}
+    {list.length > show && <div style={{ textAlign: 'center', marginTop: 10 }}><button className="btn ghost" onClick={() => setShow(x => x + 100)}>100건 더 보기 ({show}/{list.length})</button></div>}
   </>;
 }
