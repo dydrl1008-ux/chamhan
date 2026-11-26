@@ -16,7 +16,8 @@ export default async function RankWatchPage({ searchParams }: { searchParams: { 
   const has = new Set((owners ?? []).map((o: any) => o.user_id)); has.add(me.id);
   const people = (profs ?? []).filter(p => has.has(p.id) && (all || p.id === me.id || (me.role === 'manager' && p.team_id != null && p.team_id === me.team_id))).map(p => ({ user_id: p.id, name: p.name })).sort((a, b) => a.name.localeCompare(b.name));
   const sel = me.role === 'staff' ? me.id : (searchParams.u && people.some(p => p.user_id === searchParams.u) ? searchParams.u : me.id);
+  const { data: lastRun } = await supabaseAdmin().from('ai_settings').select('value').eq('key', 'rankwatch_last').maybeSingle();
   let rows: WatchRow[] = [], hist: Record<string, HistPt[]> = {}, err = '';
   try { rows = await watchRows([sel]); hist = await watchHistory(rows.map(w => w.id), 30); } catch (e: any) { err = e?.message ?? String(e); }
-  return <RankWatchClient me={{ id: me.id, name: me.name, role: me.role }} people={people} sel={sel} rows={rows} hist={hist} stars={(stars ?? []).map(s => s.group_key)} emptyGroups={(grps ?? []).filter(g => g.user_id === sel).map(g => g.name)} err={err} />;
+  return <RankWatchClient me={{ id: me.id, name: me.name, role: me.role }} people={people} sel={sel} rows={rows} hist={hist} stars={(stars ?? []).map(s => s.group_key)} emptyGroups={(grps ?? []).filter(g => g.user_id === sel).map(g => g.name)} err={err} lastRun={lastRun?.value ?? ''} />;
 }

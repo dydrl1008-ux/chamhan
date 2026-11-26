@@ -139,7 +139,7 @@ export async function dbRank(id: number): Promise<R<{ row: DbRow }>> {
   const kw = String(cur.item ?? '').trim(); if (!kw) return { ok: false, msg: '키워드 칸을 먼저 채워 주세요' };
   const pid = [cur.url, cur.url2].map(u => String(u ?? '').match(/\/products\/(\d+)/)?.[1]).find(Boolean); const cat = [cur.url, cur.url2].map(u => String(u ?? '').match(/\/catalog\/(\d+)/)?.[1]).find(Boolean);
   if (!pid && !cat) return { ok: false, msg: 'URL 칸에 상품 링크를 넣어 주세요 (…/products/상품번호) — 스토어 주소만으로는 순위를 못 찾습니다' };
-  let res; try { res = await search(kw, me.id, true); } catch (e: any) { return { ok: false, msg: String(e?.message ?? e).slice(0, 120) }; }
+  let res; try { res = await search(kw, me.id, true, true); } catch (e: any) { return { ok: false, msg: String(e?.message ?? e).slice(0, 120) }; }
   const prods = (res.products ?? []) as any[];
   const hit = prods.filter(p => (pid && String(p.link ?? '').includes(`/products/${pid}`)) || (cat && String(p.nvmid ?? '') === cat)).sort((a, b) => a.rank - b.rank)[0];
   const now = new Date().toISOString(); const rk = hit ? Number(hit.rank) || 0 : 0;

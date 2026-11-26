@@ -43,7 +43,7 @@ export async function searchFresh(keyword: string, userId: string): Promise<NscR
   const today = !!hit && new Date(new Date(hit.fetched_at).getTime() + 9 * 3600e3).toISOString().slice(0, 10) === kstDay;
   return search(kw, userId, !today);
 }
-export async function search(keyword: string, userId: string, force = false): Promise<NscResult> {
+export async function search(keyword: string, userId: string, force = false, noLimit = false): Promise<NscResult> {   // noLimit: 순위 체크처럼 시스템이 도는 조회 — 1인 하루 한도를 적용하지 않는다
   const kw = keyword.trim().replace(/\s+/g, ' '); if (!kw) throw new Error('키워드를 입력하세요'); if (kw.length > 40) throw new Error('키워드가 너무 깁니다');
   const sb = admin();
   const { data: cfg } = await sb.from('app_settings').select('key,value').in('key', ['nsc_daily_per_user', 'nsc_cache_hours']);
@@ -54,7 +54,7 @@ export async function search(keyword: string, userId: string, force = false): Pr
   // 한도: 오늘(KST) 실제 호출 수
   const kstDay = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); const dayStart = new Date(kstDay + 'T00:00:00+09:00').toISOString();
   const { count } = await sb.from('nsc_queries').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('cached', false).gte('at', dayStart);
-  if ((count ?? 0) >= perUser) throw new Error(`오늘 조회 한도(${perUser}회)를 다 썼습니다. 캐시된 키워드는 계속 볼 수 있어요`);
+  if (!noLimit && (count ?? 0) >= perUser) throw new Error(`오늘 조회 한도(${perUser}회)를 다 썼습니다. 캐시된 키워드는 계속 볼 수 있어요`);
   const j = await call(process.env.NSC_SEARCH_PATH || '/api/search', { method: 'POST', headers: H(true), body: JSON.stringify({ keyword: kw }) });
   const data = j.data ?? j; const now = new Date().toISOString();
   await sb.from('nsc_searches').upsert({ keyword: kw, data, fetched_at: now, fetched_by: userId }, { onConflict: 'keyword' });

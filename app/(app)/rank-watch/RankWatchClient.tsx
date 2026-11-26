@@ -8,9 +8,9 @@ import { fmtKST } from '@/lib/date/kst';
 import { toggleGroupStar, recheck, addItems, moveGroup, removeItems, reorder, addGroup, removeGroup } from './actions';
 import type { WatchRow, HistPt } from '@/lib/rankWatch';
 
-type Props = { me: { id: string; name: string; role: string }; people: { user_id: string; name: string }[]; sel: string; rows: WatchRow[]; hist: Record<string, HistPt[]>; stars: string[]; emptyGroups?: string[]; err: string };
+type Props = { me: { id: string; name: string; role: string }; people: { user_id: string; name: string }[]; sel: string; rows: WatchRow[]; hist: Record<string, HistPt[]>; stars: string[]; emptyGroups?: string[]; err: string; lastRun?: string };
 
-export default function RankWatchClient({ me, people, sel, rows, hist, stars, emptyGroups = [], err }: Props) {
+export default function RankWatchClient({ lastRun, me, people, sel, rows, hist, stars, emptyGroups = [], err }: Props) {
   const r = useRouter(); const myLink = true; const [busy, setBusy] = useState(false); const [filter, setFilter] = useState<'all' | 'down' | 'up' | 'star'>('all'); const [q, setQ] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({}); const [detail, setDetail] = useState<string | null>(null);
   const [sort, setSort] = useState('');
@@ -48,6 +48,10 @@ export default function RankWatchClient({ me, people, sel, rows, hist, stars, em
   const ranked = rows.filter(w => w.cur_rank != null); const avg = ranked.length ? Math.round(ranked.reduce((a, w) => a + (w.cur_rank ?? 0), 0) / ranked.length * 10) / 10 : null;
   const ds = rows.map(delta).filter((d): d is number => d != null); const avgD = ds.length ? Math.round(ds.reduce((a, b) => a + b, 0) / ds.length * 10) / 10 : null;
   const cDown = rows.filter(w => w.click != null && w.prev_click != null && w.click < w.prev_click).length, cUp = rows.filter(w => w.click != null && w.prev_click != null && w.click > w.prev_click).length;
+  // 이번 자동 조회 회차(평일 10시·14시)에 몇 개가 찍혔는지 — 다 안 찍혔으면 진행 중
+  const kNow = new Date(Date.now() + 9 * 3600e3).toISOString(); const kHm = kNow.slice(11, 16); const kDow = new Date(Date.now() + 9 * 3600e3).getUTCDay();
+  const slotIso = kDow >= 1 && kDow <= 5 && kHm >= '10:00' ? new Date(`${kNow.slice(0, 10)}T${kHm < '14:00' ? '10' : '14'}:00:00+09:00`).toISOString() : '';
+  const slotDone = slotIso ? rows.filter(w => w.cur_at && w.cur_at >= slotIso).length : 0;
   const lastAt = rows.map(w => w.cur_at).filter(Boolean).sort().at(-1) as string | undefined;
   const sortFn: Record<string, (a: WatchRow, b: WatchRow) => number> = { rank: (a, b) => (a.cur_rank ?? 999) - (b.cur_rank ?? 999), drop: (a, b) => (delta(a) ?? 0) - (delta(b) ?? 0), rise: (a, b) => (delta(b) ?? 0) - (delta(a) ?? 0), recent: (a, b) => String(b.cur_at ?? '').localeCompare(String(a.cur_at ?? '')), cdrop: (a, b) => ((a.click ?? 0) - (a.prev_click ?? a.click ?? 0)) - ((b.click ?? 0) - (b.prev_click ?? b.click ?? 0)), sdrop: (a, b) => ((a.sale ?? 0) - (a.prev_sale ?? a.sale ?? 0)) - ((b.sale ?? 0) - (b.prev_sale ?? b.sale ?? 0)) };
   const pill = (on: boolean, tone?: string) => ({ border: `1px solid ${on ? (tone ?? '#2563EB') : '#E4E7EC'}`, background: on ? (tone ?? '#2563EB') : '#fff', color: on ? '#fff' : '#344054', borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' as const });
@@ -62,7 +66,9 @@ export default function RankWatchClient({ me, people, sel, rows, hist, stars, em
       <datalist id="rw-groups">{groupNames.map(g => <option key={g} value={g} />)}</datalist>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 260 }}><h1 style={{ margin: 0, fontSize: 22, letterSpacing: '-0.02em' }}>순위 체크 <span style={{ fontSize: 14, color: '#98A2B3', fontWeight: 600 }}>{rows.length}개</span></h1>
-          <div style={{ fontSize: 13, color: '#667085', marginTop: 4 }}>평일 10시·14시에 키워드별로 자동 조회 (상위 100위) · 「재체크」는 바로 조회 · ★ 주요 업체는 순위가 바뀌면 알림{lastAt ? ` · 마지막 조회 ${fmtKST(lastAt)}` : ''}</div></div>
+          <div style={{ fontSize: 13, color: '#667085', marginTop: 4 }}>평일 10시·14시에 키워드별로 자동 조회 (상위 100위) · 「재체크」는 바로 조회 · ★ 주요 업체는 순위가 바뀌면 알림{lastAt ? ` · 마지막 조회 ${fmtKST(lastAt)}` : ''}</div>
+          {slotIso && rows.length > 0 && <div style={{ fontSize: 12.5, marginTop: 3, fontWeight: 600, color: slotDone >= rows.length ? '#079455' : '#B54708' }}>{kHm < '14:00' ? '10시' : '14시'} 회차 {slotDone} / {rows.length} 조회됨{slotDone < rows.length ? ' — 5분마다 이어서 조회 중' : ''}</div>}
+          {me.role !== 'staff' && lastRun && <div style={{ fontSize: 11.5, color: '#98A2B3', marginTop: 2 }}>자동 조회 마지막 실행: {fmtKST(lastRun.slice(0, 24))} · {lastRun.slice(25)}</div>}</div>
         {me.role !== 'staff' && people.length > 1 && <select value={sel} onChange={e => r.push(`/rank-watch?u=${e.target.value}`)} style={{ width: 'auto', minHeight: 38, borderRadius: 10 }}>{people.map(p => <option key={p.user_id} value={p.user_id}>{p.name}</option>)}</select>}
         {myLink && isMe && <><button type="button" onClick={() => { setGOpen(v => !v); setAddOpen(false); }} style={{ ...mini, padding: '9px 16px', fontSize: 13.5, borderRadius: 10 }}>{gOpen ? '닫기' : '업체 추가'}</button>
           <button type="button" onClick={() => { setAddOpen(v => !v); setGOpen(false); }} style={{ border: 0, background: '#101828', color: '#fff', borderRadius: 10, padding: '10px 18px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>{addOpen ? '닫기' : '+ 상품 추가'}</button></>}
