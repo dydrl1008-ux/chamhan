@@ -10,14 +10,22 @@ export async function resumLead(leadId: number, markPaid: boolean) {
   await sb.from('my_db').update(my).eq('meta_id', leadId);
 }
 const exVat = (n: number) => Math.round((Number(n) || 0) / 1.1);   // 정산요청 금액은 VAT 포함 → 결제 내역은 VAT 제외
-/** 정산요청 접수 성공 → 결제 내역 한 줄. 요청구분 05 · 06(환불 계열)은 환불로. 돌려주는 값: 화면에 덧붙일 말 */
-export async function payFromSettle(p: { userId: string; leadId: number; seq: string | null; reqDate: string; saleTotalAmt: number; prodTotalAmt: number; gubun: string; prodName: string }): Promise<string> {
+/** 정산요청 접수 성공 → 결제 내역 한 줄 (결제 금액 = 판매총액, 상품비 = 상품총액, 둘 다 VAT 제외로 환산). 돌려주는 값: 화면에 덧붙일 말 */
+export async function payFromSettle(p: { userId: string; leadId: number; seq: string | null; reqDate: string; saleTotalAmt: number; prodTotalAmt: number; gubunName: string; prodName: string }): Promise<string> {
   const sb = supabaseAdmin(); const { data: lead } = await sb.from('meta_leads').select('id,owner_id,name').eq('id', p.leadId).maybeSingle();
   if (!lead || lead.owner_id !== p.userId) return ' · ⚠ 인바운드 고객을 찾지 못해 결제 내역에는 넣지 못했습니다 (팀장에게 알려 주세요)';
-  const refund = ['05', '06'].includes(p.gubun); const a = exVat(Math.abs(p.saleTotalAmt)), c = exVat(Math.abs(p.prodTotalAmt)); if (!a) return ' · ⚠ 판매총액이 0이라 결제 내역에는 넣지 않았습니다';
-  const { error } = await sb.from('meta_payments').insert({ lead_id: lead.id, owner_id: p.userId, kind: refund ? '환불' : '결제', paid_on: p.reqDate, amount: refund ? -a : a, cost: refund ? 0 : c, product: p.prodName.slice(0, 80), memo: `정산요청 ${p.seq ?? '(번호 확인 전)'}`, settle_seq: p.seq, created_by: p.userId });
+  const a = exVat(Math.abs(p.saleTotalAmt)), c = exVat(Math.abs(p.prodTotalAmt)); if (!a) return ' · ⚠ 판매총액이 0이라 결제 내역에는 넣지 않았습니다';
+  const { error } = await sb.from('meta_payments').insert({ lead_id: lead.id, owner_id: p.userId, kind: '결제', paid_on: p.reqDate, amount: a, cost: c, product: p.prodName.slice(0, 80), memo: [`정산요청 ${p.seq ?? '(번호 확인 전)'}`, p.gubunName].filter(Boolean).join(' · ').slice(0, 200), settle_seq: p.seq, created_by: p.userId });
   if (error) return ` · ⚠ 결제 내역 등록 실패: ${/settle_seq/.test(error.message) ? '0106 SQL 을 먼저 실행해 주세요' : error.message.slice(0, 80)}`;
-  await resumLead(lead.id, !refund); return ` · 인바운드 「${lead.name}」 결제 내역에 ${refund ? '환불' : '결제'} ${a.toLocaleString('ko-KR')}원(VAT 제외) 등록`;
+  await resumLead(lead.id, true); return ` · 인바운드 「${lead.name}」 결제 내역에 ${a.toLocaleString('ko-KR')}원(VAT 제외) 등록`;
+}
+/** 환불요청 접수 성공 → 원 정산 건이 인바운드 결제 내역에 있으면 환불 한 줄 (환불 금액 = 판매가 기준 환불액, 상품비 환입 = 상품가 기준 환불액, VAT 제외) */
+export async function refundFromSettle(p: { userId: string; origSeq: string; refundSeq: string | null; refundDate: string; refundSale: number; refundProd: number; gubunName: string }): Promise<string> {
+  const sb = supabaseAdmin(); const { data: orig, error } = await sb.from('meta_payments').select('lead_id,owner_id,product').eq('settle_seq', p.origSeq).maybeSingle(); if (error || !orig) return '';   // 인바운드 건이 아니면 아무것도 안 한다
+  const a = exVat(Math.abs(p.refundSale)), c = exVat(Math.abs(p.refundProd)); if (!a && !c) return '';
+  const { error: e2 } = await sb.from('meta_payments').insert({ lead_id: orig.lead_id, owner_id: orig.owner_id ?? p.userId, kind: '환불', paid_on: p.refundDate, amount: -a, cost: -c, product: orig.product ?? '', memo: [`환불요청 ${p.refundSeq ?? '(번호 확인 전)'}`, `원 정산 ${p.origSeq}`, p.gubunName].filter(Boolean).join(' · ').slice(0, 200), settle_seq: p.refundSeq ? `R:${p.refundSeq}` : null, created_by: p.userId });
+  if (e2) return ` · ⚠ 인바운드 환불 기록 실패: ${e2.message.slice(0, 80)}`;
+  await resumLead(orig.lead_id, false); return ` · 인바운드 결제 내역에 환불 ${a.toLocaleString('ko-KR')}원(VAT 제외) 기록`;
 }
 /** 정산요청 취소 · 반려 → 그 정산번호로 들어간 결제 내역을 취소 표시 */
 export async function payCancelBySettle(seq: string, by: string | null): Promise<boolean> {
