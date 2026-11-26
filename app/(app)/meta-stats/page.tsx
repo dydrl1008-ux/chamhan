@@ -42,7 +42,7 @@ export default async function MetaStatsPage({ searchParams }: { searchParams: { 
       <div className="card" style={{ padding: 0, overflowX: 'auto', marginBottom: 12 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1240 }}>
           <thead><tr style={{ background: '#F9FAFB', color: '#475467', fontSize: 12.5 }}><th style={{ ...th, textAlign: 'left' }}>담당자</th>{['받은 DB', '유효 DB', '미연락', '연결률', '결제율'].map(h => <th key={h} style={th}>{h}</th>)}<th style={{ ...th, borderLeft: '2px solid #EAECF0' }}>신규 결제(1차)</th>{['재결제(2차~)', '결제 금액', '상품비', '마진'].map(h => <th key={h} style={th}>{h}</th>)}<th style={{ ...th, borderLeft: '2px solid #EAECF0' }}>광고비 부담</th><th style={th}>광고비 대비 매출</th>{a.boss && <th style={th}>예상 급여</th>}</tr></thead>
-          <tbody>{st.lines.map(l => row(l))}{row(t, true)}{!t.n && !t.amt && <tr><td colSpan={a.boss ? 14 : 13} style={{ padding: 26, textAlign: 'center', color: '#98A2B3' }}>이 기간에 들어온 DB 도, 결제도 없습니다</td></tr>}</tbody>
+          <tbody>{st.lines.map(l => row(l))}{st.lines.length > 1 && row(t, true)}{!t.n && !t.amt && <tr><td colSpan={a.boss ? 14 : 13} style={{ padding: 26, textAlign: 'center', color: '#98A2B3' }}>이 기간에 들어온 DB 도, 결제도 없습니다</td></tr>}</tbody>
         </table>
       </div>
       {st.src.length > 0 && <div className="card" style={{ padding: 0, overflowX: 'auto', marginBottom: 12 }}>
