@@ -17,4 +17,4 @@ export const META_RESULTS = ['부재', '통화', '메시지 남김', '자료 발
 
 /** DB 가 들어오는 시간 — 평일 09:00~17:30 (KST). 이 밖에 접수된 건은 접수 시트에 그대로 있다가 다음 영업일 9시에 한꺼번에 들어온다 (주말 제외) */
 export const META_OPEN_FROM = '09:00', META_OPEN_TO = '17:30';
-export function metaIntakeOpen(now = Date.now()): boolean { const k = new Date(now + 9 * 3600e3); const d = k.getUTCDay(); const hm = k.toISOString().slice(11, 16); return d !== 0 && d !== 6 && hm >= META_OPEN_FROM && hm <= META_OPEN_TO; }
+export function metaIntakeOpen(now = Date.now()): boolean { const k = new Date(now + 9 * 3600e3); const d = k.getUTCDay(); const hm = k.toISOString().slice(11, 16); if (d === 0 || d === 6) return true; /* 주말은 시간 제한 없이 바로 받는다 */ return hm >= META_OPEN_FROM && hm <= META_OPEN_TO; }

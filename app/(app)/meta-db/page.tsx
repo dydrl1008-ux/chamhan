@@ -17,7 +17,7 @@ export default async function MetaDbPage({ searchParams }: { searchParams: { u?:
   const r = await mdList(owner);
   return <>
     <PageHeader title="메타 DB" desc={a.lead ? '들어온 문의를 배분하고, 담당자별 진행 상황을 봅니다. 삭제는 없습니다 — 잘못 들어온 건은 허수 · 중복으로 표시합니다' : '나에게 배정된 문의입니다. 연락할 때마다 「연락 기록」을 남기고, 인수인계에 필요한 내용은 「관리 내용」에 적어 주세요. 결제는 정산요청에서 인바운드 체크로 접수하면 자동으로 들어옵니다'} />
-    {a.lead && !metaIntakeOpen() && <div className="card" style={{ marginBottom: 12, background: '#FFFAEB', fontSize: 13.5 }}>지금은 DB 가 들어오는 시간(평일 {META_OPEN_FROM}~{META_OPEN_TO})이 아닙니다. 이 시간 밖에 접수된 문의는 다음 영업일 9시에 한꺼번에 들어옵니다.</div>}
+    {a.lead && !metaIntakeOpen() && <div className="card" style={{ marginBottom: 12, background: '#FFFAEB', fontSize: 13.5 }}>지금은 DB 가 들어오는 시간(평일 {META_OPEN_FROM}~{META_OPEN_TO})이 아닙니다. 평일 이 시간 밖에 접수된 문의는 다음 날 9시(금요일 저녁 건은 토요일 0시)에 한꺼번에 들어옵니다. 주말은 시간 제한 없이 바로 들어옵니다.</div>}
     {!r.ok ? <div className="card" style={{ color: '#B42318' }}>{r.msg}</div>
       : <MetaDbClient rows={r.rows} people={people} owner={owner} lead={a.lead} boss={a.boss} meId={me.id} today={todayKST()} />}
   </>;
