@@ -4,10 +4,12 @@
 import { NextResponse } from 'next/server';
 import { myDbTick } from '@/lib/myDb';
 import { rankWatchTick } from '@/lib/rankWatch';
+import { metaNagTick } from '@/lib/metaLink';
 export const dynamic = 'force-dynamic'; export const maxDuration = 300;
 export async function GET(req: Request) {
   if (!process.env.CRON_SECRET || req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) return NextResponse.json({ ok: false }, { status: 401 });
   let md = 'skip'; try { md = await myDbTick(); } catch (e: any) { md = 'err ' + String(e?.message ?? e).slice(0, 80); }
+  let mn = 'skip'; try { mn = await metaNagTick(); } catch (e: any) { mn = 'err ' + String(e?.message ?? e).slice(0, 80); }   // 메타 인바운드 첫 연락 지연 알림
   let rw = 'skip'; try { rw = await rankWatchTick(230000); } catch (e: any) { rw = 'err ' + String(e?.message ?? e).slice(0, 80); }
-  return NextResponse.json({ ok: true, md, rw });
+  return NextResponse.json({ ok: true, md, mn, rw });
 }

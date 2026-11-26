@@ -43,8 +43,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/plans">계획 캘린더</NavLink>
         </NavGroup>
 
-        {(meta || lead) && <NavGroup title="메타팀" hrefs={['/meta-db', '/meta-stats', '/meta-edu', '/meta-report']}>
-          {!metaEduOnly && <NavLink href="/meta-db">인바운드 DB</NavLink>}
+        {(meta || lead) && <NavGroup title="메타팀" hrefs={['/meta-db', '/meta-stats', '/meta-edu', '/meta-report', ...(meta ? ['/my-db'] : [])]}>
+          {!metaEduOnly && (lead || mgr) && <NavLink href="/meta-db">인바운드 DB</NavLink>}
+          {meta && !metaEduOnly && <NavLink href="/my-db">내 DB</NavLink>}
           {!metaEduOnly && <NavLink href="/meta-report">메타 보고</NavLink>}
           <NavLink href="/meta-edu">{meta && !mgr ? '교육' : '교육 관리'}</NavLink>
           {(lead || mgr) && <NavLink href="/meta-stats">메타 효율</NavLink>}

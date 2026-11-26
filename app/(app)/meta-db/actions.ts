@@ -5,11 +5,12 @@ import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { metaAccess, metaTeamId, META_STATUSES } from '@/lib/meta';
 import { metaDeployed } from '@/lib/metaEdu';
+import { linkAssign, syncToMyDb } from '@/lib/metaLink';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
-export type MetaLead = { id: number; received_on: string; source: string; name: string; phone: string; product: string; inquiry: string; url: string; owner_id: string | null; status: string; paid_amt: number | null; cost_amt: number | null; paid_at: string | null; next_on: string | null; memo: string; updated_at: string; inflow: string; received_at: string | null };
+export type MetaLead = { id: number; received_on: string; source: string; name: string; phone: string; product: string; inquiry: string; url: string; owner_id: string | null; status: string; paid_amt: number | null; cost_amt: number | null; paid_at: string | null; next_on: string | null; memo: string; updated_at: string; inflow: string; received_at: string | null; assigned_at: string | null; first_contact_at: string | null; last_contact_at: string | null; contacts: number };
 export type MetaIn = { received_on?: string | null; source?: string; name?: string; phone?: string; product?: string; inquiry?: string; url?: string };
-const COLS = 'id,received_on,source,name,phone,product,inquiry,url,owner_id,status,paid_amt,cost_amt,paid_at,next_on,memo,updated_at,inflow,received_at';
-const needSql = (m: string) => /inflow|received_at|ext_id/.test(m) ? '0103 SQL(자동 접수 칸)을 먼저 실행해 주세요' : /cost_amt/.test(m) ? '0102 SQL(상품비 칸 · 메타 보고)을 먼저 실행해 주세요' : /meta_leads|meta_ad_spend/.test(m) ? '0100 SQL(메타팀 표)을 먼저 실행해 주세요' : m;
+const COLS = 'id,received_on,source,name,phone,product,inquiry,url,owner_id,status,paid_amt,cost_amt,paid_at,next_on,memo,updated_at,inflow,received_at,assigned_at,first_contact_at,last_contact_at,contacts';
+const needSql = (m: string) => /first_contact_at|last_contact_at|contacts|meta_id/.test(m) ? '0104 SQL(내 DB 연결 칸)을 먼저 실행해 주세요' : /inflow|received_at|ext_id/.test(m) ? '0103 SQL(자동 접수 칸)을 먼저 실행해 주세요' : /cost_amt/.test(m) ? '0102 SQL(상품비 칸 · 메타 보고)을 먼저 실행해 주세요' : /meta_leads|meta_ad_spend/.test(m) ? '0100 SQL(메타팀 표)을 먼저 실행해 주세요' : m;
 const s = (x: unknown, n: number) => String(x ?? '').trim().slice(0, n); const day = (x: unknown) => { const t = String(x ?? '').trim(); return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null; };
 async function who() { const me = await getProfile(); if (!me || !me.is_active) return null; const a = await metaAccess(me); if (!a.ok) return null; if (!a.lead && !(await metaDeployed(me))) return null;   // 투입 전 사원은 DB 를 볼 수 없다
   return { me, ...a }; }
@@ -48,8 +49,9 @@ export async function mdAdd(rows: MetaIn[], to: string): Promise<R<{ added: numb
   const now = new Date().toISOString(); const seen = new Set<string>(); let dup = 0; const got = new Map<string, number>();
   const ins = list.map(r => { const k = r.phone_key.length >= 8 ? r.phone_key : ''; const isDup = !!k && (have.has(k) || seen.has(k)); if (k) seen.add(k); if (isDup) { dup++; return { ...r, status: '중복', owner_id: null, assigned_at: null, created_by: x.me.id }; }
     const owner = to === 'auto' ? pick!() : (to || null); if (owner) got.set(owner, (got.get(owner) ?? 0) + 1); return { ...r, status: '미연락', owner_id: owner, assigned_at: owner ? now : null, created_by: x.me.id }; });
-  for (let i = 0; i < ins.length; i += 500) { const { error } = await sb.from('meta_leads').insert(ins.slice(i, i + 500)); if (error) return { ok: false, msg: needSql(error.message) }; }
-  const noti = [...got].filter(([u]) => u !== x.me.id).map(([user_id, n]) => ({ user_id, kind: 'info', title: `인바운드 DB ${n}건이 배정되었습니다`, body: '', link: '/meta-db' })); if (noti.length) await sb.from('notifications').insert(noti);
+  for (let i = 0; i < ins.length; i += 500) { const { data: made, error } = await sb.from('meta_leads').insert(ins.slice(i, i + 500)).select('id,owner_id'); if (error) return { ok: false, msg: needSql(error.message) };
+    const byOwner = new Map<string, number[]>(); for (const m of made ?? []) if (m.owner_id) byOwner.set(m.owner_id, [...(byOwner.get(m.owner_id) ?? []), m.id]); for (const [o, ids] of byOwner) await linkAssign(ids, o, x.me.id); }   // 배정된 건은 그 사람의 내 DB 로
+  const noti = [...got].filter(([u]) => u !== x.me.id).map(([user_id, n]) => ({ user_id, kind: 'info', title: `인바운드 DB ${n}건이 배정되었습니다`, body: '', link: '/my-db' })); if (noti.length) await sb.from('notifications').insert(noti);
   revalidatePath('/meta-db'); return { ok: true, msg: `${ins.length - dup}건 등록${dup ? ` · 중복 ${dup}건(중복으로 표시)` : ''}`, added: ins.length - dup, dup };
 }
 /** 배정·재배정 (팀장·총괄) — to: 사람 id 또는 ''(미배정으로) */
@@ -58,7 +60,8 @@ export async function mdAssign(ids: number[], to: string): Promise<R> {
   const list = (ids ?? []).map(Number).filter(Number.isFinite).slice(0, 3000); if (!list.length) return { ok: false, msg: '먼저 체크해 주세요' };
   if (to && !(await metaPeople()).some(p => p.id === to)) return { ok: false, msg: '메타팀 사람에게만 배정할 수 있습니다' };
   const sb = supabaseAdmin(); const { data, error } = await sb.from('meta_leads').update({ owner_id: to || null, assigned_at: to ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).in('id', list).select('id'); if (error) return { ok: false, msg: needSql(error.message) };
-  if (to && to !== x.me.id && data?.length) await sb.from('notifications').insert({ user_id: to, kind: 'info', title: `인바운드 DB ${data.length}건이 배정되었습니다`, body: '', link: '/meta-db' });
+  await linkAssign((data ?? []).map(d => d.id), to || null, x.me.id);   // 내 DB 에 줄 생성 · 재배정이면 메모째 이동 · 해제면 내림
+  if (to && to !== x.me.id && data?.length) await sb.from('notifications').insert({ user_id: to, kind: 'info', title: `인바운드 DB ${data.length}건이 배정되었습니다`, body: '내 DB 에서 확인하고 바로 연락해 주세요', link: '/my-db' });
   revalidatePath('/meta-db'); return { ok: true, msg: `${data?.length ?? 0}건 ${to ? '배정' : '미배정으로'}` };
 }
 /** 처리 기록 — 담당자 본인 또는 팀장·총괄. 결제로 바꾸면 결제 시각이 찍힌다 */
@@ -72,7 +75,9 @@ export async function mdUpdate(id: number, patch: { status?: string; paid_amt?: 
   if ('cost_amt' in patch) { const n = Number(patch.cost_amt); up.cost_amt = Number.isFinite(n) && n > 0 && n < 1e12 ? Math.round(n) : null; }
   if ('next_on' in patch) up.next_on = day(patch.next_on); if ('memo' in patch) up.memo = s(patch.memo, 2000); if ('product' in patch) up.product = s(patch.product, 80);
   if ('name' in patch) up.name = s(patch.name, 100); if ('phone' in patch) { up.phone = s(patch.phone, 40); up.phone_key = s(patch.phone, 40).replace(/\D/g, '').slice(0, 15); }
-  const { data, error: e2 } = await sb.from('meta_leads').update(up).eq('id', id).select(COLS).single(); return e2 ? { ok: false, msg: needSql(e2.message) } : { ok: true, msg: '저장됨', row: data as MetaLead };
+  const { data, error: e2 } = await sb.from('meta_leads').update(up).eq('id', id).select(COLS).single(); if (e2) return { ok: false, msg: needSql(e2.message) };
+  try { await syncToMyDb(id, patch); } catch { /* 내 DB 반영 실패는 저장을 막지 않는다 */ }
+  return { ok: true, msg: '저장됨', row: data as MetaLead };
 }
 /** 삭제 — 총괄·어드민만 (잘못 올린 것) */
 export async function mdDelete(ids: number[]): Promise<R> {

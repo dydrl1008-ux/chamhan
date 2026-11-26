@@ -10,6 +10,7 @@ const BG: Record<string, string> = { 결제: '#FFF27A', 허수: '#F0F2F5', 중�
 const HEAD: [keyof MetaIn, RegExp][] = [['received_on', /접수|날짜|일자|일시|등록/], ['source', /구분|경로|매체|유입/], ['name', /이름|성함|상호|업체|고객/], ['phone', /전화|연락처|번호|휴대/], ['product', /상품|서비스|종류/], ['inquiry', /문의|내용|메모|요청/], ['url', /url|링크|주소|스토어/i]];
 const ORDER: (keyof MetaIn)[] = ['received_on', 'source', 'name', 'phone', 'product', 'inquiry', 'url'];
 const p2 = (n: number) => String(n).padStart(2, '0');
+const hm = (t: string) => new Date(new Date(t).getTime() + 9 * 3600e3).toISOString().slice(5, 16).replace('-', '/').replace('T', ' ');
 function toDay(v: any): string | null {
   if (v instanceof Date && !isNaN(+v)) return `${v.getFullYear()}-${p2(v.getMonth() + 1)}-${p2(v.getDate())}`;
   const m = String(v ?? '').trim().match(/(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/); if (m) return `${m[1]}-${p2(+m[2])}-${p2(+m[3])}`;
@@ -31,8 +32,9 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
   const nameOf = useMemo(() => new Map(people.map(p => [p.id, p.name])), [people]);
   const cnt = useMemo(() => { const m: Record<string, number> = {}; for (const r of rows) m[r.status] = (m[r.status] ?? 0) + 1; return m; }, [rows]);
   const due = rows.filter(r => r.next_on && r.next_on <= today && !['결제', '허수', '중복', '종료'].includes(r.status)).length;
+  const noCall = rows.filter(r => r.owner_id && r.status === '미연락' && !r.first_contact_at).length;
   const list = useMemo(() => { const k = q.trim().toLowerCase(); const kd = k.replace(/\D/g, '');
-    return rows.filter(r => (st === '전체' || (st === '오늘 연락' ? !!r.next_on && r.next_on <= today && !['결제', '허수', '중복', '종료'].includes(r.status) : r.status === st)) && (!k || r.name.toLowerCase().includes(k) || r.product.toLowerCase().includes(k) || r.inquiry.toLowerCase().includes(k) || r.memo.toLowerCase().includes(k) || (kd.length >= 3 && r.phone.replace(/\D/g, '').includes(kd)))); }, [rows, st, q, today]);
+    return rows.filter(r => (st === '전체' || (st === '첫 연락 전' ? !!r.owner_id && r.status === '미연락' && !r.first_contact_at : st === '오늘 연락' ? !!r.next_on && r.next_on <= today && !['결제', '허수', '중복', '종료'].includes(r.status) : r.status === st)) && (!k || r.name.toLowerCase().includes(k) || r.product.toLowerCase().includes(k) || r.inquiry.toLowerCase().includes(k) || r.memo.toLowerCase().includes(k) || (kd.length >= 3 && r.phone.replace(/\D/g, '').includes(kd)))); }, [rows, st, q, today]);
   const save = async (id: number, patch: Parameters<typeof mdUpdate>[1]) => { const r = await mdUpdate(id, patch); if (!r.ok) { notify(r.msg, 'bad'); return; } setRows(a => a.map(x => x.id === id ? r.row : x)); };
   const onFile = async (f: File) => { try { const XLSX = await import('xlsx'); const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true }); const out: MetaIn[] = []; for (const n of wb.SheetNames) out.push(...parseGrid(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }) as any[][])); setParsed(out); setPaste(''); if (!out.length) notify('읽을 문의가 없습니다 — 이름이나 전화번호 칸이 있어야 합니다', 'bad'); } catch (e: any) { notify('엑셀을 읽지 못했습니다: ' + (e?.message ?? e), 'bad'); } if (fileRef.current) fileRef.current.value = ''; };
   const onPaste = (t: string) => { setPaste(t); setParsed(parseGrid(t.split(/\r?\n/).map(l => l.split('\t')))); };
@@ -67,7 +69,7 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
       </div>}
     </div>}
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-      {pill('전체', rows.length)}{due > 0 && pill('오늘 연락', due)}{STATUSES.map(k => pill(k, cnt[k] ?? 0))}
+      {pill('전체', rows.length)}{lead && noCall > 0 && pill('첫 연락 전', noCall)}{due > 0 && pill('오늘 연락', due)}{STATUSES.map(k => pill(k, cnt[k] ?? 0))}
       <span style={{ flex: 1 }} /><input style={{ ...inp, width: 200 }} placeholder="이름 · 전화 · 내용 검색" value={q} onChange={e => { setQ(e.target.value); setShow(100); }} />
     </div>
     {lead && sel.size > 0 && <div className="card" style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', background: '#F5F8FF' }}>
@@ -97,7 +99,8 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
               {r.paid_amt != null && r.cost_amt != null && <div style={{ fontSize: 11.5, color: '#067647', textAlign: 'right', marginTop: 2 }}>마진 {(r.paid_amt - r.cost_amt).toLocaleString()}</div>}</td>
             <td style={{ padding: 8 }}><input disabled={!mine} type="date" style={{ ...inp, color: r.next_on && r.next_on <= today ? '#B42318' : undefined }} value={r.next_on ?? ''} onChange={e => save(r.id, { next_on: e.target.value || null })} /></td>
             <td style={{ padding: 8, minWidth: 220 }}><textarea disabled={!mine} key={'m' + r.id + r.updated_at} style={{ ...inp, width: '100%', minHeight: 34, fontFamily: 'inherit', resize: 'vertical' }} defaultValue={r.memo} onBlur={e => { if (e.target.value !== r.memo) save(r.id, { memo: e.target.value }); }} /></td>
-            {lead && <td style={{ padding: 8, whiteSpace: 'nowrap', color: r.owner_id ? '#344054' : '#B54708' }}>{r.owner_id ? (nameOf.get(r.owner_id) ?? '(팀 밖)') : '미배정'}</td>}
+            {lead && <td style={{ padding: 8, whiteSpace: 'nowrap', color: r.owner_id ? '#344054' : '#B54708' }}>{r.owner_id ? (nameOf.get(r.owner_id) ?? '(팀 밖)') : '미배정'}
+              {r.owner_id && !['중복', '허수'].includes(r.status) && <div style={{ fontSize: 11.5, marginTop: 2, color: r.first_contact_at ? '#667085' : '#B42318', fontWeight: r.first_contact_at ? 400 : 700 }}>{r.first_contact_at ? `연락 ${r.contacts || 1}차 · ${hm(r.last_contact_at ?? r.first_contact_at)}` : `첫 연락 전${r.assigned_at ? ' · 배정 ' + hm(r.assigned_at) : ''}`}</div>}</td>}
           </tr>; })}
           {!list.length && <tr><td colSpan={cols} style={{ padding: 28, textAlign: 'center', color: '#98A2B3' }}>{rows.length ? '조건에 맞는 DB 가 없습니다' : lead ? '아직 올린 DB 가 없습니다 — 위 「+ DB 올리기」' : '아직 배정된 DB 가 없습니다'}</td></tr>}
         </tbody>
