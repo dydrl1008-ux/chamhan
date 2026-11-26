@@ -14,3 +14,7 @@ export const META_STATUSES = ['미연락', '부재', '상담중', '보류', '결
 export const META_GRADES = ['', 'S', 'A', 'B', 'C', 'D', 'E', 'F'];
 export const META_WAYS = ['전화', '카톡', '문자', '기타'];
 export const META_RESULTS = ['부재', '통화', '메시지 남김', '자료 발송', '거절'];
+
+/** 배분 시간 — 평일 09:00~15:30 (KST). 이 밖에 들어온 건은 미배정으로 쌓였다가 다음 영업일 9시부터 나눈다 */
+export const META_ASSIGN_FROM = '09:00', META_ASSIGN_TO = '15:30';
+export function metaAssignOpen(now = Date.now()): boolean { const k = new Date(now + 9 * 3600e3); const d = k.getUTCDay(); const hm = k.toISOString().slice(11, 16); return d !== 0 && d !== 6 && hm >= META_ASSIGN_FROM && hm <= META_ASSIGN_TO; }
