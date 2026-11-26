@@ -34,6 +34,7 @@ export function clientIp(req: NextRequest) {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  req.headers.set('x-wh-path', pathname);   // 화면 쪽에서 현재 주소를 알 수 있게 (메타팀 접근 제한 등)
   // 0) 수신거부 전용 주소(이름에 unsub·optout 이 든 도메인, 또는 UNSUB_HOSTS) — 수신거부 페이지만 보여 주고 워크허브 화면은 전부 없는 페이지로
   const host = (req.headers.get('host') ?? '').toLowerCase().split(':')[0];
   if (/unsub|optout/.test(host) || (process.env.UNSUB_HOSTS ?? '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean).includes(host)) {

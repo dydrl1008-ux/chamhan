@@ -7,12 +7,18 @@ const g = globalThis as any; async function cachedPendingCount(): Promise<number
 import { redirect } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 import Toast from '@/components/Toast';
+import { headers } from 'next/headers';
+import { isMeta, META_BLOCK } from '@/lib/meta';
+import MetaGuard from '@/components/MetaGuard';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const p = await getProfile();
   if (!p) redirect('/login');
   if (!p.is_active) redirect('/login?inactive=1');
   const roleName = { admin: '어드민', head: '총책임자', manager: '팀장', staff: p.is_mgmt ? '관리팀' : '직원' }[p.role];
   const lead = p.role === 'admin' || p.role === 'head'; const mgmt = lead || p.is_mgmt; const mgr = p.role === 'manager';
+  // 메타팀(팀 이름 '메타팀') — 인바운드 DB 전담. 영업사원용 화면은 메뉴에서 빼고 주소로 들어와도 돌려보낸다
+  const meta = await isMeta(p);
+  if (meta) { const path = headers().get('x-wh-path') ?? ''; if (META_BLOCK.some(b => path === b || path.startsWith(b + '/'))) redirect('/meta-db'); }
   let pendingCount = 0; if (mgmt) { pendingCount = await cachedPendingCount(); }
   // 금일 이슈 미확인 건수 (활성 이슈 중 내가 안 읽은 것)
   const sb = supabaseServer(); const [{ data: issues }, { data: reads }] = await Promise.all([sb.from('issues').select('id').eq('is_active', true).order('issue_date', { ascending: false }).limit(50), sb.from('issue_reads').select('issue_id').eq('user_id', p.id)]);
@@ -27,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <aside className="side">
         <div className="brand">워크허브<small>참한기획</small></div>
         <NavLink href="/">홈</NavLink>
+        {meta && <MetaGuard block={META_BLOCK} />}
 
         <NavGroup title="근태 · 계획" hrefs={['/attendance', '/leave', '/plans']}>
           <NavLink href="/attendance">출퇴근</NavLink>
@@ -34,22 +41,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/plans">계획 캘린더</NavLink>
         </NavGroup>
 
+        {(meta || lead) && <NavGroup title="메타팀" hrefs={['/meta-db', '/meta-stats']}>
+          <NavLink href="/meta-db">인바운드 DB</NavLink>
+          {(lead || mgr) && <NavLink href="/meta-stats">메타 효율</NavLink>}
+        </NavGroup>}
+
         <NavGroup title="영업 · 리드" hrefs={['/calls', '/my-db', '/leads', '/proposals', '/quotes', '/mail', '/mail/export', '/mail/optouts', '/mail/discover', '/brief', '/kw-calls', '/threads', '/missions', '/sales-stats', '/renewals', '/notifications']}>
-          {!p.is_mgmt && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
+          {!meta && !p.is_mgmt && <NavLink href="/calls">오늘의 콜 리스트</NavLink>}
           {lead && <NavLink href="/leads">콜 리스트 관리</NavLink>}
-          <NavLink href="/proposals">키워드 제안서</NavLink>
+          {!meta && <NavLink href="/proposals">키워드 제안서</NavLink>}
           <NavLink href="/quotes">견적서</NavLink>
-          <NavLink href="/mail">메일 발송</NavLink>
+          {!meta && <NavLink href="/mail">메일 발송</NavLink>}
           {p.role === 'head' && <NavLink href="/mail/export">수동 발송 엑셀</NavLink>}
           {(p.role === 'head' || p.role === 'admin') && <NavLink href="/mail/optouts">수신거부 목록</NavLink>}
           {p.role === 'head' && <NavLink href="/mail/discover">키워드 발굴</NavLink>}
           {p.role === 'head' && <NavLink href="/threads">쓰레드 자동 발행</NavLink>}
-          {canBrief(p) && <NavLink href="/brief">영업 브리핑</NavLink>}
-          <NavLink href="/kw-calls">키워드 콜 리스트</NavLink>
-          {!p.is_mgmt && <NavLink href="/my-db">내 DB</NavLink>}
+          {!meta && canBrief(p) && <NavLink href="/brief">영업 브리핑</NavLink>}
+          {!meta && <NavLink href="/kw-calls">키워드 콜 리스트</NavLink>}
+          {!meta && !p.is_mgmt && <NavLink href="/my-db">내 DB</NavLink>}
           {lead && <NavLink href="/missions">경쟁사 미션</NavLink>}
-          {(mgr || mgmt) && <NavLink href="/sales-stats">콜 성과</NavLink>}
-          <NavLink href="/renewals">이탈 고객</NavLink>
+          {!meta && (mgr || mgmt) && <NavLink href="/sales-stats">콜 성과</NavLink>}
+          {!meta && <NavLink href="/renewals">이탈 고객</NavLink>}
           <NavLink href="/notifications">알림{notiBadge}</NavLink>
         </NavGroup>
 
@@ -63,13 +75,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {mgmt && <NavLink href="/settlement">정산 연동</NavLink>}
         </NavGroup>
 
-        <NavGroup title="직원 · 마진" hrefs={['/overview', '/employees', '/margin', '/kpi', '/users', '/criteria']}>
+        {!meta && <NavGroup title="직원 · 마진" hrefs={['/overview', '/employees', '/margin', '/kpi', '/users', '/criteria']}>
           {p.role !== 'staff' && <NavLink href="/overview">직원 현황</NavLink>}
           <NavLink href="/margin">영업 마진</NavLink>
           <NavLink href="/kpi">{p.role === 'head' ? '일간 KPI 현황' : '일간 KPI 보고'}</NavLink>
           {lead && <NavLink href="/users">사용자 · 팀</NavLink>}
           <NavLink href="/criteria">진급 · 인센티브 기준</NavLink>
-        </NavGroup>
+        </NavGroup>}
         <NavGroup title="도구" hrefs={['/secret-index', '/shop-diag', '/rank-watch', '/product-name', '/pv3', '/slots-open']}>
           <NavLink href="/rank-watch">순위 체크</NavLink>
           <NavLink href="/secret-index">시크릿 지수</NavLink>
@@ -81,15 +93,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         {unreadIssues > 0 && <NavLink href="/issues">금일 이슈 미확인{issueBadge}</NavLink>}
         <NavGroup title="보고 · 이슈" hrefs={['/monthly', '/call-status', '/weekly', '/reports', '/issues', '/products']}>
-          {(mgr || lead) && <NavLink href="/monthly">월간 보고</NavLink>}
-          {(mgr || lead) && <NavLink href="/call-status">콜 리스트 현황</NavLink>}
-          {(mgr || lead) && <NavLink href="/weekly">지난 주간보고 (보관)</NavLink>}
+          {(mgr || lead) && !meta && <NavLink href="/monthly">월간 보고</NavLink>}
+          {(mgr || lead) && !meta && <NavLink href="/call-status">콜 리스트 현황</NavLink>}
+          {(mgr || lead) && !meta && <NavLink href="/weekly">지난 주간보고 (보관)</NavLink>}
           <NavLink href="/reports">보고서</NavLink>
           <NavLink href="/issues">금일 이슈{issueBadge}</NavLink>
           <NavLink href="/products">상품 안내 · 접수</NavLink>
         </NavGroup>
 
-        {(mgr || lead) && (
+        {(mgr || lead) && !meta && (
           <NavGroup title="AI팀" hrefs={['/ai']}>
             <NavLink href="/ai/orders">지시 · 작업 현황</NavLink>
             {lead && <NavLink href="/ai/agents">에이전트 · 일정</NavLink>}

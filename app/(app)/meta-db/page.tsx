@@ -1,0 +1,21 @@
+// 메타팀 인바운드 DB — 광고로 들어온 문의를 처리한다. 사원: 본인 배정분 / 메타팀 팀장·총괄: 전체 + 올리기·배분
+import { redirect } from 'next/navigation';
+import { getProfile } from '@/lib/auth/session';
+import { todayKST } from '@/lib/date/kst';
+import { metaAccess } from '@/lib/meta';
+import { PageHeader } from '@/components/ui';
+import { mdList, metaPeople } from './actions';
+import MetaDbClient from './MetaDbClient';
+export const dynamic = 'force-dynamic';
+export default async function MetaDbPage({ searchParams }: { searchParams: { u?: string } }) {
+  const me = await getProfile(); if (!me || !me.is_active) redirect('/login');
+  const a = await metaAccess(me); if (!a.ok) redirect('/');
+  const people = a.lead ? await metaPeople() : [];
+  const owner = a.lead ? (searchParams.u === 'none' || people.some(p => p.id === searchParams.u) ? searchParams.u! : 'all') : me.id;
+  const r = await mdList(owner);
+  return <>
+    <PageHeader title="인바운드 DB" desc={a.lead ? '광고로 들어온 문의를 올리고 배분합니다. 같은 전화번호가 이미 있으면 「중복」으로 들어갑니다' : '나에게 배정된 문의입니다. 통화 후 상태 · 결제 금액 · 메모를 남겨 주세요'} />
+    {!r.ok ? <div className="card" style={{ color: '#B42318' }}>{r.msg}</div>
+      : <MetaDbClient rows={r.rows} people={people} owner={owner} lead={a.lead} boss={a.boss} meId={me.id} today={todayKST()} />}
+  </>;
+}
