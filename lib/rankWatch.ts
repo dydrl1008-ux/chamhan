@@ -69,12 +69,12 @@ export async function watchHistory(ids: string[], days = 30): Promise<Record<str
 
 /** 순위 조회 — 키워드별로 묶어 지수 프로그램을 키워드당 한 번만 새로 조회, 그 키워드를 쓰는 항목 전부에 순위 기록. 0 = 100위 밖 */
 const GAP_MS = 2500;   // 지수 프로그램 조회 간격
-export async function checkWatch(rows: WatchRow[], budgetMs = 40000): Promise<{ ok: boolean; msg: string; n: number; left: number }> {
+export async function checkWatch(rows: WatchRow[], budgetMs = 40000): Promise<{ ok: boolean; msg: string; n: number; left: number; failed?: string[] }> {
   if (!rows.length) return { ok: false, msg: '대상 없음', n: 0, left: 0 };
   const wh = supabaseAdmin(); const t0 = Date.now(); const by = new Map<string, WatchRow[]>();
   for (const w of rows) { const k = String(w.keyword ?? '').trim().replace(/\s+/g, ' '); if (!k || k.length > 40 || !w.mid) continue; by.set(k, [...(by.get(k) ?? []), w]); }
   // 키워드를 하나씩, 조회 시작 간격 2.5초로 (동시에 여러 개 넣으면 지수 프로그램이 「너무 빠른 조회」로 막는다). 한 키워드가 실패해도 나머지는 계속. 1인 하루 조회 한도는 적용하지 않는다
-  let n = 0, kws = 0, err = '', cooled = false; const failed: string[] = []; const queue = [...by]; const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  let n = 0, kws = 0, err = '', cooled = false; const failed: string[] = []; const tries = new Map<string, number>(); const queue = [...by]; const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
   const one = async ([kw, list]: [string, WatchRow[]]) => {
     let prods: any[] = []; let got = false;
     for (let t = 0; t < 2 && !got; t++) {   // 지수 프로그램이 「너무 빠른 조회」로 막으면 8초 쉬고 한 번 더. 또 막히면 이번 실행은 여기서 멈춘다(남은 건 5분 뒤 이어서)
@@ -82,6 +82,7 @@ export async function checkWatch(rows: WatchRow[], budgetMs = 40000): Promise<{ 
       catch (e: any) { const m = String(e?.message ?? e); const fast = /빠른|잠시 후|429|too many/i.test(m);
         if (fast && t === 0 && Date.now() - t0 + 9000 < budgetMs) { await sleep(8000); continue; }
         if (fast) { cooled = true; queue.unshift([kw, list]); return; }
+        if ((tries.get(kw) ?? 0) < 1) { tries.set(kw, 1); queue.push([kw, list]); return; }   // 다른 키워드를 먼저 돌고 맨 뒤에서 한 번 더
         failed.push(kw); if (!err) err = `「${kw}」 조회 실패: ${m.slice(0, 80)}`; return; }
     }
     const at = new Date().toISOString(); const ids = list.map(w => String(w.id));
@@ -104,8 +105,8 @@ export async function checkWatch(rows: WatchRow[], budgetMs = 40000): Promise<{ 
   while (queue.length && !cooled && Date.now() - t0 < budgetMs) { const s0 = Date.now(); await one(queue.shift()!); if (queue.length && !cooled) await sleep(Math.max(0, GAP_MS - (Date.now() - s0))); }
   const left = queue.length;   // 시간 안에 손도 못 댄 키워드 수 (실패한 건 다음 회차에 다시)
   if (cooled && !n && !err) err = '지수 프로그램이 「너무 빠른 조회」로 막고 있습니다 — 잠시 후 이어서 조회합니다';
-  if (err && !n) return { ok: false, msg: err, n: 0, left };
-  return { ok: true, msg: `${n}건 순위 조회 (키워드 ${kws}개)` + (left ? ` · 남은 키워드 ${left}개${cooled ? ' (조회 속도 제한으로 잠시 쉼)' : ''}` : '') + (failed.length ? ` · 실패 ${failed.length}개(${failed.slice(0, 3).join(', ')}) — ${err}` : ''), n, left };
+  if (err && !n) return { ok: false, msg: err, n: 0, left, failed };
+  return { ok: true, msg: `${n}건 순위 조회 (키워드 ${kws}개)` + (left ? ` · 남은 키워드 ${left}개${cooled ? ' (조회 속도 제한으로 잠시 쉼)' : ''}` : '') + (failed.length ? ` · 실패 ${failed.length}개(${failed.slice(0, 3).join(', ')}) — ${err} · 실패한 건 5분 뒤 다시 조회` : ''), n, left, failed };
 }
 
 /** 등록 — 상품 링크(단일) 또는 원부 링크 + 키워드 여러 개. 같은 상품·키워드는 건너뛰고, 등록하자마자 첫 순위를 조회 */
@@ -141,23 +142,36 @@ export async function rankWatchTick(budgetMs = 20000): Promise<string> {
   const now = new Date(Date.now() + 9 * 3600e3); const today = now.toISOString().slice(0, 10); const hm = now.toISOString().slice(11, 16); const dow = now.getUTCDay();
   if (dow === 0 || dow === 6 || hm < '10:00' || hm >= '19:00') return 'off';
   const hh = hm < '14:00' ? '10' : '14'; const slotKey = `${today} ${hh}`; const slot = new Date(`${today}T${hh}:00:00+09:00`).toISOString();
-  const wh = supabaseAdmin(); const { data: done } = await wh.from('ai_settings').select('value').eq('key', 'rankwatch_slot_done').maybeSingle(); if (done?.value === slotKey) return 'done';
-  const all = await watchRows(); const todo = all.filter(w => !w.cur_at || w.cur_at < slot).sort((a, b) => String(a.cur_at ?? '').localeCompare(String(b.cur_at ?? '')));   // 오래 안 본 것부터
+  const wh = supabaseAdmin(); const { data: st } = await wh.from('ai_settings').select('key,value').in('key', ['rankwatch_slot_done', 'rankwatch_alert_done', 'rankwatch_fail']); const cfg = new Map<string, string>((st ?? []).map((x: any) => [x.key, x.value]));
+  if (cfg.get('rankwatch_slot_done') === slotKey) return 'done';
+  const setKey = (key: string, value: string) => wh.from('ai_settings').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  // 이 회차에 실패한 키워드와 횟수 — 실패한 건 회차가 끝날 때까지 5분마다 계속 다시 조회한다 (다른 키워드를 먼저 돌고 맨 뒤에서)
+  let fail: Record<string, number> = {}; try { const f = JSON.parse(cfg.get('rankwatch_fail') || '{}'); if (f.slot === slotKey) fail = f.c ?? {}; } catch { /* 처음 */ }
+  const kwOf = (w: WatchRow) => String(w.keyword ?? '').trim().replace(/\s+/g, ' ');
+  const all = await watchRows(); const stale = (list: WatchRow[]) => list.filter(w => (!w.cur_at || w.cur_at < slot) && !!w.mid && !!kwOf(w) && kwOf(w).length <= 40);   // 조회할 수 없는 줄(상품 번호 · 키워드 없음)은 대상에서 뺀다
+  const todo = stale(all).sort((a, b) => (fail[kwOf(a)] ?? 0) - (fail[kwOf(b)] ?? 0) || String(a.cur_at ?? '').localeCompare(String(b.cur_at ?? '')));   // 실패 없던 것 · 오래 안 본 것부터
+  let msg = '', rest: WatchRow[] = [], waiting = 0;
   if (todo.length) {
-    const r = await checkWatch(todo, budgetMs); await wh.from('ai_settings').upsert({ key: 'rankwatch_last', value: `${new Date().toISOString()} ${r.msg}`.slice(0, 400), updated_at: new Date().toISOString() }, { onConflict: 'key' });   // 화면에서 마지막 실행 결과를 볼 수 있게
-    // 조회가 한 건도 안 되는 상태(전부 실패)가 이어지면 이 회차는 접는다 — 같은 실패를 5분마다 되풀이하지 않게. 다음 회차에 다시 시도
-    if (!r.n && !r.left) { await wh.from('ai_settings').upsert({ key: 'rankwatch_slot_done', value: slotKey, updated_at: new Date().toISOString() }, { onConflict: 'key' }); return 'gave up: ' + r.msg.slice(0, 80); }
-    return r.ok ? `rank ${r.n}rows left ${r.left}kw` : 'err ' + r.msg.slice(0, 80);
+    const r = await checkWatch(todo, budgetMs); const nf: Record<string, number> = {}; for (const k of r.failed ?? []) nf[k] = (fail[k] ?? 0) + 1; for (const k of Object.keys(fail)) if (!(k in nf) && todo.some(w => kwOf(w) === k)) nf[k] = fail[k];   // 아직 차례가 안 온 실패 건은 횟수 유지
+    rest = stale(await watchRows()); for (const k of Object.keys(nf)) if (!rest.some(w => kwOf(w) === k)) delete nf[k];   // 조회된 건 지움
+    fail = nf; await setKey('rankwatch_fail', JSON.stringify({ slot: slotKey, c: fail }).slice(0, 8000));
+    waiting = new Set(rest.filter(w => (fail[kwOf(w)] ?? 0) < 3).map(kwOf)).size;   // 아직 제대로 시도 못 했거나 실패 3번 미만인 키워드
+    const stuck = Object.keys(fail).filter(k => fail[k] >= 3);
+    await setKey('rankwatch_last', `${new Date().toISOString()} ${r.msg}${stuck.length ? ` · 계속 실패 ${stuck.length}개(${stuck.slice(0, 5).join(', ')}) — 회차 끝까지 5분마다 다시 조회` : ''}`.slice(0, 400));   // 화면에서 마지막 실행 결과를 볼 수 있게
+    msg = r.ok ? `rank ${r.n}rows left ${r.left}kw fail ${Object.keys(fail).length}kw` : 'err ' + r.msg.slice(0, 80);
   }
-  await wh.from('ai_settings').upsert({ key: 'rankwatch_slot_done', value: slotKey, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (!rest.length) await setKey('rankwatch_slot_done', slotKey);
+  // 급하락 알림 — 다 조회됐거나, 남은 게 계속 실패(3번 이상)하는 키워드뿐이면 그때 한 번 보낸다. 실패 건은 그 뒤에도 계속 다시 조회
+  if (waiting || cfg.get('rankwatch_alert_done') === slotKey) return msg || 'done';
+  await setKey('rankwatch_alert_done', slotKey);
   let sent = 0;
   try { const by = new Map<string, string[]>();
-    for (const w of all) { if (!w.cur_at || w.cur_at < slot || w.prev_rank == null) continue; const out = w.cur_rank == null; const d = out ? 0 : (w.cur_rank as number) - w.prev_rank; if (!out && d < DROP_ALERT) continue;
+    for (const w of todo.length ? await watchRows() : all) { if (!w.cur_at || w.cur_at < slot || w.prev_rank == null) continue; const out = w.cur_rank == null; const d = out ? 0 : (w.cur_rank as number) - w.prev_rank; if (!out && d < DROP_ALERT) continue;
       by.set(w.user_id, [...(by.get(w.user_id) ?? []), `▼ ${w.group !== GROUP_NONE ? w.group + ' · ' : ''}${w.keyword}  ${w.prev_rank}위 → ${out ? '100위 밖' : `${w.cur_rank}위 (${d}↓)`}`]); }
     const rows = [...by].map(([user_id, arr]) => ({ user_id, kind: 'alert', title: `순위 급하락 ${arr.length}건 — ${hh}시 조회`, body: arr.slice(0, 30).join('\n').slice(0, 1500), link: '/rank-watch' }));
     if (rows.length) { await wh.from('notifications').insert(rows); sent = rows.length; }
   } catch { /* 알림 실패는 조회에 영향 없음 */ }
-  return `done now alert ${sent}`;
+  return `${msg || 'done'} alert ${sent}`;
 }
 
 /** ★ 주요 업체 순위 변동 알림 — 마지막 알림 순위 대비 delta 이상 변동 또는 100위 안↔밖 */
