@@ -6,10 +6,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { metaAccess, metaTeamId, META_STATUSES } from '@/lib/meta';
 import { metaDeployed } from '@/lib/metaEdu';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
-export type MetaLead = { id: number; received_on: string; source: string; name: string; phone: string; product: string; inquiry: string; url: string; owner_id: string | null; status: string; paid_amt: number | null; cost_amt: number | null; paid_at: string | null; next_on: string | null; memo: string; updated_at: string };
+export type MetaLead = { id: number; received_on: string; source: string; name: string; phone: string; product: string; inquiry: string; url: string; owner_id: string | null; status: string; paid_amt: number | null; cost_amt: number | null; paid_at: string | null; next_on: string | null; memo: string; updated_at: string; inflow: string; received_at: string | null };
 export type MetaIn = { received_on?: string | null; source?: string; name?: string; phone?: string; product?: string; inquiry?: string; url?: string };
-const COLS = 'id,received_on,source,name,phone,product,inquiry,url,owner_id,status,paid_amt,cost_amt,paid_at,next_on,memo,updated_at';
-const needSql = (m: string) => /cost_amt/.test(m) ? '0102 SQL(상품비 칸 · 메타 보고)을 먼저 실행해 주세요' : /meta_leads|meta_ad_spend/.test(m) ? '0100 SQL(메타팀 표)을 먼저 실행해 주세요' : m;
+const COLS = 'id,received_on,source,name,phone,product,inquiry,url,owner_id,status,paid_amt,cost_amt,paid_at,next_on,memo,updated_at,inflow,received_at';
+const needSql = (m: string) => /inflow|received_at|ext_id/.test(m) ? '0103 SQL(자동 접수 칸)을 먼저 실행해 주세요' : /cost_amt/.test(m) ? '0102 SQL(상품비 칸 · 메타 보고)을 먼저 실행해 주세요' : /meta_leads|meta_ad_spend/.test(m) ? '0100 SQL(메타팀 표)을 먼저 실행해 주세요' : m;
 const s = (x: unknown, n: number) => String(x ?? '').trim().slice(0, n); const day = (x: unknown) => { const t = String(x ?? '').trim(); return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null; };
 async function who() { const me = await getProfile(); if (!me || !me.is_active) return null; const a = await metaAccess(me); if (!a.ok) return null; if (!a.lead && !(await metaDeployed(me))) return null;   // 투입 전 사원은 DB 를 볼 수 없다
   return { me, ...a }; }
