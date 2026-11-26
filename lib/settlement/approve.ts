@@ -72,7 +72,7 @@ export async function cancelApproval(settlementSeq: string, actorId: string, hin
   let verified = false; try { const after = await findRow(cookie, settlementSeq, ['03'], String(r.dispReqDate ?? r.reqDate ?? '').slice(0, 10)); verified = String(after?.applyStatus) === '03'; } catch {}
   await sb.from('settlement_actions').insert({ settlement_seq: settlementSeq, action: 'cancel', payload, result: `${res.status} ${res.text.slice(0, 200)}${verified ? ' · 재조회 승인취소 확인' : ''}`, ok: okNum && verified, actor_id: actorId });
   if (!okNum) throw new Error(`정산 사이트 응답: ${res.status} ${res.text.slice(0, 200)}`);
-  await sb.from('settlement_pending').update({ resolved_at: new Date().toISOString(), resolved_status: verified ? '반려 (워크허브에서 승인취소)' : '승인취소 전송됨', resolved_by: actorId }).eq('settle_no', settlementSeq).is('resolved_at', null);
+  await sb.from('settlement_pending').update({ resolved_at: new Date().toISOString(), resolved_status: verified ? '반려 (워크허브에서 승인취소)' : '승인취소 전송됨', resolved_by: actorId }).eq('settle_no', settlementSeq).is('resolved_at', null); try { const { payCancelBySettle } = await import('@/lib/metaPay'); await payCancelBySettle(settlementSeq, actorId); } catch { /* 메타 결제 내역 취소 실패는 승인취소를 막지 않는다 */ }
   await markItemsStatus(settlementSeq, '승인취소');   // 마진에서 즉시 제외
   return { verified };
 }
