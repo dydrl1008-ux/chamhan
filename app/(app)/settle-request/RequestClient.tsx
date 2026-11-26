@@ -6,7 +6,7 @@ import { calc, type ReqInput } from '@/lib/settlement/calc';
 const w = (v: number) => '₩' + Math.round(v).toLocaleString('ko-KR');
 const L = ({ l, v, c }: { l: string; v: React.ReactNode; c?: string }) => <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid var(--line)' }}><span style={{ color: 'var(--muted)' }}>{l}</span><b style={{ color: c }}>{v}</b></div>;
 export default function RequestClient({ linked, settleId, lastError, today, canAddCustomer, metaLeads }: { linked: boolean; settleId: string; lastError: string; today: string; canAddCustomer: boolean; metaLeads?: { id: number; label: string }[] | null }) {
-  const [inb, setInb] = useState(!!metaLeads);   // 메타팀은 기본이 체크 const [inbLead, setInbLead] = useState<number | ''>(''); const [inbQ, setInbQ] = useState('');   // 메타팀: 인바운드 체크 → 결제 내역 자동 등록
+  const [inb, setInb] = useState(!!metaLeads); /* 메타팀은 기본이 체크 */ const [inbLead, setInbLead] = useState<number | ''>(''); const [inbQ, setInbQ] = useState('');   // 메타팀: 인바운드 체크 → 결제 내역 자동 등록
   const [detail, setDetail] = useState<any>(null); const [lq, setLq] = useState(''); const [detailItems, setDetailItems] = useState<{ seq: number; name: string; inputValue: string }[] | null>(null);
   const openDetail = async (r: any) => { setDetail(r); setDetailItems(null); const x = await requestItems(String(r.settlementSeq), String(r.prodId)); setDetailItems(x.ok ? (x.items ?? []) : []); };
   const [fd, setFd] = useState<any>(null); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [rows, setRows] = useState<any[]>([]); const [listErr, setListErr] = useState('');

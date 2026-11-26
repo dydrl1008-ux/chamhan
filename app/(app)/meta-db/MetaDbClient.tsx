@@ -79,7 +79,6 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
       <b style={{ fontSize: 13 }}>{sel.size}건 선택</b>
       <select style={inp} value={moveTo} onChange={e => setMoveTo(e.target.value)}><option value="">미배정으로</option>{people.map(p => <option key={p.id} value={p.id}>{p.name}에게</option>)}</select>
       <button className="btn" disabled={busy} onClick={assign}>배정</button>
-      {boss && <button className="btn ghost" disabled={busy} style={{ color: '#B42318' }} onClick={del}>삭제</button>}
       <button className="btn ghost" onClick={() => setSel(new Set())}>선택 해제</button>
     </div>}
     <div className="card" style={{ padding: 0, overflowX: 'auto' }}>

@@ -101,11 +101,12 @@ export async function dbDelete(ids: number[]): Promise<R> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
   const list = (ids ?? []).map(Number).filter(Number.isFinite).slice(0, 2000); if (!list.length) return { ok: false, msg: '먼저 체크해 주세요' };
   const sb = supabaseAdmin(); let q = sb.from('my_db').update({ deleted_at: new Date().toISOString(), deleted_by: me.id }).in('id', list).is('deleted_at', null);
-  if (!isBoss(me)) q = q.eq('owner_id', me.id).neq('status', '결제').neq('source', '메타');   // 메타 인바운드 건은 직원이 지울 수 없다 — 허수면 상태를 「허수」로
+  q = q.neq('source', '메타');   // 메타 인바운드 건은 누구도 지울 수 없다 (총괄 포함) — 허수면 상태를 「허수」로
+  if (!isBoss(me)) q = q.eq('owner_id', me.id).neq('status', '결제');
   const { data, error } = await q.select('id'); if (error) return { ok: false, msg: needSql(error.message) };
   if (data?.length) await sb.from('my_db_logs').insert(data.map(d => ({ db_id: d.id, user_id: me.id, action: '삭제' })));
   const skip = list.length - (data?.length ?? 0);
-  return data?.length ? { ok: true, msg: `${data.length}건 삭제 (휴지통에서 되살릴 수 있습니다)` + (skip ? ` · ${skip}건은 결제 건이라 총괄만 지울 수 있음` : '') } : { ok: false, msg: '지울 수 있는 건이 없습니다 (결제 건은 총괄만)' };
+  return data?.length ? { ok: true, msg: `${data.length}건 삭제 (휴지통에서 되살릴 수 있습니다)` + (skip ? ` · ${skip}건은 결제 건이라 총괄만 지울 수 있음` : '') } : { ok: false, msg: '지울 수 있는 건이 없습니다 (결제 건은 총괄만 · 메타 인바운드 건은 삭제 불가 — 허수로 표시)' };
 }
 export async function dbRestore(ids: number[]): Promise<R> {
   const me = await active(); if (!me) return { ok: false, msg: '로그인 필요' };
@@ -120,7 +121,7 @@ export async function dbRestore(ids: number[]): Promise<R> {
 export async function dbPurge(ids: number[]): Promise<R> {
   const me = await active(); if (!me || !isBoss(me)) return { ok: false, msg: '총괄만' };
   const list = (ids ?? []).map(Number).filter(Number.isFinite).slice(0, 2000); if (!list.length) return { ok: false, msg: '먼저 체크해 주세요' };
-  const { data, error } = await supabaseAdmin().from('my_db').delete().in('id', list).not('deleted_at', 'is', null).select('id');
+  const { data, error } = await supabaseAdmin().from('my_db').delete().in('id', list).not('deleted_at', 'is', null).neq('source', '메타').select('id');   // 메타 건은 완전 삭제도 없음
   return error ? { ok: false, msg: needSql(error.message) } : { ok: true, msg: `${data?.length ?? 0}건 완전 삭제` };
 }
 /** 다른 직원에게 넘기기 — 본인 DB(결제 건 제외) 또는 총괄은 누구 것이든. 휴지통에 있던 건 되살려서 넘긴다 */

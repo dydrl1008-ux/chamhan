@@ -80,16 +80,8 @@ export async function mdUpdate(id: number, patch: { status?: string; paid_amt?: 
   try { await syncToMyDb(id, patch); } catch { /* 내 DB 반영 실패는 저장을 막지 않는다 */ }
   return { ok: true, msg: '저장됨', row: data as MetaLead };
 }
-/** 삭제 — 총괄·어드민만 (잘못 올린 것) */
-export async function mdDelete(ids: number[]): Promise<R> {
-  const x = await who(); if (!x || !x.boss) return { ok: false, msg: '총괄만 지울 수 있습니다' };
-  const list = (ids ?? []).map(Number).filter(Number.isFinite).slice(0, 3000); if (!list.length) return { ok: false, msg: '먼저 체크해 주세요' };
-  const sb = supabaseAdmin(); const { data: pays } = await sb.from('meta_payments').select('lead_id').in('lead_id', list); const hasPay = new Set((pays ?? []).map(p => p.lead_id)); const ok = list.filter(i => !hasPay.has(i));   // 결제 내역이 있는 건은 지울 수 없다 (실적 기록 보존)
-  if (!ok.length) return { ok: false, msg: '결제 내역이 있는 건은 지울 수 없습니다 — 허수 · 종료로 표시해 주세요' };
-  const { data, error } = await sb.from('meta_leads').delete().in('id', ok).select('id'); if (error) return { ok: false, msg: needSql(error.message) };
-  await sb.from('my_db').update({ deleted_at: new Date().toISOString(), deleted_by: x.me.id }).in('meta_id', ok).is('deleted_at', null);
-  revalidatePath('/meta-db'); return { ok: true, msg: `${data?.length ?? 0}건 삭제` + (hasPay.size ? ` · ${hasPay.size}건은 결제 내역이 있어 남김` : '') };
-}
+/** 메타 DB 는 지우지 않는다 (효율 집계가 나중에 달라지지 않게). 잘못 들어온 건은 상태를 「허수」 · 「중복」으로 */
+export async function mdDelete(_ids: number[]): Promise<R> { return { ok: false, msg: '메타 DB 는 삭제할 수 없습니다 — 허수 · 중복으로 표시해 주세요' }; }
 /** 회사월(21일~20일) 광고비 입력 — 총괄·어드민만 */
 export async function mdSpend(month: string, amount: number): Promise<R> {
   const x = await who(); if (!x || !x.boss) return { ok: false, msg: '총괄만 입력할 수 있습니다' };
