@@ -15,6 +15,6 @@ export const META_GRADES = ['', 'S', 'A', 'B', 'C', 'D', 'E', 'F'];
 export const META_WAYS = ['전화', '카톡', '문자', '기타'];
 export const META_RESULTS = ['부재', '통화', '메시지 남김', '자료 발송', '거절'];
 
-/** 배분 시간 — 평일 09:00~15:30 (KST). 이 밖에 들어온 건은 미배정으로 쌓였다가 다음 영업일 9시부터 나눈다 */
-export const META_ASSIGN_FROM = '09:00', META_ASSIGN_TO = '15:30';
-export function metaAssignOpen(now = Date.now()): boolean { const k = new Date(now + 9 * 3600e3); const d = k.getUTCDay(); const hm = k.toISOString().slice(11, 16); return d !== 0 && d !== 6 && hm >= META_ASSIGN_FROM && hm <= META_ASSIGN_TO; }
+/** DB 가 들어오는 시간 — 평일 09:00~17:30 (KST). 이 밖에 접수된 건은 접수 시트에 그대로 있다가 다음 영업일 9시에 한꺼번에 들어온다 (주말 제외) */
+export const META_OPEN_FROM = '09:00', META_OPEN_TO = '17:30';
+export function metaIntakeOpen(now = Date.now()): boolean { const k = new Date(now + 9 * 3600e3); const d = k.getUTCDay(); const hm = k.toISOString().slice(11, 16); return d !== 0 && d !== 6 && hm >= META_OPEN_FROM && hm <= META_OPEN_TO; }

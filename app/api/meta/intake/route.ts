@@ -4,13 +4,14 @@
 import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { metaTeamId } from '@/lib/meta';
+import { metaTeamId, metaIntakeOpen } from '@/lib/meta';
 import { mapIntake, type IntakeRow } from '@/lib/metaIntake';
 export const dynamic = 'force-dynamic'; export const maxDuration = 30;
 const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 export async function POST(req: Request) {
   const secret = process.env.META_INTAKE_SECRET ?? ''; const got = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
   if (secret.length < 16 || !same(got, secret)) return NextResponse.json({ ok: false }, { status: 401 });
+  if (!metaIntakeOpen()) return NextResponse.json({ ok: true, held: true, msg: '평일 09:00~17:30 에만 받습니다 — 다음 영업일 9시에 들어갑니다' });   // 시간 밖: 넣지 않는다. 시트가 5분마다 다시 보내므로 9시에 한꺼번에 들어온다
   let body: any; try { body = await req.json(); } catch { return NextResponse.json({ ok: false, msg: 'bad json' }, { status: 400 }); }
   const list: IntakeRow[] = []; const seenId = new Set<string>(); for (const r of (Array.isArray(body?.rows) ? body.rows : []).slice(0, 500)) { const m = mapIntake(String(r?.tab ?? ''), Array.isArray(r?.cells) ? r.cells : []); if (m && !seenId.has(m.ext_id)) { seenId.add(m.ext_id); list.push(m); } }
   if (!list.length) return NextResponse.json({ ok: true, added: 0, dup: 0, skipped: 0 });

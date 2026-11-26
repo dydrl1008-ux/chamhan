@@ -3,8 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { metaAccess, metaTeamId, metaAssignOpen, META_ASSIGN_FROM, META_ASSIGN_TO, META_STATUSES, META_GRADES, META_WAYS } from '@/lib/meta';
-const CLOSED_MSG = `배분 시간(평일 ${META_ASSIGN_FROM}~${META_ASSIGN_TO})이 아닙니다 — 미배정으로 두었다가 다음 배분 시간에 나눠 주세요`;
+import { metaAccess, metaTeamId, META_STATUSES, META_GRADES, META_WAYS } from '@/lib/meta';
 import { metaDeployed } from '@/lib/metaEdu';
 
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
@@ -37,7 +36,6 @@ export async function mdList(owner?: string): Promise<R<{ rows: MetaLead[] }>> {
 /** 올리기 (팀장·총괄) — to: 사람 id / 'auto'(미연락 적은 사람부터 번갈아) / ''(미배정). 이미 있는 전화번호는 「중복」으로 들어가고 배정하지 않는다 */
 export async function mdAdd(rows: MetaIn[], to: string): Promise<R<{ added: number; dup: number }>> {
   const x = await who(); if (!x || !x.lead) return { ok: false, msg: '팀장·총괄만 올릴 수 있습니다' };
-  if (to && !x.boss && !metaAssignOpen()) return { ok: false, msg: CLOSED_MSG.replace('미배정으로 두었다가', '「미배정으로 두기」로 올리고') };
   const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const list = (rows ?? []).slice(0, 3000).map(r => ({ received_on: day(r.received_on) ?? today, source: s(r.source, 20) || '상담신청', name: s(r.name, 100), phone: s(r.phone, 40), phone_key: s(r.phone, 40).replace(/\D/g, '').slice(0, 15), product: s(r.product, 80), inquiry: s(r.inquiry, 2000), url: s(r.url, 400) })).filter(r => r.name || r.phone_key);
   if (!list.length) return { ok: false, msg: '넣을 문의가 없습니다 (이름이나 전화번호가 있어야 합니다)' };
@@ -63,7 +61,6 @@ export async function mdAssign(ids: number[], to: string): Promise<R> {
   if (to && !(await metaPeople()).some(p => p.id === to)) return { ok: false, msg: '메타팀 사람에게만 배정할 수 있습니다' };
   const sb = supabaseAdmin(); const now = new Date().toISOString(); const { data: cur, error: e0 } = await sb.from('meta_leads').select('id,owner_id').in('id', list); if (e0) return { ok: false, msg: needSql(e0.message) };
   const move = (cur ?? []).filter(c => (c.owner_id ?? '') !== (to || '')); if (!move.length) return { ok: false, msg: '이미 그 담당자입니다' };
-  if (to && !x.boss && !metaAssignOpen() && move.some(c => !c.owner_id)) return { ok: false, msg: CLOSED_MSG };   // 새로 나눠주는 건 배분 시간에만 (담당자끼리 넘기는 인수인계는 언제든, 총괄은 예외)
   // 이전 담당자별로 묶어 넘긴다 — 연락 기록 · 관리 내용 · 결제 내역은 건에 붙어 있어 그대로 따라간다 (인수인계)
   const byPrev = new Map<string, number[]>(); for (const c of move) byPrev.set(c.owner_id ?? '', [...(byPrev.get(c.owner_id ?? '') ?? []), c.id]);
   for (const [prev, idsOf] of byPrev) { const up: Record<string, unknown> = { owner_id: to || null, assigned_at: to ? now : null, updated_at: now, nag_at: null }; if (prev) { up.prev_owner = prev; up.moved_at = now; }
