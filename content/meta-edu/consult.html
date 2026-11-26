@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>인바운드 상담 교육자료 - 신입용</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{--bg:#f5f7fa;--card:#fff;--ink:#1b2333;--sub:#5d6778;--line:#dde2ea;--paid:#b45f06;--paidbg:#fdf0dc;--mix:#6b3fa0;--mixbg:#efe8f8;--nat:#0a7d3e;--natbg:#e2f5e9;--ai:#1860c7;--aibg:#e3edfc;--gold:#e8a900;--warn:#b3261e;--warnbg:#fdecea}
+@media (prefers-color-scheme:dark){:root{--bg:#10151f;--card:#19202d;--ink:#eef1f6;--sub:#9aa5b8;--line:#2c3547;--paid:#f3b565;--paidbg:#3a2a12;--mix:#c5a3f0;--mixbg:#2d2140;--nat:#5fd391;--natbg:#12301f;--ai:#8db8f7;--aibg:#14284a;--warn:#f6a39d;--warnbg:#3a1a18}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.7 "Noto Sans KR",system-ui,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:26px;line-height:1.3;font-weight:900;margin:0 0 8px;letter-spacing:-.02em}
+.lead{color:var(--sub);margin:0 0 20px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
+.toc a{border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:13px;padding:5px 12px;border-radius:99px;text-decoration:none}
+section{margin:0 0 22px;padding:18px;background:var(--card);border:1.5px solid var(--line);border-radius:14px}
+section h2{font-size:19px;margin:0 0 10px}
+section h3{font-size:15px;margin:16px 0 4px;color:var(--sub)}
+p{margin:0 0 10px}ul,ol{margin:0 0 10px;padding-left:20px}li{margin-bottom:4px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 10px;border-radius:99px}
+.paid{background:var(--paidbg);color:var(--paid)}.mix{background:var(--mixbg);color:var(--mix)}.nat{background:var(--natbg);color:var(--nat)}.ai{background:var(--aibg);color:var(--ai)}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14.5px;min-width:520px}
+th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top}th{color:var(--sub);font-size:13px}
+.cap{font-size:13px;color:var(--sub)}
+.box{padding:10px 14px;border-left:4px solid var(--gold);background:var(--bg);margin:10px 0;font-size:14.5px}
+.warn{border-left-color:var(--warn);background:var(--warnbg)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.grid{grid-template-columns:1fr}}
+.cell{padding:12px 14px;border:1.5px solid var(--line);border-radius:12px}
+.cell b{display:block;margin-bottom:4px}
+.flow{display:flex;flex-wrap:wrap;gap:6px 4px;align-items:center;margin:8px 0}.flow i{font-style:normal;color:var(--sub);font-size:13px}
+a{color:var(--ai)}
+ol.flowl{padding-left:20px}ol.flowl li{margin-bottom:6px}
+details{margin:6px 0;border:1.5px solid var(--line);border-radius:10px;padding:8px 12px}summary{cursor:pointer;font-weight:700}
+
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
+.toc a{border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:13px;padding:5px 12px;border-radius:99px;text-decoration:none}
+.keybox{padding:12px 14px;border-left:4px solid var(--gold);background:var(--bg);border-radius:0 10px 10px 0;margin:10px 0}
+.chat{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.chat .m{max-width:88%;padding:9px 12px;border-radius:12px;font-size:15px;line-height:1.55;white-space:pre-line}
+.chat .m small{display:block;font-size:12px;opacity:.7;margin-bottom:2px;font-weight:700}
+.chat .c{align-self:flex-start;background:var(--bg);border:1px solid var(--line)}
+.chat .u{align-self:flex-end;background:#fff0a8;color:#1b2333}
+.tip{font-size:14px;color:var(--sub);margin:4px 0 14px}
+.tip b{color:var(--ink)}
+.q{border:1.5px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+.q p{margin:0 0 8px;font-weight:700}
+.q button{display:block;width:100%;text-align:left;margin:6px 0;padding:10px 12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;font:inherit;font-size:15px;cursor:pointer}
+.q button.ok{border-color:#0a7d3e;background:rgba(10,125,62,.14)}
+.q button.ng{border-color:#b3261e;background:rgba(179,38,30,.14)}
+.q .ex{display:none;margin-top:8px;font-size:14.5px;color:var(--sub)}
+.q.done .ex{display:block}
+.score{font-weight:700;margin-top:10px}
+.chk-list{list-style:none;padding-left:0}
+.chk-list li{margin-bottom:6px}
+img{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px;margin:10px 0 6px}
+.note{padding:10px 14px;border-left:4px solid var(--gold);background:var(--bg);margin:10px 0;font-size:14.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>인바운드 상담 교육자료 <span style="font-weight:500;font-size:.7em">신입용</span></h1>
+<p class="lead">광고를 보고 먼저 연락 준 고객(인바운드 DB)을 상담하는 방법입니다. 0~1장에서 공통 흐름을 익히고, 광고 소재별로 쇼핑(2장), 플레이스(3장), 가구매(4장)를 나눠 읽습니다. 각 장은 1차 전화 정보 수집, 이후 연락 계획, 결제 후 연장 순서입니다. 5장은 금지 표현, 6장은 확인 문제입니다.</p>
+<div class="toc"><a href="#s0">0 시작하기</a><a href="#s1">1 공통 흐름</a><a href="#s2">2 쇼핑</a><a href="#s3">3 플레이스</a><a href="#s4">4 가구매</a><a href="#s5">5 금지 표현</a><a href="#s6">6 확인 문제</a></div>
+<section id="s0"><h2>0. 시작하기 전에: 인바운드가 무엇인지부터</h2>
+<p>인바운드는 고객이 광고를 보고 먼저 연락처를 남긴 경우입니다. 고객은 이미 관심이 있지만 대부분 바쁘고, 여러 업체에 동시에 문의한 경우도 많습니다. 우리가 먼저 빠르게 전화해 상황을 파악하고, 맞는 상품을 제안해 결제로 연결한 뒤, 끝까지 관리해 연장까지 이어지게 하는 것이 목표입니다.</p>
+<div class="keybox"><b>신입이 가장 먼저 외울 3가지</b><ol style="margin:6px 0 0;padding-left:20px"><li><b>1차 전화는 팔기보다 묻는 시간</b>입니다. 필요한 정보를 최대한 모읍니다.</li><li>통화가 안 되면 <b>끝이 아니라 다음 연락의 시작</b>입니다. 반드시 다음 연락 일정을 기록합니다.</li><li>순위·효과·안전을 <b>보장하는 말은 하지 않습니다.</b> 모르면 “확인 후 답변드리겠습니다.”</li></ol></div>
+<h3>처음 듣는 용어</h3><div class="tw"><table><tr><th>용어</th><th>뜻</th></tr><tr><td>DB</td><td>광고로 접수된 고객 연락처와 기본 정보 한 건.</td></tr><tr><td>인입</td><td>광고를 보고 연락처를 남겨 우리에게 들어온 것.</td></tr><tr><td>허수</td><td>연락처 오류, 장난, 업종 무관 등으로 상담이 불가능한 접수.</td></tr><tr><td>중복</td><td>같은 고객이 여러 번 접수한 경우.</td></tr><tr><td>부재</td><td>전화했지만 받지 않은 경우.</td></tr><tr><td>유효 리드</td><td>접수에서 허수와 중복을 뺀, 상담 대상이 되는 고객.</td></tr><tr><td>1차 통화</td><td>첫 전화. 상황 파악과 정보 수집이 목적.</td></tr><tr><td>후속 연락</td><td>1차 통화 이후의 재연락(재통화, 카톡, 문자 등).</td></tr><tr><td>연장</td><td>진행 기간이 끝나기 전에 계속 진행하도록 이어 가는 것.</td></tr></table></div></section>
+<section id="s1"><h2>1. 공통 흐름: 접수에서 연장까지</h2>
+<div class="flow"><span class="tag nat">접수</span><i>→</i><span class="tag nat">1차 전화</span><i>→</i><span class="tag nat">제안·견적</span><i>→</i><span class="tag nat">결제</span><i>→</i><span class="tag nat">진행·보고</span><i>→</i><span class="tag nat">연장</span></div>
+<h3>1차 전화 공통 구조 (3~5분)</h3>
+<ol class="flowl"><li><b>인사와 확인</b> 회사명, 이름, 문의하신 내용을 본 연락임을 밝힙니다. 통화 가능 여부를 묻습니다.</li><li><b>정보 수집</b> 아래 질문으로 상황을 파악합니다. 메모하면서 듣습니다.</li><li><b>간단 설명</b> 우리가 하는 일을 짧게 설명합니다. 이 단계에서 장황한 설명은 피합니다.</li><li><b>다음 약속</b> 제안서·견적을 보내고, <b>다음 연락 시간</b>을 정합니다. 시간을 고객 입에서 받아냅니다.</li></ol><div class="chat"><div class="m u"><small>우리</small>안녕하세요 ○○○ 대표님 맞으실까요?
+(주)참한기획 ○○○입니다. 남겨주신 문의 확인하고 연락드렸어요.
+지금 3~5분 통화 괜찮으실까요?</div><div class="m c"><small>고객</small>네 괜찮습니다.</div><div class="m u"><small>우리</small>감사합니다. 상황 정확히 알아야 맞는 방법을 말씀드릴 수 있어서 몇 가지만 여쭤볼게요.</div></div>
+<h3>통화 후 기록 양식 (모든 소재 공통)</h3><div class="tw"><table><tr><th>항목</th><th>적을 내용</th></tr><tr><td>통화 결과</td><td>부재 / 통화 완료 / 번호 오류 / 거절</td></tr><tr><td>고객 상태</td><td>관심 높음 / 비교 중 / 보류 / 관심 없음</td></tr><tr><td>핵심 정보</td><td>업종, 지역, 현재 문제, 원하는 것, 예산 감, 결정권자</td></tr><tr><td>다음 연락</td><td>날짜와 시간, 방법(전화·카톡), 해야 할 말</td></tr><tr><td>보낸 자료</td><td>제안서, 견적, 후기 자료 발송 여부</td></tr></table></div><p class="cap">기록이 없으면 다음 사람이 처음부터 다시 물어야 하고, 고객은 불쾌해합니다. 통화가 끝나면 바로 적습니다.</p></section>
+<section id="s2"><h2>2. 상담 기본기: 전화를 잘 받게 하는 것들</h2>
+<p>상담은 말을 잘하는 것보다 <b>잘 묻고, 잘 듣고, 정리해 주는 것</b>입니다. 고객은 좋은 말솜씨보다 “내 상황을 알아주는 사람”에게 마음을 엽니다.</p>
+<h3>전화하기 전 1분 준비</h3>
+<ul class="chk-list"><li>☐ 접수 내용을 읽었다 (어떤 광고로, 무엇을 남겼는지)</li><li>☐ 업종과 플랫폼 링크가 있으면 먼저 열어 봤다</li><li>☐ 메모할 곳(기록 양식)이 열려 있다</li><li>☐ 조용한 곳이고, 말할 첫 문장을 정했다</li><li>☐ 이전 통화 기록이 있으면 읽었다</li></ul>
+<h3>상담의 4단계 흐름</h3>
+<div class="flow"><span class="tag mix">공감</span><i>→</i><span class="tag mix">질문</span><i>→</i><span class="tag mix">요약 확인</span><i>→</i><span class="tag mix">제안</span></div><div class="chat"><div class="m c"><small>고객</small>리뷰가 없어서 손님이 안 와요.</div><div class="m u"><small>우리</small>리뷰가 없으면 처음 보는 손님이 망설이기 쉽죠. (공감)</div><div class="m u"><small>우리</small>지금 검색하면 가게가 보이긴 하세요? 아니면 아예 안 보이는 쪽인가요? (질문)</div><div class="m c"><small>고객</small>보이긴 하는데 뒤쪽이에요.</div><div class="m u"><small>우리</small>정리하면 노출은 되는데 뒤쪽이고 리뷰가 적어서 손님이 망설인다는 말씀이시죠? (요약 확인)</div><div class="m u"><small>우리</small>그럼 링크 보고 현재 상태 확인해서 맞는 방법을 정리해 드릴게요. (제안)</div></div>
+<h3>질문하는 기술</h3><div class="tw"><table><tr><th>방법</th><th>예</th><th>왜 좋은가</th></tr><tr><td>열린 질문</td><td>“지금 가장 고민되는 게 뭐세요?”</td><td>고객이 스스로 길게 말하게 함. 상황 파악에 가장 좋음</td></tr><tr><td>닫힌 질문</td><td>“쿠팡에서 파세요?”</td><td>사실 확인용. 짧게 끝나므로 열린 질문 뒤에 사용</td></tr><tr><td>한 번에 하나만</td><td>“업종은요? 그리고 예산은요? 언제 시작하세요?”(X)</td><td>한꺼번에 묻지 않고 하나씩 묻습니다</td></tr><tr><td>요약 확인</td><td>“말씀하신 게 ○○이 맞으실까요?”</td><td>잘못 이해한 것을 바로잡고 신뢰를 줍니다</td></tr><tr><td>침묵 허용</td><td>질문 후 3초 기다리기</td><td>바로 이어 말하면 고객이 생각할 시간이 없습니다</td></tr></table></div>
+<h3>말할 때 지킬 것</h3>
+<ul><li>쉬운 말로 말합니다. “유입”, “노출 알고리즘” 같은 말은 풀어서 설명합니다.</li><li>고객 말을 끊지 않습니다. 끝까지 듣고 요약해 확인합니다.</li><li>한 번에 길게 설명하지 않습니다. 30초 말하고 고객에게 물어봅니다.</li><li>모르는 것은 아는 척하지 않고 “확인 후 답변드리겠습니다”라고 합니다.</li><li>고객이 바쁘다고 하면 길게 붙잡지 않고 다시 연락할 시간을 정합니다.</li></ul>
+<h3>통화를 마칠 때 3가지</h3>
+<div class="keybox"><ol style="margin:0;padding-left:20px"><li><b>요약</b> 오늘 들은 내용을 한 문장으로 말합니다.</li><li><b>보낼 것</b> 제안서·견적·링크 요청 중 무엇을 언제까지 보내는지 말합니다.</li><li><b>다음 연락 시간</b> “내일 오후 3시쯤 다시 연락드려도 될까요?”처럼 구체적으로 정합니다.</li></ol></div>
+</section>
+<section id="s3"><h2>3. 반론 처리: 고객이 이렇게 말할 때</h2>
+<p>고객의 거절이나 망설임은 대부분 “걱정이 있다”는 신호입니다. 반박하지 않고 <b>걱정을 인정하고(공감), 이유를 묻고, 사실만 말하는</b> 순서로 응대합니다. 어떤 경우에도 보장 표현은 쓰지 않습니다.</p><div class="tw"><table><tr><th>고객이 이렇게 말하면</th><th>이렇게 말합니다</th><th>하지 말 것</th></tr><tr><td>“비싸요”</td><td>“비용이 부담되실 수 있죠. 어느 정도를 생각하셨는지 여쭤봐도 될까요? 맞는 구성이 있는지 같이 보겠습니다.”</td><td>“이게 제일 싸요”, 근거 없는 할인 약속</td></tr><tr><td>“생각해 볼게요”</td><td>“네, 천천히 보세요. 혹시 고민되시는 부분이 있으면 말씀해 주세요. 제가 정리해서 보내드릴게요. 내일 오후에 한 번 연락드려도 될까요?”</td><td>“지금 아니면 안 돼요” 같은 압박</td></tr><tr><td>“다른 업체도 알아볼게요”</td><td>“좋은 방법이에요. 비교하실 때 보고 주기, 진행 방식, 조건을 꼭 확인해 보세요. 저희 자료도 보내드릴게요.”</td><td>다른 업체 비방</td></tr><tr><td>“정말 올라가나요?”</td><td>“순위는 네이버·쿠팡 기준과 경쟁에 따라 달라져서 약속드리지는 않습니다. 진행 후 변화를 정기적으로 전달드립니다.”</td><td>“반드시 올라가요”, “성공률 ○○%”</td></tr><tr><td>“지금 바빠요 나중에요”</td><td>“네 알겠습니다. 몇 시쯤 다시 연락드리면 편하세요?”</td><td>“잠깐이면 돼요” 하며 계속 붙잡기</td></tr><tr><td>“광고 해봤는데 효과 없었어요”</td><td>“그러셨군요. 어떤 키워드로, 어느 정도 하셨는지 알려주시면 원인을 같이 확인해 볼게요.”</td><td>“그건 업체가 잘못한 거예요”</td></tr><tr><td>“직원인데 대표님께 전달할게요”</td><td>“감사합니다. 대표님이 보시기 편하게 정리해서 보내드릴게요. 결정하시는 분과 통화할 수 있을까요?”</td><td>결정권자 확인 없이 계속 진행</td></tr><tr><td>“문자로 보내주세요”</td><td>“네 바로 보내드릴게요. 보시고 궁금하신 점 물어보셔도 되고, 오늘 저녁에 확인 연락 한 번 드려도 될까요?”</td><td>보내고 연락 시간을 정하지 않음</td></tr></table></div>
+<div class="note">거절한 고객도 이유를 기록합니다. 가격, 시기, 비교 중, 효과 의심 중 어느 쪽인지 알아야 다음 연락에서 맞는 자료를 보낼 수 있습니다.</div>
+</section>
+<section id="s4"><h2>4. 메시지 쓰기: 카톡·문자 템플릿</h2>
+<p>통화가 안 되거나 통화 후 정리할 때는 짧은 메시지를 보냅니다. 아래 문구를 기본으로 하되 ○○를 채우고 고객에 맞게 바꿉니다.</p>
+<h3>부재 첫 메시지 (통화가 안 됐을 때)</h3><div class="chat"><div class="m u"><small>우리</small>안녕하세요 ○○○ 대표님. 문의 남겨주셔서 연락드렸는데 통화가 안 되어 메시지 남깁니다.
+(주)참한기획 ○○○입니다. 편하신 시간 알려주시면 그때 다시 연락드리겠습니다^^</div></div>
+<h3>부재 두 번째 메시지 (시간대를 바꿔 재시도한 뒤)</h3><div class="chat"><div class="m u"><small>우리</small>대표님 다시 연락드렸는데 닿지 않아 남깁니다.
+문의하신 ○○ 관련해서 확인된 내용 간단히 정리해 드리면 도움이 될 것 같아요. 혹시 지금 상황만 한 줄로 알려주시면 맞는 방법으로 안내드리겠습니다.</div></div>
+<h3>통화 후 정리 메시지</h3><div class="chat"><div class="m u"><small>우리</small>대표님 통화로 말씀드린 내용 남겨놓겠습니다.
+- 확인한 내용: ○○
+- 보내드린 자료: ○○
+- 다음 연락: ○월 ○일 ○시
+궁금하신 점 있으면 편하게 말씀 주세요^^</div></div>
+<h3>보류 고객 재연락</h3><div class="chat"><div class="m u"><small>우리</small>대표님 지난번 말씀 주신 ○○ 건 어떻게 되셨는지 안부 겸 연락드립니다. 고민되시는 부분이 있으면 말씀해 주세요. 정리해서 도와드리겠습니다^^</div></div>
+<h3>메시지 작성 원칙</h3><ul><li>짧게 씁니다. 3~5줄을 넘기지 않습니다.</li><li>다음에 무엇을 할지(자료, 연락 시간)를 반드시 넣습니다.</li><li>순위·효과·기간 보장 문구를 쓰지 않습니다.</li><li>같은 문구를 복사해 여러 고객에게 보내지 않고, 고객 이름과 상황을 넣습니다.</li><li>밤늦은 시간이나 새벽에는 보내지 않습니다.</li></ul>
+</section>
+<section id="s5"><h2>5. 쇼핑 소재 고객 (쿠팡·네이버쇼핑)</h2><p>쇼핑 상위노출 광고를 보고 문의한 고객입니다. 상품을 이미 팔고 있고, 검색에서 더 잘 보이게 하려는 사장님이 대부분입니다. 앞의 쇼핑 교육자료 내용을 함께 봅니다.</p><h3>① 1차 전화: 정보를 최대한 모으기</h3><div class="tw"><table><tr><th>물어볼 것</th><th>이유</th></tr><tr><td>어느 플랫폼에서 파시나요? (쿠팡/네이버/둘 다)</td><td>제안 상품이 달라집니다(쿠팡 또는 네이버쇼핑).</td></tr><tr><td>판매하는 상품과 대표 상품은 무엇인가요?</td><td>상품 링크로 현재 상태를 진단합니다.</td></tr><tr><td>지금 검색에서 어떤 키워드로 노출되길 원하세요?</td><td>진행할 키워드를 정합니다.</td></tr><tr><td>현재 하루·월 판매량과 리뷰 수는 어느 정도인가요?</td><td>경쟁 상황과 목표 수준을 가늠합니다.</td></tr><tr><td>쿠팡·네이버 광고는 하고 계신가요? 월 비용은요?</td><td>광고와 상위노출의 차이를 설명할 근거가 됩니다.</td></tr><tr><td>이전에 대행사를 써 보셨나요? 결과는 어땠나요?</td><td>불만과 기대치를 파악합니다.</td></tr><tr><td>결정은 대표님이 직접 하시나요?</td><td>결정권자를 확인합니다.</td></tr><tr><td>예산은 월 어느 정도로 생각하세요?</td><td>맞는 상품 범위를 정합니다. 안 알려 주면 억지로 묻지 않습니다.</td></tr></table></div><div class="chat"><div class="m u"><small>우리</small>어느 플랫폼에서 주로 판매하세요? 쿠팡, 네이버 중 어디가 매출이 더 나오는지도 알려주시면 좋아요.</div><div class="m c"><small>고객</small>쿠팡이 7이고 네이버가 3 정도예요.</div><div class="m u"><small>우리</small>그럼 쿠팡 쪽 키워드 먼저 살펴보고 말씀드릴게요. 대표 상품 링크 카톡으로 보내주실 수 있을까요?</div></div><p class="tip"><b>목표:</b> 상품 링크와 키워드를 받는 것. 진단 후 제안서를 보내겠다고 하고 <b>연락 시간</b>을 정합니다.</p><h3>② 이후 연락: 어떻게 이어 갈까</h3><div class="tw"><table><tr><th>상황</th><th>다음 행동</th></tr><tr><td>상품 링크를 받음</td><td>진단 후 같은 날 또는 다음 날 제안서·견적 발송. 보낸 뒤 확인 연락 시간을 약속했는지 기록합니다.</td></tr><tr><td>통화 부재</td><td>당일 카톡·문자로 “문의 주셔서 연락드렸습니다” 메시지를 남기고, 시간대를 바꿔 다시 전화합니다.</td></tr><tr><td>관심은 있으나 보류</td><td>보류 이유(가격, 시기, 비교 중)를 기록하고, 이유에 맞는 자료와 연락 날짜를 정합니다.</td></tr><tr><td>다른 업체와 비교 중</td><td>비방하지 않고 우리 진행 방식과 보고 주기를 설명합니다. 비교 기준을 묻습니다.</td></tr><tr><td>거절</td><td>이유를 기록하고 정중히 마무리합니다. 허수가 아니라면 일정 기간 뒤 한 번만 안부 연락을 남길 수 있습니다.</td></tr></table></div><p class="cap">연락 횟수와 간격은 회사 기준에 따릅니다. 신입은 팀장이 정한 기준을 확인한 뒤 기록에 따라 움직입니다. 권장 예시: 부재 시 당일 메시지와 시간대를 바꾼 재시도를 반복하되, 같은 시간대에만 걸지 않습니다.</p><h3>③ 결제 후: 진행 관리와 연장</h3><p>쇼핑은 진행 효과가 눈에 보이는 상품입니다. 결제가 끝나면 세팅 완료와 보고 약속부터 합니다. 쿠팡 진행 방식은 제안서에 구체적으로 나와 있지 않으므로, 고객에게 설명하기 전에 팀장에게 확인합니다.</p><div class="tw"><table><tr><th>시점</th><th>할 일</th></tr><tr><td>결제 직후</td><td>세팅 완료 안내, 진행 키워드, 보고 주기를 문자로 정리합니다.</td></tr><tr><td>진행 중</td><td>약속한 주기에 맞춰 순위·변화를 전달합니다. 오르지 않았을 때도 사실대로 전달하고 다음 계획을 말합니다.</td></tr><tr><td>만료 전</td><td>진행 결과를 정리해 보내고, 연장 의사와 키워드 추가 여부를 묻습니다.</td></tr><tr><td>연장 결정 후</td><td>같은 날 연장 내용과 기간을 문자로 정리합니다.</td></tr></table></div><div class="chat"><div class="m u"><small>우리</small>대표님 이번 달 진행한 ○○ 키워드 변화 정리해서 보내드렸어요.
+다음 달에도 이어서 진행하시면 ○○ 키워드도 같이 확인해 볼 수 있습니다. 이번 결과 보시고 말씀 주세요^^</div></div></section>
+<section id="s6"><h2>6. 플레이스 소재 고객</h2><p>네이버 플레이스(지도·가게 검색) 광고를 보고 문의한 가게 사장님입니다. 미용실, 식당, 네일샵처럼 손님이 지역에서 가게를 찾아오는 업종이 많습니다. 앞의 플레이스 교육자료와 함께 봅니다.</p><h3>① 1차 전화: 정보를 최대한 모으기</h3><div class="tw"><table><tr><th>물어볼 것</th><th>이유</th></tr><tr><td>어떤 업종이고 가게 위치는 어디인가요?</td><td>지역 키워드와 경쟁 정도를 파악합니다.</td></tr><tr><td>플레이스 링크를 보내주실 수 있나요?</td><td>현재 순위, 리뷰 수, 정보 충실도를 진단합니다.</td></tr><tr><td>어떤 키워드로 손님이 찾아오기를 원하세요?</td><td>진행 키워드를 정합니다.</td></tr><tr><td>지금 검색하면 몇 위쯤 보이나요? 손님은 주로 어디서 오나요?</td><td>현재 상태와 체감 문제를 확인합니다.</td></tr><tr><td>리뷰(영수증·블로그)는 어느 정도 있나요?</td><td>리뷰 관련 상품 추천의 근거가 됩니다.</td></tr><tr><td>광고나 다른 대행사를 쓰고 있나요?</td><td>중복 진행과 기대치를 확인합니다.</td></tr><tr><td>언제부터 시작하길 원하세요? 급한 이유가 있나요?</td><td>시급성과 결정 시점을 파악합니다.</td></tr><tr><td>결정은 대표님이 직접 하시나요?</td><td>결정권자를 확인합니다.</td></tr></table></div><div class="chat"><div class="m u"><small>우리</small>어떤 업종이시고 가게는 어느 지역이세요? 손님이 “지역+업종”으로 검색해서 찾아오시는 경우가 많은지도 궁금해요.</div><div class="m c"><small>고객</small>강남에서 네일샵 하는데 검색하면 잘 안 보여서요.</div><div class="m u"><small>우리</small>그렇군요. 플레이스 링크 보내주시면 지금 순위랑 상태 보고 3가지 방법으로 정리해서 보내드릴게요.</div></div><p class="tip"><b>목표:</b> 플레이스 링크와 키워드를 받는 것. 실제 상담방에서도 첫 응대의 목표는 링크 받기였습니다.</p><h3>② 이후 연락: 어떻게 이어 갈까</h3><div class="tw"><table><tr><th>상황</th><th>다음 행동</th></tr><tr><td>링크를 받음</td><td>진단 후 제안서를 보내고, 확인 연락 시간을 정합니다.</td></tr><tr><td>통화 부재</td><td>카톡·문자 후 시간대를 바꿔 재시도. 플레이스 링크를 남겨 달라고 메시지로 요청합니다.</td></tr><tr><td>무료 테스트 관심</td><td>플레이스 상품은 무료 테스트 기간을 안내할 수 있습니다. 테스트가 순위 보장이 아님을 함께 말합니다.</td></tr><tr><td>다른 업체 사용 중</td><td>“현재 키워드와 상태를 먼저 확인해 보겠습니다”로 진단부터 시작합니다.</td></tr><tr><td>보류·거절</td><td>이유를 기록하고, 보류 고객은 약속한 날짜에 후속 연락합니다.</td></tr></table></div><p class="cap">플레이스 문의 고객에게는 플레이스 상위노출을 중심으로 블로그 리뷰 관리와 당근 인근 홍보를 함께 추천하는 구성이 제안서에 있습니다.</p><h3>③ 결제 후: 진행 관리와 연장</h3><p>플레이스 상품은 종류가 여러 가지입니다. 아래는 현재 이야기된 후보 목록이며, <b>상품별 가격·조건·진행 방식은 별도 상품 리스트와 팀장 안내를 따릅니다.</b></p><ul><li>영수증 리뷰</li><li>블로그 리뷰</li><li>리워드 (실유저 유입)</li><li>보장형</li><li>패키지</li><li>당근 인근 홍보 / 블로그·카페 상위노출</li></ul><div class="box warn"><b>주의.</b> 리워드·영수증 리뷰처럼 실유저를 통한 유입과 리뷰는 방식에 따라 네이버가 어뷰징으로 판단할 수 있습니다. 2026년 1월에는 영수증 조작 리뷰 단속과 페널티 강화가 공지된 것으로 알려져 있습니다. 보장형은 순위·기간을 약속하는 상품이므로 설명 표현에 특히 주의하고, 구체적 조건은 팀장 확인 후 안내합니다. “안전합니다”라고 말하지 않습니다.</div><div class="tw"><table><tr><th>시점</th><th>할 일</th></tr><tr><td>결제 직후</td><td>세팅 완료와 보고 약속을 문자로 정리합니다. 진행 키워드와 기간을 명시합니다.</td></tr><tr><td>진행 중</td><td>순위 변화와 진행 상황을 주기적으로 전달합니다. “주기적으로”라고 했다면 주기를 정해 지킵니다.</td></tr><tr><td>만료 전</td><td>결과를 정리하고 연장과 함께 블로그 리뷰 등 보완 상품을 제안합니다.</td></tr><tr><td>연장 결정 후</td><td>내용을 문자로 정리합니다.</td></tr></table></div><div class="chat"><div class="m u"><small>우리</small>대표님 한 달 동안 진행한 ○○ 키워드 순위 변화 정리해서 보내드렸습니다.
+순위는 변동될 수 있어서 계속 확인하면서 관리하는 게 도움이 됩니다. 이어서 진행하실지 말씀 주세요^^</div></div></section>
+<section id="s7"><h2>7. 가구매 소재 고객</h2><p>가구매 소재 광고를 보고 문의한 고객입니다. 이 소재는 상품 판매량이나 리뷰를 쌓으려는 고객이 많고, 연결되는 제안 상품은 가구매, 사진촬영, 리워드 등입니다. 이 영역은 규정 위험이 크므로 이 장을 가장 신중하게 읽습니다.</p><h3>① 1차 전화: 정보를 최대한 모으기</h3><div class="tw"><table><tr><th>물어볼 것</th><th>이유</th></tr><tr><td>어느 플랫폼에서 어떤 상품을 판매하세요?</td><td>상품 링크와 판매 환경을 확인합니다.</td></tr><tr><td>지금 판매량과 리뷰 수는 얼마나 되나요?</td><td>현재 상태를 파악합니다.</td></tr><tr><td>무엇이 가장 걱정이세요? (판매량, 리뷰, 사진, 노출)</td><td>고객이 정말 원하는 것을 구분합니다.</td></tr><tr><td>상세페이지와 상품 사진은 어떤 상태인가요?</td><td>가구매보다 사진·상세 개선이 먼저일 수 있습니다.</td></tr><tr><td>이전에 비슷한 방식을 써 보셨나요? 어떤 일이 있었나요?</td><td>경험과 불안 요소를 파악합니다.</td></tr><tr><td>언제까지 결과를 원하세요?</td><td>기대 시점을 확인하고 보장하지 않을 범위를 정합니다.</td></tr><tr><td>결정은 대표님이 직접 하시나요?</td><td>결정권자를 확인합니다.</td></tr></table></div><div class="chat"><div class="m u"><small>우리</small>어느 플랫폼에서 판매하시고, 지금 가장 걱정되는 게 판매량인지 리뷰인지 사진인지 먼저 여쭤볼게요.</div><div class="m c"><small>고객</small>리뷰가 거의 없어서 손님이 안 사요.</div><div class="m u"><small>우리</small>그렇군요. 상품 링크 보내주시면 상세페이지와 사진, 현재 상태부터 확인하고 맞는 방법을 말씀드릴게요.</div></div><p class="tip"><b>목표:</b> 상품 링크와 고객의 진짜 고민을 파악하는 것. 상품을 정해 놓고 말하지 않습니다.</p><h3>② 이후 연락: 어떻게 이어 갈까</h3><div class="tw"><table><tr><th>상황</th><th>다음 행동</th></tr><tr><td>링크를 받음</td><td>상품 상태를 진단한 뒤 제안서를 보내고, 확인 연락 시간을 정합니다.</td></tr><tr><td>통화 부재</td><td>카톡·문자 후 시간대를 바꿔 재시도합니다.</td></tr><tr><td>사진·상세 개선 관심</td><td>사진촬영 상품을 먼저 안내할 수 있습니다. 판매 효과를 약속하지 않습니다.</td></tr><tr><td>“가구매로 순위 올려 주세요”</td><td>가구매의 위험(제재 가능성)을 정직하게 설명하고, 다른 방법이 있는지 함께 봅니다. 진행 가능 범위는 팀장 확인 후 안내합니다.</td></tr><tr><td>보류·거절</td><td>이유를 기록하고 약속한 날짜에 후속 연락합니다.</td></tr></table></div><p class="cap">가구매 소재 고객은 결과에 대한 기대가 높습니다. 후속 연락에서도 보장 표현을 하지 않는 것이 가장 중요합니다.</p><h3>③ 결제 후: 진행 관리와 연장</h3><p>가구매 소재 고객의 제안 상품은 가구매, 사진촬영, 리워드입니다. <b>상품별 가격·조건·진행 방식은 별도 상품 리스트와 팀장 안내를 따릅니다.</b></p><div class="box warn"><b>반드시 알아둘 점.</b> 구매나 리뷰를 인위적으로 만들어 검색 순위에 영향을 주는 행위는 네이버가 이용약관으로 금지하는 어뷰징에 해당할 수 있고, 적발되면 노출 제한 등 제재를 받을 수 있다고 안내합니다. 대가를 받은 후기는 광고 표기 규정도 지켜야 합니다. 신입은 고객에게 “안전합니다”, “걸리지 않습니다”라고 말하지 않습니다. 이 상품을 어떻게 안내할지는 팀장 확인이 먼저입니다.</div><div class="tw"><table><tr><th>시점</th><th>할 일</th></tr><tr><td>결제 직후</td><td>진행 범위와 일정을 문자로 정리합니다. 약속하지 않은 결과를 말하지 않습니다.</td></tr><tr><td>진행 중</td><td>약속한 시점에 진행 상황을 전달합니다. 문제가 생기면 바로 고객에게 알립니다.</td></tr><tr><td>종료 전</td><td>결과를 있는 그대로 정리하고, 사진·상세 개선 같은 보완 상품을 제안합니다.</td></tr><tr><td>연장 결정 후</td><td>내용을 문자로 정리합니다.</td></tr></table></div><div class="chat"><div class="m u"><small>우리</small>대표님 이번 진행 상황 정리해서 보내드렸습니다.
+결과는 상품과 경쟁 상황에 따라 달라서, 다음 단계로 사진·상세 개선도 함께 보시면 좋겠습니다. 편하실 때 말씀 주세요^^</div></div></section>
+<section id="s8"><h2>8. 하면 안 되는 말 (모든 소재 공통)</h2><div class="tw"><table><tr><th>하면 안 되는 말·행동</th><th>왜 안 되나</th><th>이렇게 합니다</th></tr><tr><td>“상위노출 보장합니다 / ○위까지 올려드립니다”</td><td>순위는 네이버·쿠팡이 정합니다. 보장으로 들리면 분쟁이 됩니다.</td><td>“진행 후 순위 변화를 정기적으로 확인해 전달드립니다.”</td></tr><tr><td>“성공률 ○○%입니다”</td><td>조건 없이 비율만 말하면 보장으로 읽힙니다.</td><td>실제 사례를 기간과 조건과 함께 보여 드립니다.</td></tr><tr><td>“절대 안 걸립니다 / 안전합니다”</td><td>제재 가능성을 완전히 없앨 수 없습니다.</td><td>“네이버 기준에 맞는 방식으로 진행합니다.”</td></tr><tr><td>“오늘 결제하면 특별 할인, 지금 아니면 안 됩니다”</td><td>근거 없는 압박은 불신을 만듭니다.</td><td>진행 가능 일정과 조건을 사실대로 안내합니다.</td></tr><tr><td>“다른 업체는 사기입니다”</td><td>근거 없는 비방입니다.</td><td>“현재 키워드와 상태를 먼저 확인해 보겠습니다.”</td></tr><tr><td>통화로만 약속하고 문자로 남기지 않음</td><td>나중에 말이 달라져 분쟁이 됩니다.</td><td>통화 직후 내용을 문자로 정리합니다.</td></tr></table></div>
+<div class="note">실제 상담방에서 확인된 “5위 이내 진입 후 결제, 25일 보장”, “상위노출 성공률 80%” 같은 문구는 위 표의 첫 두 줄에 해당합니다. 새 직원은 사용하지 않습니다.</div></section>
+<section id="s9"><h2>9. 연습과 이해도 확인</h2>"""+ '<p>2명이 짝을 지어 고객 역할과 상담 역할을 번갈아 합니다. 아래 상황으로 5분씩 연습하고 상대가 체크리스트로 평가합니다.</p>' + tbl([
+ ['쇼핑','“쿠팡에서 가습기 파는데 검색하면 뒤쪽이에요. 대행사는 처음이에요.” 가격이 부담된다고 말합니다.'],
+ ['플레이스','“강남 네일샵인데 리뷰가 적어요. 다른 업체 써봤는데 안 올랐어요.” 생각해 보겠다고 말합니다.'],
+ ['가구매','“판매량이 적어서 가구매로 올려 주세요.” 안전한지 계속 묻습니다.'],
+], ['소재','고객 역할 시나리오']) + '<h3>평가 체크리스트</h3><ul class="chk-list"><li>☐ 인사와 통화 가능 여부를 먼저 물었다</li><li>☐ 열린 질문으로 상황을 파악했다</li><li>☐ 고객 말을 요약해 확인했다</li><li>☐ 반론에 공감하고 이유를 물었다</li><li>☐ 보장 표현을 쓰지 않았다</li><li>☐ 마지막에 보낼 것과 다음 연락 시간을 정했다</li><li>☐ 통화 후 기록과 정리 메시지를 남겼다</li></ul>'+"""<h3>확인 문제</h3><p>답을 고르면 바로 정답과 설명이 나옵니다. 모두 푼 뒤 점수를 팀장에게 알리세요.</p><div id="quiz"></div></section>
+<section><h2>교육자료 목록</h2><p><a href="https://claude.ai/artifact/1X7AsFivS84sKmRtSDa7G6" target="_blank" rel="noopener">쇼핑 상위노출</a> · <a href="https://claude.ai/artifact/7jeo53oG8W5jRekPfWYxrf" target="_blank" rel="noopener">플레이스 상위노출</a> · <a href="https://claude.ai/artifact/WCNTZkpi8uAGyWPTdGSgEr" target="_blank" rel="noopener">블로그·카페 상위노출</a> · 인바운드 상담 (현재)</p></section>
+</div>
+<script>
+(function(){
+  var Q = [{"q": "1차 전화의 가장 중요한 목적은?", "o": ["바로 결제를 받는 것", "순위를 보장하는 것", "정보를 최대한 모으고 다음 약속을 잡는 것", "통화를 빨리 끝내는 것"], "a": 2, "e": "1차 전화는 팔기보다 묻는 시간입니다. 업종, 키워드, 현재 문제를 파악하고 제안서를 보낼 약속과 다음 연락 시간을 정합니다."}, {"q": "고객이 “생각해 볼게요”라고 합니다. 가장 알맞은 응대는?", "o": ["고민되는 부분을 부드럽게 묻고, 정리해 보내겠다며 다음 연락 시간을 정한다", "지금 아니면 안 된다고 말한다", "바로 전화를 끊는다", "할인을 약속한다"], "a": 0, "e": "망설임은 걱정의 신호입니다. 걱정을 묻고, 필요한 자료를 정리해 보내며 다음 연락 시간을 정합니다. 압박은 신뢰를 잃습니다."}, {"q": "전화를 받지 않은 고객에게 가장 알맞은 행동은?", "o": ["기록 없이 포기한다", "같은 시간대에만 계속 전화한다", "허수로 처리한다", "카톡·문자를 남기고 시간대를 바꿔 다시 연락하며 기록한다"], "a": 3, "e": "부재는 끝이 아니라 다음 연락의 시작입니다. 메시지를 남기고 시간대를 바꿔 재시도하며 일정을 기록합니다."}, {"q": "쇼핑 소재 고객에게 1차 전화에서 꼭 받아야 하는 것은?", "o": ["대표님의 개인 계좌", "판매 플랫폼과 대표 상품 링크, 원하는 키워드", "경쟁업체 비밀", "결제 카드 번호"], "a": 1, "e": "상품 링크와 키워드를 받아야 진단하고 제안서를 만들 수 있습니다. 결제 정보는 통화에서 묻지 않습니다."}, {"q": "플레이스 소재 고객의 첫 목표는?", "o": ["바로 보장형 결제", "당근 가입", "가게 위치와 업종 파악, 플레이스 링크 받기", "블로그 글 작성"], "a": 2, "e": "링크를 받아 현재 순위와 상태를 진단한 뒤 제안서를 보냅니다."}, {"q": "가구매 소재 고객이 “가구매로 순위만 올려 주세요”라고 합니다. 올바른 응대는?", "o": ["가구매의 제재 위험을 정직하게 설명하고, 진행 가능 범위는 팀장 확인 후 안내한다", "안전하니 걱정 말라고 한다", "무조건 거절하고 끊는다", "순위를 보장한다고 말한다"], "a": 0, "e": "구매나 리뷰를 인위적으로 만드는 행위는 네이버가 어뷰징으로 제재할 수 있습니다. 안전하다고 말하지 않고, 상품 안내는 팀장 확인이 먼저입니다."}, {"q": "통화 후 해야 할 일로 틀린 것은?", "o": ["통화 결과와 고객 상태를 기록한다", "기록은 나중에 기억으로 정리한다", "다음 연락 날짜와 시간을 정한다", "통화로 약속한 내용을 문자로 정리한다"], "a": 1, "e": "기록은 통화 직후 남깁니다. 기록이 없으면 다음 사람이 다시 물어야 하고 고객은 불쾌해합니다."}, {"q": "결제 후 연장을 위해 가장 먼저 해야 할 일은?", "o": ["연장 이야기만 반복한다", "연락을 끊는다", "결과가 나쁘면 숨긴다", "세팅 완료와 보고 약속을 정리하고 약속한 주기로 결과를 전달한다"], "a": 3, "e": "연장은 진행 중 신뢰에서 나옵니다. 약속한 주기에 사실대로 보고하고, 만료 전에 결과를 정리해 연장을 제안합니다."}, {"q": "고객이 “다른 업체를 쓰는데 안 올라요”라고 합니다. 올바른 응대는?", "o": ["현재 키워드와 상태를 먼저 확인해 보겠다고 말하고 진단부터 한다", "그 업체는 사기라고 말한다", "우리는 반드시 올려 준다고 말한다", "답하지 않는다"], "a": 0, "e": "비방과 보장은 금지입니다. 링크를 받아 현재 상태를 진단하는 것으로 시작합니다."}, {"q": "상담의 네 단계 순서로 맞는 것은?", "o": ["제안 → 공감 → 질문 → 요약", "공감 → 질문 → 요약 확인 → 제안", "질문 → 제안 → 공감 → 요약", "요약 → 제안 → 질문 → 공감"], "a": 1, "e": "먼저 공감하고, 질문으로 상황을 파악하고, 들은 내용을 요약해 확인한 뒤 제안합니다."}, {"q": "다음 중 열린 질문은?", "o": ["“쿠팡에서 파세요?”", "“예산 있으세요?”", "“결정권자세요?”", "“지금 가장 고민되는 게 뭐세요?”"], "a": 3, "e": "열린 질문은 고객이 스스로 길게 말하게 해 상황 파악에 가장 좋습니다. 닫힌 질문은 사실 확인에 씁니다."}, {"q": "통화를 마칠 때 꼭 해야 하는 3가지에 포함되지 않는 것은?", "o": ["요약", "보낼 것", "결제 압박", "다음 연락 시간"], "a": 2, "e": "요약, 보낼 것, 다음 연락 시간을 정합니다. 결제를 압박하는 것은 포함되지 않습니다."}];
+  var host = document.getElementById('quiz');
+  var done = 0, right = 0;
+  var score = document.createElement('div'); score.className = 'score';
+  Q.forEach(function(item, qi){
+    var box = document.createElement('div'); box.className = 'q';
+    var p = document.createElement('p'); p.textContent = (qi+1) + '. ' + item.q; box.appendChild(p);
+    var ex = document.createElement('div'); ex.className = 'ex'; ex.textContent = item.e;
+    var btns = [];
+    item.o.forEach(function(t, oi){
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = t;
+      b.addEventListener('click', function(){
+        if (box.classList.contains('done')) return;
+        box.classList.add('done'); done++;
+        btns.forEach(function(x, xi){ if (xi === item.a) x.classList.add('ok'); });
+        if (oi === item.a) { right++; } else { b.classList.add('ng'); }
+        score.textContent = '푼 문제 ' + done + ' / ' + Q.length + ' · 맞힌 문제 ' + right + (done === Q.length ? ' (' + Math.round(right / Q.length * 100) + '점)' : '');
+      });
+      btns.push(b); box.appendChild(b);
+    });
+    box.appendChild(ex); host.appendChild(box);
+  });
+  host.appendChild(score);
+})();
+</script>
+</body>
+</html>

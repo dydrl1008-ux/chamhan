@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getProfile } from '@/lib/auth/session';
 import { todayKST } from '@/lib/date/kst';
 import { metaAccess } from '@/lib/meta';
+import { metaDeployed } from '@/lib/metaEdu';
 import { PageHeader } from '@/components/ui';
 import { mdList, metaPeople } from './actions';
 import MetaDbClient from './MetaDbClient';
@@ -10,6 +11,7 @@ export const dynamic = 'force-dynamic';
 export default async function MetaDbPage({ searchParams }: { searchParams: { u?: string } }) {
   const me = await getProfile(); if (!me || !me.is_active) redirect('/login');
   const a = await metaAccess(me); if (!a.ok) redirect('/');
+  if (!a.lead && !(await metaDeployed(me))) redirect('/meta-edu');   // 교육 · 시험 · 스크립트 승인 전에는 DB 대신 교육 화면
   const people = a.lead ? await metaPeople() : [];
   const owner = a.lead ? (searchParams.u === 'none' || people.some(p => p.id === searchParams.u) ? searchParams.u! : 'all') : me.id;
   const r = await mdList(owner);

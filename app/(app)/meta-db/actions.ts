@@ -4,17 +4,22 @@ import { revalidatePath } from 'next/cache';
 import { getProfile } from '@/lib/auth/session';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { metaAccess, metaTeamId, META_STATUSES } from '@/lib/meta';
+import { metaDeployed } from '@/lib/metaEdu';
 type R<T = {}> = ({ ok: true; msg: string } & T) | { ok: false; msg: string };
 export type MetaLead = { id: number; received_on: string; source: string; name: string; phone: string; product: string; inquiry: string; url: string; owner_id: string | null; status: string; paid_amt: number | null; paid_at: string | null; next_on: string | null; memo: string; updated_at: string };
 export type MetaIn = { received_on?: string | null; source?: string; name?: string; phone?: string; product?: string; inquiry?: string; url?: string };
 const COLS = 'id,received_on,source,name,phone,product,inquiry,url,owner_id,status,paid_amt,paid_at,next_on,memo,updated_at';
 const needSql = (m: string) => /meta_leads|meta_ad_spend/.test(m) ? '0100 SQL(메타팀 표)을 먼저 실행해 주세요' : m;
 const s = (x: unknown, n: number) => String(x ?? '').trim().slice(0, n); const day = (x: unknown) => { const t = String(x ?? '').trim(); return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null; };
-async function who() { const me = await getProfile(); if (!me || !me.is_active) return null; const a = await metaAccess(me); return a.ok ? { me, ...a } : null; }
+async function who() { const me = await getProfile(); if (!me || !me.is_active) return null; const a = await metaAccess(me); if (!a.ok) return null; if (!a.lead && !(await metaDeployed(me))) return null;   // 투입 전 사원은 DB 를 볼 수 없다
+  return { me, ...a }; }
 /** 메타팀 사람들 (배분 대상) */
 export async function metaPeople(): Promise<{ id: string; name: string; role: string }[]> {
   const tid = await metaTeamId(); if (tid == null) return [];
-  const { data } = await supabaseAdmin().from('profiles').select('id,name,role').eq('team_id', tid).eq('is_active', true).in('role', ['manager', 'staff']).order('name'); return (data ?? []) as any[];
+  const sb = supabaseAdmin(); const { data } = await sb.from('profiles').select('id,name,role').eq('team_id', tid).eq('is_active', true).in('role', ['manager', 'staff']).order('name'); const all = (data ?? []) as { id: string; name: string; role: string }[];
+  // 사원은 교육을 마치고 팀장이 투입 승인한 사람만 배분 대상 (0101 SQL 전에는 전원)
+  const { data: ed, error } = await sb.from('meta_edu').select('user_id,deployed_at').in('user_id', all.map(p => p.id).concat('00000000-0000-0000-0000-000000000000')); if (error) return all;
+  const ok = new Set((ed ?? []).filter(e => e.deployed_at).map(e => e.user_id)); return all.filter(p => p.role === 'manager' || ok.has(p.id));
 }
 /** 목록 — owner: 사람 id / 'none'(미배정) / 'all'. 사원은 무조건 본인 것 */
 export async function mdList(owner?: string): Promise<R<{ rows: MetaLead[] }>> {

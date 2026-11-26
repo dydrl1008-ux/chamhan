@@ -9,6 +9,7 @@ import LogoutButton from '@/components/LogoutButton';
 import Toast from '@/components/Toast';
 import { headers } from 'next/headers';
 import { isMeta, META_BLOCK } from '@/lib/meta';
+import { metaDeployed } from '@/lib/metaEdu';
 import MetaGuard from '@/components/MetaGuard';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const p = await getProfile();
@@ -18,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const lead = p.role === 'admin' || p.role === 'head'; const mgmt = lead || p.is_mgmt; const mgr = p.role === 'manager';
   // 메타팀(팀 이름 '메타팀') — 인바운드 DB 전담. 영업사원용 화면은 메뉴에서 빼고 주소로 들어와도 돌려보낸다
   const meta = await isMeta(p);
+  const metaEduOnly = meta && p.role === 'staff' && !(await metaDeployed(p));   // 교육 중인 메타팀 사원 — 인바운드 DB 메뉴는 투입 승인 후에 열린다
   if (meta) { const path = headers().get('x-wh-path') ?? ''; if (META_BLOCK.some(b => path === b || path.startsWith(b + '/'))) redirect('/meta-db'); }
   let pendingCount = 0; if (mgmt) { pendingCount = await cachedPendingCount(); }
   // 금일 이슈 미확인 건수 (활성 이슈 중 내가 안 읽은 것)
@@ -41,8 +43,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/plans">계획 캘린더</NavLink>
         </NavGroup>
 
-        {(meta || lead) && <NavGroup title="메타팀" hrefs={['/meta-db', '/meta-stats']}>
-          <NavLink href="/meta-db">인바운드 DB</NavLink>
+        {(meta || lead) && <NavGroup title="메타팀" hrefs={['/meta-db', '/meta-stats', '/meta-edu']}>
+          {!metaEduOnly && <NavLink href="/meta-db">인바운드 DB</NavLink>}
+          <NavLink href="/meta-edu">{meta && !mgr ? '교육' : '교육 관리'}</NavLink>
           {(lead || mgr) && <NavLink href="/meta-stats">메타 효율</NavLink>}
         </NavGroup>}
 

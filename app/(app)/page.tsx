@@ -33,7 +33,7 @@ function SlotSection({ es, today }: { es: { days: number; soon: SlotEx[]; ended:
     </Section>);
 }
 export default async function Home() {
-  const p = (await getProfile())!; if (await isMeta(p)) redirect('/meta-db');   // 메타팀은 홈(마진 · 인센티브 · 진급) 대신 인바운드 DB 로
+  const p = (await getProfile())!; if (await isMeta(p)) redirect('/meta-db');   // (투입 전이면 거기서 다시 교육 화면으로)   // 메타팀은 홈(마진 · 인센티브 · 진급) 대신 인바운드 DB 로
   const sb = supabaseServer(); const today = todayKST(); const bm = bizMonthOf(today); const [ms] = bizMonthRange(bm); const wsFrom = addDays(today, -40);
   const [{ data: issue }, { data: reads }, { data: promos }] = await Promise.all([
     sb.from('issues').select('id,title,body,issue_date').eq('is_active', true).order('issue_date', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle(),
