@@ -68,7 +68,6 @@ export default async function Home() {
         <Stat label="오늘 출근" value={att?.check_in ? att.check_in.slice(0, 5) : '미체크'} tone={att?.check_in ? (att.is_late ? 'wait' : 'ok') : 'bad'} desc={att?.check_in ? (att.is_late ? '지각' : '정상') + (att.check_out ? ` · 퇴근 ${att.check_out.slice(0, 5)}` : '') : '자리에 앉으면 기록'} href="/attendance" />
         <Stat label="오늘 KPI" value={kpi ? won(kpi.margin) : '미제출'} tone={kpi ? undefined : 'bad'} pending={kpi?.margin_pending ? won(kpi.margin_pending) : undefined} desc={kpi ? `정산 ${won(kpi.margin_auto)} + 추가 ${won(kpi.margin_manual)}` : '퇴근 전 제출'} href="/kpi" />
         <Stat label={`${bizLabel(bm)} 누계 마진`} value={won(mm)} tone={mm < 0 ? 'bad' : undefined} pending={me?.monthPending ? won(me.monthPending) : undefined} pct={tg ? pct(mm, tg) : undefined} desc={tg ? `목표 ${man(tg)} · ${pct(mm, tg)}%` : '목표 미배정'} href="/margin" />
-        <Stat label="예상 인센티브" value={won(me?.inc.total ?? 0)} desc={me?.inc.tier ? `${me.inc.scope} · ${me.inc.tier.label}${me.inc.next ? ` · 다음 구간까지 ${man(Number(me.inc.next.min_margin) - mm)}` : ''}` : '기준 없음'} href="/me" />
       </div>);
     const slotSec = <SlotSection es={es} today={today} />;
     const myLists = (
@@ -198,10 +197,10 @@ export default async function Home() {
         </div>
         <Section title="팀원별 오늘 · 이달" sub="출근 · KPI · 오늘 마진 · 누계 · 목표를 한 줄에" flush right={<Link href="/overview" className="help">직원 현황 →</Link>}>
           <div className="tbl-wrap"><table>
-            <thead><tr><th>팀원</th><th>출근</th><th>오늘 KPI</th><th className="num">오늘 마진</th><th className="num">이달 누계</th>{tg > 0 && <th style={{ width: '26%' }}>목표 달성</th>}<th className="num">예상 인센</th></tr></thead>
+            <thead><tr><th>팀원</th><th>출근</th><th>오늘 KPI</th><th className="num">오늘 마진</th><th className="num">이달 누계</th>{tg > 0 && <th style={{ width: '26%' }}>목표 달성</th>}</tr></thead>
             <tbody>
-              {staff.map(x => { const t = tgOf(x.id); return <tr key={x.id}><td><Link href={`/employees/${x.id}`} style={{ textDecoration: 'none', color: 'inherit' }}><Cell main={x.name} sub={x.position ?? ''} /></Link></td><td>{attOf(x)}</td><td>{kpiOf(x)}</td><td><Money v={todayM(x.id)} dash /></td><td><Money v={x.monthMargin} big sub={x.monthPending ? <span style={{ color: 'var(--wait-ink)' }}>대기 {won(x.monthPending)}</span> : undefined} /></td>{tg > 0 && <td>{t ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ flex: 1 }}><Bar p={pct(x.monthMargin, t)} /></div><span style={{ fontSize: 13, fontWeight: 600, minWidth: 36, textAlign: 'right' }}>{pct(x.monthMargin, t)}%</span></div> : <span className="cell-sub">-</span>}</td>}<td><Money v={x.inc.total} /></td></tr>; })}
-              <tr className="total"><td colSpan={3}>팀 합계 <span className="cell-sub" style={{ display: 'inline', fontWeight: 500 }}>출근 {rows.length - noAtt.length}/{rows.length} · KPI {staff.length - noKpi.length}/{staff.length}</span></td><td><Money v={staff.reduce((a, x) => a + todayM(x.id), 0)} /></td><td><Money v={mm} big /></td>{tg > 0 && <td>{pct(mm, tg)}%</td>}<td><Money v={staff.reduce((a, x) => a + x.inc.total, 0)} /></td></tr>
+              {staff.map(x => { const t = tgOf(x.id); return <tr key={x.id}><td><Link href={`/employees/${x.id}`} style={{ textDecoration: 'none', color: 'inherit' }}><Cell main={x.name} sub={x.position ?? ''} /></Link></td><td>{attOf(x)}</td><td>{kpiOf(x)}</td><td><Money v={todayM(x.id)} dash /></td><td><Money v={x.monthMargin} big sub={x.monthPending ? <span style={{ color: 'var(--wait-ink)' }}>대기 {won(x.monthPending)}</span> : undefined} /></td>{tg > 0 && <td>{t ? <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ flex: 1 }}><Bar p={pct(x.monthMargin, t)} /></div><span style={{ fontSize: 13, fontWeight: 600, minWidth: 36, textAlign: 'right' }}>{pct(x.monthMargin, t)}%</span></div> : <span className="cell-sub">-</span>}</td>}</tr>; })}
+              <tr className="total"><td colSpan={3}>팀 합계 <span className="cell-sub" style={{ display: 'inline', fontWeight: 500 }}>출근 {rows.length - noAtt.length}/{rows.length} · KPI {staff.length - noKpi.length}/{staff.length}</span></td><td><Money v={staff.reduce((a, x) => a + todayM(x.id), 0)} /></td><td><Money v={mm} big /></td>{tg > 0 && <td>{pct(mm, tg)}%</td>}</tr>
             </tbody>
           </table></div>
         </Section>

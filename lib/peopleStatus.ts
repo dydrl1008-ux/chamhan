@@ -56,9 +56,9 @@ export async function peopleStatus(opts: { teamId?: number; onlyUser?: string; m
 }
 
 /** 현황 표 → CSV (엑셀용 BOM 포함) */
-export function statusCsv(rows: PersonStatus[], bm: string) {
+export function statusCsv(rows: PersonStatus[], bm: string, withInc = true) {   // withInc=false: 예상 인센티브 열 제외 (총괄 · 어드민만 본다)
   const esc = (v: unknown) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const head = ['이름', '팀', '직급', '오늘 근태', '지각', '근태 대기', '오늘 KPI', '오늘 마진', `${Number(bm.slice(5))}월 마진`, '승인 대기 마진', '목표', '달성률%', '콜(월)', '신규(월)', 'KPI 입력일', '계획 완료', '계획 전체', '주간보고', '가망건', '협상중', '진급', '예상 인센티브'];
-  const lines = rows.map(p => [p.name, p.teamName, p.position ?? '', p.att.kind === 'leave' ? p.att.text : p.att.kind === 'in' ? `출근 ${p.att.text}${p.att.out ? '~' + p.att.out : ''}` : '미체크', p.att.late ? 'Y' : '', p.pendingLeaves || '', p.role === 'manager' ? '' : p.kpi.submitted ? '제출' : '미제출', p.kpi.submitted ? p.kpi.margin : '', p.monthMargin, p.monthPending || '', p.target || '', p.targetPct ?? '', p.kpi.calls, p.kpi.newCnt, p.kpi.days, p.plan?.done ?? '', p.plan?.total ?? '', p.report ? (p.report.cur === 'submitted' ? '제출' : p.report.cur === 'draft' ? '작성중' : '없음') : '', p.pipe.total || '', p.pipe.nego || '', p.promo ? (p.promo.ok ? `도달→${p.promo.c.to_position}` : `미도달(${p.promo.fails.join('·')})`) : '', p.inc.total].map(esc).join(','));
+  const head = ['이름', '팀', '직급', '오늘 근태', '지각', '근태 대기', '오늘 KPI', '오늘 마진', `${Number(bm.slice(5))}월 마진`, '승인 대기 마진', '목표', '달성률%', '콜(월)', '신규(월)', 'KPI 입력일', '계획 완료', '계획 전체', '주간보고', '가망건', '협상중', '진급', ...(withInc ? ['예상 인센티브'] : [])];
+  const lines = rows.map(p => [p.name, p.teamName, p.position ?? '', p.att.kind === 'leave' ? p.att.text : p.att.kind === 'in' ? `출근 ${p.att.text}${p.att.out ? '~' + p.att.out : ''}` : '미체크', p.att.late ? 'Y' : '', p.pendingLeaves || '', p.role === 'manager' ? '' : p.kpi.submitted ? '제출' : '미제출', p.kpi.submitted ? p.kpi.margin : '', p.monthMargin, p.monthPending || '', p.target || '', p.targetPct ?? '', p.kpi.calls, p.kpi.newCnt, p.kpi.days, p.plan?.done ?? '', p.plan?.total ?? '', p.report ? (p.report.cur === 'submitted' ? '제출' : p.report.cur === 'draft' ? '작성중' : '없음') : '', p.pipe.total || '', p.pipe.nego || '', p.promo ? (p.promo.ok ? `도달→${p.promo.c.to_position}` : `미도달(${p.promo.fails.join('·')})`) : '', ...(withInc ? [p.inc.total] : [])].map(esc).join(','));
   return '﻿' + [head.join(','), ...lines].join('\r\n');
 }

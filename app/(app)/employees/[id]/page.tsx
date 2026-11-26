@@ -38,7 +38,7 @@ export default async function EmployeePage({ params }: { params: { id: string } 
       <div className="grid4">
         <Stat label={`${bizLabel(bm)} ${p.role === 'manager' ? '팀' : ''} 마진`} value={won(p.monthMargin)} pending={p.monthPending ? won(p.monthPending) : undefined} desc={p.kpi.days ? `KPI ${p.kpi.days}일 입력 · 콜 ${p.kpi.calls.toLocaleString()} · 신규 ${p.kpi.newCnt}` : 'KPI 입력 없음'} />
         <Stat label="목표 달성" value={p.target ? `${p.targetPct}%` : '목표 없음'} pct={p.target ? p.targetPct ?? 0 : undefined} desc={p.target ? `목표 ${man(p.target)} · 남은 ${man(Math.max(0, p.target - p.monthMargin))}` : '월 목표를 배정하면 달성률이 표시됩니다'} />
-        <Stat label="예상 인센티브" value={won(p.inc.total)} desc={p.inc.tier ? `${p.inc.scope} · ${p.inc.tier.label}${p.inc.next ? ` · 다음 구간까지 ${man(Number(p.inc.next.min_margin) - p.monthMargin)}` : ''}` : '기준 없음'} />
+        {(me.role === 'head' || me.role === 'admin') && <Stat label="예상 인센티브" value={won(p.inc.total)} desc={p.inc.tier ? `${p.inc.scope} · ${p.inc.tier.label}${p.inc.next ? ` · 다음 구간까지 ${man(Number(p.inc.next.min_margin) - p.monthMargin)}` : ''}` : '기준 없음'} />}
         <Stat label="진급" value={p.promo ? (p.promo.ok ? '승급 검토' : `${p.promo.fails.length}개 미충족`) : '기준 없음'} tone={p.promo ? (p.promo.ok ? 'ok' : 'wait') : undefined} desc={p.promo ? `${p.promo.c.from_position} → ${p.promo.c.to_position}${p.promo.ok ? '' : ' · ' + p.promo.fails.join(' · ')}` : `직급(${p.position ?? '미설정'}) 기준 없음`} />
       </div>
       <div className="grid3">

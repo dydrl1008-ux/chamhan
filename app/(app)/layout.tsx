@@ -43,8 +43,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/plans">계획 캘린더</NavLink>
         </NavGroup>
 
-        {(meta || lead) && <NavGroup title="메타팀" hrefs={['/meta-db', '/meta-stats', '/meta-edu']}>
+        {(meta || lead) && <NavGroup title="메타팀" hrefs={['/meta-db', '/meta-stats', '/meta-edu', '/meta-report']}>
           {!metaEduOnly && <NavLink href="/meta-db">인바운드 DB</NavLink>}
+          {!metaEduOnly && <NavLink href="/meta-report">메타 보고</NavLink>}
           <NavLink href="/meta-edu">{meta && !mgr ? '교육' : '교육 관리'}</NavLink>
           {(lead || mgr) && <NavLink href="/meta-stats">메타 효율</NavLink>}
         </NavGroup>}
@@ -83,7 +84,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/margin">영업 마진</NavLink>
           <NavLink href="/kpi">{p.role === 'head' ? '일간 KPI 현황' : '일간 KPI 보고'}</NavLink>
           {lead && <NavLink href="/users">사용자 · 팀</NavLink>}
-          <NavLink href="/criteria">진급 · 인센티브 기준</NavLink>
+          <NavLink href="/criteria">{lead ? '진급 · 인센티브 기준' : '진급 기준'}</NavLink>
         </NavGroup>}
         <NavGroup title="도구" hrefs={['/secret-index', '/shop-diag', '/rank-watch', '/product-name', '/pv3', '/slots-open']}>
           <NavLink href="/rank-watch">순위 체크</NavLink>
@@ -99,7 +100,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {(mgr || lead) && !meta && <NavLink href="/monthly">월간 보고</NavLink>}
           {(mgr || lead) && !meta && <NavLink href="/call-status">콜 리스트 현황</NavLink>}
           {(mgr || lead) && !meta && <NavLink href="/weekly">지난 주간보고 (보관)</NavLink>}
-          <NavLink href="/reports">보고서</NavLink>
+          {!meta && <NavLink href="/reports">보고서</NavLink>}
           <NavLink href="/issues">금일 이슈{issueBadge}</NavLink>
           <NavLink href="/products">상품 안내 · 접수</NavLink>
         </NavGroup>

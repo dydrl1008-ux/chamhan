@@ -9,7 +9,8 @@ import MailLink from '@/components/MailLink';
 import { PageHeader, Stat, Section, Empty } from '@/components/ui';
 export const dynamic = 'force-dynamic';
 export default async function MePage() {
-  const me = (await getProfile())!; const sb = supabaseServer(); const today = todayKST(); const year = Number(today.slice(0, 4)); const ms = bizMonthOf(today) + '-01';
+  const me = (await getProfile())!; const showInc = me.role === 'head' || me.role === 'admin';   // 인센티브 금액은 총괄 · 어드민만
+  const sb = supabaseServer(); const today = todayKST(); const year = Number(today.slice(0, 4)); const ms = bizMonthOf(today) + '-01';
   const [{ people, tiers }, { data: yl }, { data: pr }, { data: dir }, { data: tgt }, { data: teams }] = await Promise.all([
     evaluatePeople(today, me.id),
     sb.from('v_leave_yearly').select('*').eq('user_id', me.id).eq('year', year).maybeSingle(),
@@ -32,7 +33,7 @@ export default async function MePage() {
       <div className="grid4">
         <Stat label={`업무월 ${isMgr ? '팀' : '내'} 마진`} value={won(p?.monthMargin)} pending={p?.monthPending ? won(p.monthPending) : undefined} pct={tg ? Math.round((p?.monthMargin ?? 0) / tg * 100) : undefined} desc={tg ? `목표 ${man(tg)} · ${Math.round((p?.monthMargin ?? 0) / tg * 100)}%` : '목표 미배정'} />
         <Stat label="잔여 연차" value={`${granted - used}일`} desc={`부여 ${granted} · 사용 ${used} · 올해 지각 ${Number(yl?.late_cnt ?? 0)} · 결근 ${Number(yl?.absent_cnt ?? 0)}`} href="/leave" />
-        <Stat label="예상 인센티브" value={won(p?.inc.total ?? 0)} desc={p?.inc.tier ? `${myScope} · ${p.inc.tier.label}${p.inc.next ? ` · 다음 구간까지 ${man(Number(p.inc.next.min_margin) - p.monthMargin)}` : ''}` : '기준 없음'} />
+        {showInc && <Stat label="예상 인센티브" value={won(p?.inc.total ?? 0)} desc={p?.inc.tier ? `${myScope} · ${p.inc.tier.label}${p.inc.next ? ` · 다음 구간까지 ${man(Number(p.inc.next.min_margin) - p.monthMargin)}` : ''}` : '기준 없음'} />}
         <Stat label="계획 달성" value={(() => { const vs = ['daily', 'weekly', 'monthly'].map(t => rate(t)).filter((x): x is number => x !== null); return vs.length ? `${Math.round(vs.reduce((a, b) => a + b, 0) / vs.length)}%` : '-'; })()} desc={`일일 ${rate('daily') ?? '-'}${rate('daily') !== null ? '%' : ''} · 주간 ${rate('weekly') ?? '-'}${rate('weekly') !== null ? '%' : ''} · 월 ${rate('monthly') ?? '-'}${rate('monthly') !== null ? '%' : ''}`} href="/plans" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
@@ -47,12 +48,12 @@ export default async function MePage() {
               <tr><td>재직</td><td style={{ color: p.promo.tenOk ? 'var(--ok)' : 'var(--bad)' }}>{p.tenure}개월 / 최소 {p.promo.c.min_tenure_months}</td></tr></tbody></table>
             <div style={{ marginTop: 10 }}><span className="pill" style={p.promo.ok ? { background: 'var(--ok-soft)', color: 'var(--ok)' } : { background: '#FDF1DD', color: '#D97706' }}>{p.promo.ok ? '이달 기준 도달' : '미도달 — ' + p.promo.fails.join(', ')}</span></div>
           </> : <div style={{ fontSize: 13, color: 'var(--muted)' }}>직급({me.position ?? '미설정'})에 해당하는 진급 기준이 없습니다.</div>}</div>
-        <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>이달 예상 인센티브 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{myScope} 기준{p?.inc.tier ? ` · 현재 ${p.inc.tier.label}` : ''} · 마감 전 추정</span></h3>
+        {showInc && <div className="card"><h3 style={{ margin: '0 0 12px', fontSize: 15 }}>이달 예상 인센티브 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{myScope} 기준{p?.inc.tier ? ` · 현재 ${p.inc.tier.label}` : ''} · 마감 전 추정</span></h3>
           {p && <>
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tiers.filter(t => t.scope === myScope).length},1fr)`, gap: 4, marginBottom: 10 }}>{tiers.filter(t => t.scope === myScope).map(t => { const cur = p.inc.tier?.id === t.id; const past = p.inc.tier && t.sort_order < p.inc.tier.sort_order; return <div key={t.id} style={{ textAlign: 'center', padding: '6px 3px', borderRadius: 8, border: `1px solid ${cur ? 'var(--accent)' : 'var(--line)'}`, background: cur ? 'var(--accent-soft)' : past ? 'var(--ok-soft)' : 'var(--bg)' }}><div style={{ fontSize: 14, fontWeight: 800, color: cur ? 'var(--accent)' : past ? 'var(--ok)' : 'var(--ink)' }}>{(Number(t.rate) * 100).toFixed(0)}%</div><div style={{ fontSize: 10, color: 'var(--muted)' }}>{t.label}</div></div>; })}</div>
             <table style={{ fontSize: 13 }}><tbody>{p.inc.items.map((x, i) => <tr key={i}><td>{x.name}</td><td style={{ textAlign: 'right' }}>{won(x.amt)}</td></tr>)}<tr style={{ fontWeight: 700, background: 'var(--bg)' }}><td>예상 합계</td><td style={{ textAlign: 'right' }}>{won(p.inc.total)}</td></tr></tbody></table>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>{p.inc.next ? `다음 구간(${p.inc.next.label} ${(Number(p.inc.next.rate) * 100).toFixed(0)}%)까지 ${won(Number(p.inc.next.min_margin) - p.monthMargin)} 남음` : '최고 구간'} · 마이너스 마진은 0으로 계산</div>
-          </>}</div>
+          </>}</div>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}><PasswordChange /><SettleLink linked={!!cred} settleId={cred?.settle_user_id ?? ''} verifiedAt={cred?.verified_at ?? null} lastError={cred?.last_error ?? null} /></div>
       <MailLink accounts={(mailAccts ?? []) as any[]} />

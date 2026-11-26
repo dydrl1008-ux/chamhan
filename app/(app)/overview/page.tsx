@@ -8,7 +8,7 @@ import { peopleStatus } from '@/lib/peopleStatus';
 import { PageHeader, Stat, Section, Cell, Money, Status, Empty } from '@/components/ui';
 export const dynamic = 'force-dynamic';
 export default async function OverviewPage({ searchParams }: { searchParams: { team?: string; m?: string } }) {
-  const me = await getProfile(); if (!me || !(me.role === 'admin' || me.role === 'head' || me.role === 'manager')) redirect('/');
+  const me = await getProfile(); if (!me || !(me.role === 'admin' || me.role === 'head' || me.role === 'manager')) redirect('/'); const showInc = me.role !== 'manager';   // 인센티브 금액은 총괄 · 어드민만
   const sb = supabaseServer(); const today = todayKST(); const curBm = bizMonthOf(today); const bm = /^\d{4}-\d{2}$/.test(searchParams.m ?? '') && searchParams.m! <= curBm ? searchParams.m! : curBm; const isCur = bm === curBm; const [ms, meD] = bizMonthRange(bm); const asOf = isCur ? today : meD;
   const teamFilter = me.role === 'manager' ? (me.team_id ?? 0) : Number(searchParams.team) || 0;
   const [{ people, teams }, { data: att }, { data: kpiToday }, { data: leavesPending }, { data: leavesToday }, { data: targets }, { data: wr }, { data: pipe }, { data: plans }, { data: kpiMonth }] = await Promise.all([
@@ -48,12 +48,12 @@ export default async function OverviewPage({ searchParams }: { searchParams: { t
         <Stat label="오늘 KPI 제출" value={`${st.sums.kpi}/${st.sums.staff}명`} desc={st.sums.staff - st.sums.kpi ? `미제출 ${st.rows.filter(p => p.role === 'staff' && !p.kpi.submitted).map(p => p.name).join(', ')}` : '전원 제출'} tone={st.sums.kpi < st.sums.staff ? 'wait' : 'ok'} /></>
         : <><Stat label="KPI 입력일 합" value={`${st.rows.reduce((a, p) => a + p.kpi.days, 0)}일`} desc={`직원 ${st.sums.staff}명 · 1인 평균 ${st.sums.staff ? Math.round(st.rows.reduce((a, p) => a + p.kpi.days, 0) / st.sums.staff) : 0}일`} />
         <Stat label="콜 · 신규 합" value={st.rows.reduce((a, p) => a + p.kpi.calls, 0).toLocaleString()} desc={`신규 ${st.rows.reduce((a, p) => a + p.kpi.newCnt, 0)}건`} /></>}
-        <Stat label={`${Number(bm.slice(5))}월 마진`} value={won(st.sums.margin)} pending={st.sums.pending ? won(st.sums.pending) : undefined} desc={`예상 인센티브 합 ${won(st.sums.inc)}`} />
+        <Stat label={`${Number(bm.slice(5))}월 마진`} value={won(st.sums.margin)} pending={st.sums.pending ? won(st.sums.pending) : undefined} desc={showInc ? `예상 인센티브 합 ${won(st.sums.inc)}` : undefined} />
         <Stat label="목표 달성" value={st.sums.target ? pct(st.sums.margin, st.sums.target) + '%' : '목표 없음'} pct={st.sums.target ? pct(st.sums.margin, st.sums.target) : undefined} desc={st.sums.target ? `목표 ${man(st.sums.target)} · 진급 기준 도달 ${st.sums.promo}명` : `진급 기준 도달 ${st.sums.promo}명`} />
       </div>
       <Section title="인원별 업무 현황" sub={me.role === 'manager' ? '우리 팀' : undefined} flush right={<span className="cell-sub">이름을 누르면 직원 상세</span>}>
         <div style={{ overflowX: 'auto' }}><table>
-          <thead><tr><th>직원</th>{isCur ? <><th>근태</th><th>KPI</th></> : <th>KPI 입력 · 콜 · 신규</th>}<th style={{ textAlign: 'right' }}>{Number(bm.slice(5))}월 마진</th><th>목표</th><th>계획</th><th>보고 · 가망</th><th>진급</th><th style={{ textAlign: 'right' }}>예상 인센</th></tr></thead>
+          <thead><tr><th>직원</th>{isCur ? <><th>근태</th><th>KPI</th></> : <th>KPI 입력 · 콜 · 신규</th>}<th style={{ textAlign: 'right' }}>{Number(bm.slice(5))}월 마진</th><th>목표</th><th>계획</th><th>보고 · 가망</th><th>진급</th>{showInc && <th style={{ textAlign: 'right' }}>예상 인센</th>}</tr></thead>
           <tbody>{st.rows.map(p => <tr key={p.id}>
             <td><a href={`/employees/${p.id}`} style={{ textDecoration: 'none', color: 'inherit' }}><Cell main={p.name} sub={`${p.teamName} · ${p.position ?? '-'}`} /></a></td>
             {isCur ? <><td>{p.att.kind === 'leave' ? <Status kind="off">{p.att.text}</Status> : p.att.kind === 'in' ? <Status kind={p.att.late ? 'wait' : 'ok'}>{p.att.late ? '지각 ' : '근무중 '}{p.att.text}{p.att.out ? ' → ' + p.att.out : ''}</Status> : <Status kind="bad">미체크</Status>}
@@ -64,7 +64,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: { t
             <td>{p.plan ? <Cell main={`${p.plan.done}/${p.plan.total}`} sub={`${pct(p.plan.done, p.plan.total)}%`} /> : <span className="cell-sub">-</span>}</td>
             <td>{p.report ? <Cell main={<Status kind={p.report.cur === 'submitted' ? 'ok' : p.report.cur ? 'wait' : 'bad'}>{p.report.cur === 'submitted' ? '주간보고 제출' : p.report.cur === 'draft' ? '작성 중' : '미작성'}</Status>} sub={`지난주 ${p.report.last === 'submitted' ? '제출' : '미제출'}`} /> : p.pipe.total ? <Cell main={`가망 ${p.pipe.total}건`} sub={p.pipe.nego ? `협상 중 ${p.pipe.nego}` : ''} /> : <span className="cell-sub">-</span>}</td>
             <td>{p.promo ? <Status kind={p.promo.ok ? 'ok' : 'off'}>{p.promo.ok ? `승급 검토 → ${p.promo.c.to_position}` : `기준 ${p.promo.fails.length}개 미충족`}</Status> : <span className="cell-sub">기준 없음</span>}{p.promo && !p.promo.ok && <div className="cell-sub">{p.promo.fails.join(' · ')}</div>}</td>
-            <td><Money v={p.inc.total} sub={p.inc.tier?.label} /></td>
+            {showInc && <td><Money v={p.inc.total} sub={p.inc.tier?.label} /></td>}
           </tr>)}
           {st.rows.length === 0 && <tr><td colSpan={9}><Empty>인원 없음</Empty></td></tr>}</tbody></table></div>
         <div className="cell-sub" style={{ padding: '10px 22px' }}>마진·목표·계획·진급·인센티브는 {bizLabel(bm)} 기준 · 지각은 이달, 결근은 올해 누계 · 팀장 행의 마진은 팀 합계</div>
