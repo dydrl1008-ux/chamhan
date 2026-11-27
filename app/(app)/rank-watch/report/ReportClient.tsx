@@ -53,7 +53,9 @@ export default function ReportClient({ data, err }: { data: ReportData; err: str
   const png = async (): Promise<string | null> => {
     if (!sheet.current) return null;
     const { toPng } = await import('html-to-image');
-    return toPng(sheet.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true, filter: n => !(n instanceof HTMLElement && n.dataset.noexport) });
+    const el = sheet.current;
+    // 화면에서는 가운데 정렬(margin auto)이라, 그대로 캡처하면 왼쪽 여백만큼 밀려서 오른쪽이 잘림 → 저장할 때만 여백·그림자 제거, 크기 고정
+    return toPng(el, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true, width: el.offsetWidth, height: el.scrollHeight, canvasWidth: el.offsetWidth, canvasHeight: el.scrollHeight, style: { margin: '0', boxShadow: 'none', borderRadius: '0', transform: 'none' }, filter: n => !(n instanceof HTMLElement && n.dataset.noexport) });
   };
   const savePng = async () => { setBusy('png'); try { const u = await png(); if (!u) return; const a = document.createElement('a'); a.href = u; a.download = fname + '.png'; a.click(); notify('PNG 저장 — 카톡에 바로 붙이세요', 'ok'); } catch (e: any) { notify('PNG 실패: ' + (e?.message ?? e), 'bad'); } finally { setBusy(''); } };
   const savePdf = async () => {
@@ -62,7 +64,7 @@ export default function ReportClient({ data, err }: { data: ReportData; err: str
       const u = await png(); if (!u || !sheet.current) return;
       const { jsPDF } = await import('jspdf');
       const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-      const W = 210, H = 297, m = 8; const w = W - m * 2; const ratio = sheet.current.offsetHeight / sheet.current.offsetWidth; const h = w * ratio;
+      const W = 210, H = 297, m = 8; const w = W - m * 2; const ratio = sheet.current.scrollHeight / sheet.current.offsetWidth; const h = w * ratio;
       let y = 0; let page = 0;
       while (y < h) { if (page) pdf.addPage(); pdf.addImage(u, 'PNG', m, m - y, w, h); y += H - m * 2; page++; }  // 긴 리포트는 여러 장으로
       pdf.save(fname + '.pdf'); notify('PDF 저장', 'ok');
