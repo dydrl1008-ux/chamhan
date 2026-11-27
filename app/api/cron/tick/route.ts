@@ -4,13 +4,14 @@
 import { NextResponse } from 'next/server';
 import { myDbTick } from '@/lib/myDb';
 import { rankWatchTick } from '@/lib/rankWatch';
-import { metaNagTick, metaAlarmTick } from '@/lib/metaLink';
+import { metaNagTick, metaAlarmTick, metaIntakeWatch } from '@/lib/metaLink';
 export const dynamic = 'force-dynamic'; export const maxDuration = 300;
 export async function GET(req: Request) {
   if (!process.env.CRON_SECRET || req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) return NextResponse.json({ ok: false }, { status: 401 });
   let md = 'skip'; try { md = await myDbTick(); } catch (e: any) { md = 'err ' + String(e?.message ?? e).slice(0, 80); }
   let mn = 'skip'; try { mn = await metaNagTick(); } catch (e: any) { mn = 'err ' + String(e?.message ?? e).slice(0, 80); }   // 메타 인바운드 첫 연락 지연 알림
   let ma = 'skip'; try { ma = await metaAlarmTick(); } catch (e: any) { ma = 'err ' + String(e?.message ?? e).slice(0, 80); }   // 메타 DB 다음 연락 알람
+  let mi = 'skip'; try { mi = await metaIntakeWatch(); } catch (e: any) { mi = 'err ' + String(e?.message ?? e).slice(0, 80); }   // 접수 시트 스크립트가 멈췄는지
   let rw = 'skip'; try { rw = await rankWatchTick(230000); } catch (e: any) { rw = 'err ' + String(e?.message ?? e).slice(0, 80); }
-  return NextResponse.json({ ok: true, md, mn, ma, rw });
+  return NextResponse.json({ ok: true, md, mn, ma, mi, rw });
 }

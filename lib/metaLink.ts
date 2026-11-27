@@ -1,6 +1,7 @@
 // 메타 인바운드 DB ↔ 내 DB 연결. 인바운드 DB = 팀장이 나눠주는 창구, 내 DB = 사원이 계속 연락하며 관리하는 곳.
 // 배정 → 내 DB 에 한 줄 생성(재배정이면 메모째 이동) / 내 DB 에서 고치면 → 인바운드 DB(효율 집계)로 반영
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { metaIntakeOpen } from '@/lib/meta';
 export const FIRST_CALL_MIN = 30;   // 배정 후 업무시간 30분 안에 첫 연락이 없으면 「지연」
 /** 내 DB 상태 → 인바운드 DB 상태. 아직 아무 기록도 없으면 미연락 */
 export function metaStatusOf(my: string, touched: boolean): string {
@@ -65,6 +66,19 @@ export async function metaNagTick(): Promise<string> {
     rows.push({ user_id: uid, kind: 'alert', title: `첫 연락 지연 ${list.length}건 — 배정 후 ${FIRST_CALL_MIN}분이 지났습니다`, body, link: '/meta-db' });
     for (const m of mgrs ?? []) if (m.id !== uid) rows.push({ user_id: m.id, kind: 'alert', title: `${nm} — 첫 연락 지연 ${list.length}건`, body, link: '/meta-db' }); }
   if (rows.length) await sb.from('notifications').insert(rows); return `nag ${late.length}`;
+}
+
+/** 5분마다 — 접수 시트 스크립트가 멈췄는지 본다. 받는 시간인데 20분 넘게 아무 호출이 없으면 총괄·대표에게 알림 (3시간에 한 번). 한 번도 연결된 적 없으면 조용히 */
+export async function metaIntakeWatch(): Promise<string> {
+  if (!metaIntakeOpen()) return 'closed';
+  const sb = supabaseAdmin(); const { data, error } = await sb.from('app_settings').select('key,value').in('key', ['meta_intake_seen_at', 'meta_intake_watch_at']); if (error) return 'skip';
+  const at = (k: string) => { const v = String((data ?? []).find((x: any) => x.key === k)?.value ?? '').replace(/"/g, ''); const t = v ? new Date(v).getTime() : NaN; return Number.isFinite(t) ? t : 0; };
+  const seen = at('meta_intake_seen_at'); if (!seen) return 'never'; const min = Math.floor((Date.now() - seen) / 60000); if (min < 20) return 'ok';
+  if (Date.now() - at('meta_intake_watch_at') < 3 * 3600e3) return 'alerted';
+  const now = new Date().toISOString(); await sb.from('app_settings').upsert({ key: 'meta_intake_watch_at', value: now, updated_at: now }, { onConflict: 'key' });
+  const { data: us } = await sb.from('profiles').select('id').in('role', ['admin', 'head']).eq('is_active', true);
+  if (us?.length) await sb.from('notifications').insert(us.map((u: any) => ({ user_id: u.id, kind: 'alert', title: '⚠️ 메타 자동 접수가 멈춘 것 같습니다', body: `접수 시트에서 ${min}분째 아무것도 오지 않습니다 — 시트의 Apps Script 트리거와 실행 로그를 확인해 주세요`, link: '/meta-db' })));
+  return `alert ${min}m`;
 }
 
 /** 5분마다 — 「다음 연락」에 시각을 정해 둔 메타 건: 그 시각이 되면 담당자에게 한 번 알린다 */

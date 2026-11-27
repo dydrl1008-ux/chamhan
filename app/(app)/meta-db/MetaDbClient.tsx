@@ -1,5 +1,5 @@
 'use client';
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notify } from '@/components/Toast';
 import MetaPayBox from '@/components/MetaPayBox';
@@ -10,6 +10,12 @@ const GRADES = ['', 'S', 'A', 'B', 'C', 'D', 'E', 'F']; const WAYS = ['전화', 
 const GBG: Record<string, string> = { S: '#FFD9D5', A: '#FFE7D1', B: '#DFF3E1', C: '#DCEBFD', E: '#F0F2F5', F: '#E2E5EA' };   // 등급별 줄 색 (내 DB 와 같은 색)
 const SC: Record<string, string> = { 미연락: '#175CD3', 부재: '#B54708', 상담중: '#067647', 보류: '#6941C6', 결제: '#B42318', 허수: '#667085', 중복: '#98A2B3', 종료: '#667085' };
 const BG: Record<string, string> = { 결제: '#FFF27A', 허수: '#F0F2F5', 중복: '#F0F2F5', 종료: '#F7F8FA' };
+const SRC: Record<string, [string, string]> = { 상담신청: ['#DBEAFE', '#1D4ED8'], '바이럴 접수': ['#FCE7F3', '#BE185D'] };   // 들어온 시트(탭)별 배지 색
+/** 어떻게 들어왔나 — 접수 ID 로 구분: 시트 자동 접수 / 예전 시트 이관 / 직접 올림 */
+const cameBy = (id: string | null) => !id ? '직접 올림' : /^old_/.test(id) ? '시트 이관' : '자동 접수';
+const CH: Record<string, string> = { ig: '인스타그램', fb: '페이스북', an: '오디언스 네트워크', th: '스레드', msg: '메신저' };
+/** 유입 경로를 읽을 수 있게 — 'ig / paid / …' → '인스타그램 광고', 'ig / social / link_in_bio' → '인스타그램 프로필 링크' */
+const inflowLabel = (v: string) => { const [a = '', b = ''] = v.split(' / ').map(x => x.trim()); const ch = CH[a] ?? (/naver/i.test(a) ? '네이버 검색' : a); return ch + (b === 'paid' ? ' 광고' : b === 'social' ? ' 프로필 링크' : ''); };
 const HEAD: [keyof MetaIn, RegExp][] = [['received_on', /접수|날짜|일자|일시|등록/], ['source', /구분|경로|매체|유입/], ['name', /이름|성함|상호|업체|고객/], ['phone', /전화|연락처|번호|휴대/], ['product', /상품|서비스|종류/], ['inquiry', /문의|내용|메모|요청/], ['url', /url|링크|주소|스토어/i]];
 const ORDER: (keyof MetaIn)[] = ['received_on', 'source', 'name', 'phone', 'product', 'inquiry', 'url'];
 const p2 = (n: number) => String(n).padStart(2, '0');
@@ -30,6 +36,7 @@ function parseGrid(g: any[][]): MetaIn[] {
 }
 export default function MetaDbClient({ rows: init, people, owner, lead, boss, meId, today }: { rows: MetaLead[]; people: { id: string; name: string; role: string }[]; owner: string; lead: boolean; boss: boolean; meId: string; today: string }) {
   const router = useRouter(); const [rows, setRows] = useState(init); const [st, setSt] = useState('전체'); const [q, setQ] = useState(''); const [show, setShow] = useState(100);
+  useEffect(() => { setRows(init); setSel(new Set()); setShow(100); }, [init]);   // 담당자를 바꾸거나 새로 불러오면 목록도 따라 바뀐다 (처음 받은 목록을 붙들고 있던 문제)
   const [pay, setPay] = useState<number | null>(null);
   const [sel, setSel] = useState<Set<number>>(new Set()); const [busy, setBusy] = useState(false); const [open, setOpen] = useState(false);
   const [paste, setPaste] = useState(''); const [parsed, setParsed] = useState<MetaIn[]>([]); const [to, setTo] = useState('auto'); const [moveTo, setMoveTo] = useState(''); const fileRef = useRef<HTMLInputElement>(null);
@@ -90,15 +97,15 @@ export default function MetaDbClient({ rows: init, people, owner, lead, boss, me
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: lead ? 1560 : 1430 }}>
         <thead><tr style={{ background: '#F9FAFB', textAlign: 'left', color: '#475467', fontSize: 12.5 }}>
           {lead && <th style={{ padding: '8px 6px 8px 12px', width: 30 }}><input type="checkbox" checked={list.length > 0 && list.slice(0, show).every(r => sel.has(r.id))} onChange={e => setSel(e.target.checked ? new Set(list.slice(0, show).map(r => r.id)) : new Set())} /></th>}
-          {['접수', '고객', '첫 문의 내용', '연락방식', '등급', '상태', '⏰ 다음 연락', '연락 기록', '관리 내용 (인수인계)', '결제 (정산 자동)'].concat(lead ? ['담당자'] : []).map(h => <th key={h} style={{ padding: 8, whiteSpace: 'nowrap' }}>{h}</th>)}
+          {['접수 · 시트', '고객', '첫 문의 내용', '연락방식', '등급', '상태', '⏰ 다음 연락', '연락 기록', '관리 내용 (인수인계)', '결제 (정산 자동)'].concat(lead ? ['담당자'] : []).map(h => <th key={h} style={{ padding: 8, whiteSpace: 'nowrap' }}>{h}</th>)}
         </tr></thead>
         <tbody>
           {list.slice(0, show).map(r => { const mine = lead || r.owner_id === meId; const off = ['허수', '중복', '종료'].includes(r.status); const late = !!r.next_on && r.next_on <= today && !['결제', '허수', '중복', '종료'].includes(r.status); const chs = r.channel ? r.channel.split(',').filter(Boolean) : [];
             return <Fragment key={r.id}><tr style={{ borderTop: '1px solid #EAECF0', background: r.status === '결제' ? '#FFF27A' : off ? '#F2F4F7' : GBG[r.grade], opacity: off ? .6 : 1, verticalAlign: 'top' }}>
             {lead && <td style={{ padding: '8px 6px 8px 12px' }}><input type="checkbox" checked={sel.has(r.id)} onChange={e => setSel(x => { const n = new Set(x); e.target.checked ? n.add(r.id) : n.delete(r.id); return n; })} /></td>}
-            <td style={{ padding: 8, whiteSpace: 'nowrap', color: '#475467' }}>{r.received_on.slice(5).replace('-', '/')}{r.received_at && <div style={{ fontSize: 11.5, color: '#98A2B3' }}>{hm(r.received_at).slice(6)}</div>}<div style={{ fontSize: 11.5 }}>{r.source}</div></td>
+            <td style={{ padding: 8, whiteSpace: 'nowrap', color: '#475467' }}>{r.received_on.slice(5).replace('-', '/')}{r.received_at && <div style={{ fontSize: 11.5, color: '#98A2B3' }}>{hm(r.received_at).slice(6)}</div>}<div style={{ marginTop: 4 }}><span title="들어온 시트" style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, background: (SRC[r.source] ?? ['#EAECF0', '#344054'])[0], color: (SRC[r.source] ?? ['#EAECF0', '#344054'])[1] }}>{r.source || '구분 없음'}</span></div><div style={{ fontSize: 11, color: '#98A2B3', marginTop: 2 }}>{cameBy(r.ext_id)}</div></td>
             <td style={{ padding: 8, whiteSpace: 'nowrap' }}><b>{r.name || '—'}</b><div>{r.phone}</div>{r.product && <div style={{ fontSize: 12, fontWeight: 700, color: '#6941C6' }}>{r.product}</div>}</td>
-            <td style={{ padding: 8, minWidth: 190, maxWidth: 280 }}><span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.inquiry || '—'}</span>{r.url && <> <a href={/^https?:/.test(r.url) ? r.url : 'https://' + r.url} target="_blank" rel="noreferrer" style={{ color: '#175CD3' }}>링크</a></>}{r.inflow && <div style={{ fontSize: 11.5, color: '#98A2B3', marginTop: 2 }}>유입 {r.inflow.split(' / ')[0]}</div>}</td>
+            <td style={{ padding: 8, minWidth: 190, maxWidth: 280 }}><span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.inquiry || '—'}</span>{r.url && <> <a href={/^https?:/.test(r.url) ? r.url : 'https://' + r.url} target="_blank" rel="noreferrer" style={{ color: '#175CD3' }}>링크</a></>}{r.inflow && <div style={{ fontSize: 11.5, color: '#98A2B3', marginTop: 2 }}>유입 {inflowLabel(r.inflow)}</div>}</td>
             <td style={{ padding: 8, whiteSpace: 'nowrap' }}>{WAYS3.map(c => <label key={c} style={{ display: 'block', fontSize: 12.5 }}><input type="checkbox" disabled={!mine} checked={chs.includes(c)} onChange={e => save(r.id, { channel: (e.target.checked ? [...chs, c] : chs.filter(x => x !== c)).join(',') })} /> {c}</label>)}</td>
             <td style={{ padding: 8 }}><select disabled={!mine} style={{ ...inp, width: 52, fontWeight: 800, background: 'rgba(255,255,255,.7)' }} value={r.grade} onChange={e => save(r.id, { grade: e.target.value })}>{GRADES.map(g => <option key={g} value={g}>{g || '-'}</option>)}</select></td>
             <td style={{ padding: 8 }}><select disabled={!mine} style={{ ...inp, color: SC[r.status], fontWeight: 700 }} value={r.status} onChange={e => save(r.id, { status: e.target.value })}>{STATUSES.map(x => <option key={x}>{x}</option>)}</select></td>
