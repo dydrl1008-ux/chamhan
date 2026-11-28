@@ -137,10 +137,10 @@ export async function saveWatchOrder(p: { userId: string; groups?: string[]; ite
   return { ok: true, msg: '순서 저장' };
 }
 
-/** 자동 조회 — 평일 10시·14시. 이번 회차에 아직 안 찍힌 항목만 키워드별로 조회, 다 끝나면 급하락 알림 */
+/** 자동 조회 — 매일(주말 포함) 10시·14시. 이번 회차에 아직 안 찍힌 항목만 키워드별로 조회, 다 끝나면 급하락 알림 */
 export async function rankWatchTick(budgetMs = 20000): Promise<string> {
-  const now = new Date(Date.now() + 9 * 3600e3); const today = now.toISOString().slice(0, 10); const hm = now.toISOString().slice(11, 16); const dow = now.getUTCDay();
-  if (dow === 0 || dow === 6 || hm < '10:00' || hm >= '19:00') return 'off';
+  const now = new Date(Date.now() + 9 * 3600e3); const today = now.toISOString().slice(0, 10); const hm = now.toISOString().slice(11, 16);
+  if (hm < '10:00' || hm >= '19:00') return 'off';   // 주말에도 돈다
   const hh = hm < '14:00' ? '10' : '14'; const slotKey = `${today} ${hh}`; const slot = new Date(`${today}T${hh}:00:00+09:00`).toISOString();
   const wh = supabaseAdmin(); const { data: st } = await wh.from('ai_settings').select('key,value').in('key', ['rankwatch_slot_done', 'rankwatch_alert_done', 'rankwatch_fail']); const cfg = new Map<string, string>((st ?? []).map((x: any) => [x.key, x.value]));
   if (cfg.get('rankwatch_slot_done') === slotKey) return 'done';
